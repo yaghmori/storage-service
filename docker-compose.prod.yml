@@ -1,0 +1,62 @@
+services:
+  # Storage Service (Production)
+  storage-service:
+    build:
+      context: .
+      dockerfile: apps/storage-service/Dockerfile
+      args:
+        - NODE_ENV=production
+    container_name: storage-service-prod
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-storage_service}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-storage_service}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      # Storage
+      DEFAULT_STORAGE_PROVIDER: ${DEFAULT_STORAGE_PROVIDER:-local}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-104857600}
+      UPLOAD_PATH: /app/uploads
+      # Server
+      PORT: 3000
+      TCP_HOST: 0.0.0.0
+      TCP_PORT: 3001
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-storage}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      MINIO_ACTIVE: ${MINIO_ACTIVE:-true}
+      # AWS S3 (Optional)
+      AWS_S3_REGION: ${AWS_S3_REGION:-}
+      AWS_S3_ACCESS_KEY_ID: ${AWS_S3_ACCESS_KEY_ID:-}
+      AWS_S3_SECRET_ACCESS_KEY: ${AWS_S3_SECRET_ACCESS_KEY:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-}
+      AWS_S3_ACTIVE: ${AWS_S3_ACTIVE:-false}
+      # Node
+      NODE_ENV: production
+    ports:
+      - "${STORAGE_PORT:-3000}:3000"
+      - "${STORAGE_TCP_PORT:-3001}:3001"
+    volumes:
+      - storage_uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  storage_uploads:

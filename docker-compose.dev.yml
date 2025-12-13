@@ -1,0 +1,68 @@
+services:
+  # Redis for BullMQ
+  redis:
+    image: redis:7-alpine
+    container_name: storage-redis-dev
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Storage Service (Development with hot-reload)
+  storage-service:
+    build:
+      context: .
+      dockerfile: apps/storage-service/Dockerfile.dev
+    container_name: storage-service-dev
+    environment:
+      # Database
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storage_service
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: storage_service
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      # Storage
+      DEFAULT_STORAGE_PROVIDER: minio
+      MAX_FILE_SIZE: 104857600
+      UPLOAD_PATH: /app/uploads
+      # Server
+      PORT: 4000
+      TCP_HOST: 0.0.0.0
+      TCP_PORT: 4001
+      # MinIO
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: storage
+      MINIO_USE_SSL: "false"
+      MINIO_ACTIVE: "true"
+      # Node
+      NODE_ENV: development
+    ports:
+      - "4000:4000"
+      - "4001:4001"
+    volumes:
+      # Mount entire workspace for hot-reload (source code changes)
+      - .:/app
+      # Preserve node_modules (use named volume or keep container's node_modules)
+      - /app/node_modules
+      - /app/apps/storage-service/node_modules
+      # Mount uploads directory
+      - storage_uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  storage_uploads:

@@ -1,0 +1,35 @@
+# Development Dockerfile for storage-service with hot-reload support
+FROM docker.io/node:lts-alpine
+
+# Install pnpm and development tools globally
+RUN npm install -g pnpm nodemon ts-node typescript tsconfig-paths
+
+WORKDIR /app
+
+# Configure pnpm for faster installs
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN pnpm config set store-dir /pnpm-store
+
+# Copy root package files for workspace setup
+COPY package.json pnpm-lock.yaml ./
+COPY nx.json tsconfig.base.json tsconfig.json ./
+
+# Copy app package files
+COPY apps/storage-service/package.json ./apps/storage-service/
+COPY apps/storage-service/tsconfig*.json ./apps/storage-service/
+
+# Install all dependencies (workspace dependencies will be resolved)
+# Use --prefer-offline to use cache if available
+RUN pnpm install --frozen-lockfile --prefer-offline || pnpm install --frozen-lockfile
+
+# Copy source code structure (will be overridden by volume mounts in dev)
+# Only copy necessary files to reduce build context
+COPY apps/storage-service/src ./apps/storage-service/src
+
+# Expose ports
+EXPOSE 4000 4001
+
+# Use nodemon to watch for changes with proper path resolution
+CMD ["nodemon", "--watch", "apps/storage-service/src", "--ext", "ts", "--exec", "ts-node --project apps/storage-service/tsconfig.app.json -r tsconfig-paths/register apps/storage-service/src/main.ts"]
+
