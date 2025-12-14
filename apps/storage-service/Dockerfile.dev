@@ -1,143 +1,78 @@
-# Development Dockerfile for storage-service with hot-reload support
-# Multi-stage build for better caching and optimization
+# Development Dockerfile for storage-service with TSX hot-reload
+# Optimized for fast startup and efficient caching
 
 # ============================================================================
-# Stage 1: Base - Install pnpm and base tools
+# Stage 1: Base - Install pnpm and prepare environment
 # ============================================================================
 FROM docker.io/node:lts-alpine AS base
 
-# Install pnpm globally
-RUN npm install -g pnpm
+# Install pnpm, ts-node, tsconfig-paths, and nodemon globally
+RUN npm install -g pnpm ts-node tsconfig-paths nodemon
 
-# Setup pnpm (creates global bin directory and configures PATH)
-RUN pnpm setup || true
-
-# Configure npm for better network resilience
-RUN npm config set fetch-retries 5 && \
-    npm config set fetch-retry-mintimeout 20000 && \
-    npm config set fetch-retry-maxtimeout 120000
-
-# Install development tools globally with retry logic
-# Use npm for global packages (more reliable than pnpm global install)
-# tsx is faster than nodemon+ts-node (uses esbuild under the hood)
-RUN npm install -g tsx ts-node typescript tsconfig-paths || \
-    (echo "First attempt failed, retrying..." && \
-     sleep 5 && \
-     npm install -g --fetch-retries=5 tsx ts-node typescript tsconfig-paths) || \
-    (echo "Second retry failed, trying again..." && \
-     sleep 10 && \
-     npm install -g --fetch-retries=10 tsx ts-node typescript tsconfig-paths)
-
-WORKDIR /app
-
-# Configure pnpm for faster installs with caching and better network handling
+# Configure pnpm environment
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV PNPM_STORE_DIR="/pnpm/store"
-# Increase network concurrency for parallel downloads
+
+# Configure pnpm for better network handling
 ENV PNPM_NETWORK_CONCURRENCY=20
-# Aggressive retry settings for slow/failing packages
-ENV PNPM_FETCH_RETRIES=10
+ENV PNPM_FETCH_RETRIES=5
 ENV PNPM_FETCH_RETRY_MINTIMEOUT=30000
-ENV PNPM_FETCH_RETRY_MAXTIMEOUT=300000
-# Increase timeout for slow packages
-ENV PNPM_FETCH_TIMEOUT=300000
-# Enable strict peer dependencies to avoid hanging
+ENV PNPM_FETCH_RETRY_MAXTIMEOUT=120000
+ENV PNPM_FETCH_TIMEOUT=180000
 ENV PNPM_STRICT_PEER_DEPENDENCIES=false
+
+WORKDIR /app
 
 # ============================================================================
 # Stage 2: Dependencies - Install all dependencies
 # ============================================================================
 FROM base AS dependencies
 
-# Copy only package files first for better layer caching
+# Copy package files for dependency installation
 COPY package.json pnpm-lock.yaml ./
 COPY nx.json tsconfig.base.json tsconfig.json ./
 COPY apps/storage-service/package.json ./apps/storage-service/
 COPY apps/storage-service/tsconfig*.json ./apps/storage-service/
 
-# Install dependencies with BuildKit cache mount for pnpm store
-# Using multiple cache mounts for better performance
-# Added retry wrapper with progressive fallback for slow packages
+# Install dependencies with retry logic and cache mounts
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     --mount=type=cache,id=pnpm-cache,target=/root/.pnpm-cache \
     sh -c ' \
-      install_with_retry() { \
-        local attempt=1; \
-        local max_attempts=5; \
-        while [ $attempt -le $max_attempts ]; do \
-          echo "=== Installation attempt $attempt of $max_attempts ==="; \
-          if pnpm install --frozen-lockfile --prefer-offline "$@" 2>&1; then \
-            echo "✓ Installation successful!"; \
-            return 0; \
-          else \
-            local exit_code=$?; \
-            echo "✗ Attempt $attempt failed (exit code: $exit_code), waiting before retry..."; \
-            sleep $((attempt * 10)); \
-            attempt=$((attempt + 1)); \
-          fi; \
-        done; \
-        echo "✗ All $max_attempts attempts failed"; \
-        return 1; \
-      }; \
-      \
-      echo "Starting installation with standard settings (concurrency: ${PNPM_NETWORK_CONCURRENCY:-20})..."; \
-      if install_with_retry; then \
-        echo "✓ Installation completed successfully!"; \
-      else \
-        echo "Standard installation failed, trying with reduced concurrency (5)..."; \
-        if PNPM_NETWORK_CONCURRENCY=5 install_with_retry; then \
-          echo "✓ Installation completed with reduced concurrency!"; \
-        else \
-          echo "Reduced concurrency failed, trying without optional dependencies..."; \
-          if install_with_retry --no-optional; then \
-            echo "✓ Installation completed without optional dependencies!"; \
-          else \
-            echo "Final attempt with minimal concurrency (3) and no optional deps..."; \
-            PNPM_NETWORK_CONCURRENCY=3 pnpm install --frozen-lockfile --prefer-offline --no-optional || exit 1; \
-          fi; \
-        fi; \
-      fi \
+      echo "Installing dependencies with pnpm..."; \
+      pnpm install --frozen-lockfile --prefer-offline || \
+      (echo "Retry with reduced concurrency..." && \
+       PNPM_NETWORK_CONCURRENCY=5 pnpm install --frozen-lockfile --prefer-offline) || \
+      (echo "Final retry without optional deps..." && \
+       pnpm install --frozen-lockfile --prefer-offline --no-optional) \
     '
 
 # ============================================================================
-# Stage 3: Development - Final stage with dev tools and runtime
+# Stage 3: Development - Final stage with TSX runtime
 # ============================================================================
 FROM base AS development
-
-# Dev tools are already installed in base stage, no need to reinstall
 
 # Copy configuration files
 COPY package.json pnpm-lock.yaml ./
 COPY nx.json tsconfig.base.json tsconfig.json ./
 COPY apps/storage-service/package.json ./apps/storage-service/
 COPY apps/storage-service/tsconfig*.json ./apps/storage-service/
+COPY apps/storage-service/nodemon.json ./apps/storage-service/
 
 # Copy installed dependencies from dependencies stage
-# Note: With pnpm workspace, dependencies are hoisted to root node_modules
-# Copy root node_modules (contains all dependencies for the workspace)
 COPY --from=dependencies /app/node_modules ./node_modules
-# Create app directory structure (node_modules will be preserved by volume mount in docker-compose)
-# pnpm hoists dependencies to root, so app-specific node_modules may not exist - that's fine
-RUN mkdir -p ./apps/storage-service
+
+# Create app directory structure
+RUN mkdir -p ./apps/storage-service/src
 
 # Copy source code (will be overridden by volume mounts in dev)
 COPY apps/storage-service/src ./apps/storage-service/src
 
-# Expose ports
-EXPOSE 4000 4001
-
-# Change to the app directory and use tsx watch for hot reload
-# tsx is much faster than nodemon+ts-node (10-100x faster restarts)
-# Configure file watching for Docker on Windows (polling mode)
-# TSC_WATCHFILE enables TypeScript compiler polling for file changes
-# CHOKIDAR_USEPOLLING enables chokidar (used by tsx) polling mode
-ENV TSC_WATCHFILE=DynamicPriorityPolling
-ENV CHOKIDAR_USEPOLLING=true
-ENV CHOKIDAR_INTERVAL=1000
+# Set working directory to the app
 WORKDIR /app/apps/storage-service
-# tsx watch automatically watches all imported TypeScript files
-# tsx.config.json is automatically detected and used for watch configuration
-# Config files (tsconfig.base.json, nx.json) are read at startup, so changes require manual restart
-CMD ["tsx", "watch", "--tsconfig", "tsconfig.app.json", "-r", "tsconfig-paths/register", "src/main.ts"]
 
+# Expose application and debug ports
+EXPOSE 4000 4001 9229
+
+# Use nodemon with ts-node for hot reload
+CMD nodemon --config nodemon.json

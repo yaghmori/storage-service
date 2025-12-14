@@ -15,7 +15,8 @@
       "Bash(python -m json.tool:*)",
       "Bash(cat:*)",
       "Bash(pnpm exec tsc:*)",
-      "Bash(pnpm remove:*)"
+      "Bash(pnpm remove:*)",
+      "Bash(pnpm list:*)"
     ]
   }
 }

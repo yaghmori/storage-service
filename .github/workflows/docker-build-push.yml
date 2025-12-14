@@ -1,0 +1,167 @@
+name: Docker Build & Push - Storage Service
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - master
+      - main
+      - staging
+      - develop
+  workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: "Custom tag for the image (e.g., v1.0.0, beta, staging)"
+        required: false
+        type: string
+      push_to_registry:
+        description: "Push images to registry"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/storage-service
+
+jobs:
+  build-and-push:
+    name: Build & Push Storage Service
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: npx nx build @org/storage-service --configuration=production
+
+      - name: Prune dependencies
+        run: npx nx prune @org/storage-service
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}
+          flavor: |
+            latest=false
+          tags: |
+            # Custom tag from manual workflow
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.custom_tag != '' }}
+
+            # Semantic versioning
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+
+            # Branch-based tags
+            type=ref,event=branch
+            type=raw,value=production,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=development,enable=${{ github.ref == 'refs/heads/develop' }}
+
+            # PR tags
+            type=ref,event=pr,prefix=pr-
+
+            # Commit SHA
+            type=sha,prefix=sha-,format=short
+
+            # Latest tags
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+
+          labels: |
+            org.opencontainers.image.title=storage-service
+            org.opencontainers.image.description=Storage Service application
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            com.storage-service.build.number=${{ github.run_number }}
+            com.storage-service.git.commit=${{ github.sha }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/storage-service/Dockerfile
+          push: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.push_to_registry == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Registry cache only - simpler and more reliable
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}:buildcache,mode=max
+          build-args: |
+            NODE_ENV=production
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Output image tags
+        run: |
+          echo "### 🐳 Storage Service Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Caching Strategy:** Registry cache only (GHCR)" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Cleanup old cache images periodically
+  cleanup-cache:
+    name: Cleanup Old Cache Images
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Delete old cache images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: "storage-service"
+          package-type: "container"
+          min-versions-to-keep: 3
+          delete-only-untagged-versions: true
+
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🚀 Docker Build & Push Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch/Tag:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY

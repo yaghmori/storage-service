@@ -9,9 +9,6 @@ export class HealthController {
   @Public()
   @Get()
   async check() {
-    if (!this.healthService) {
-      throw new Error('HealthService is not available - dependency injection failed');
-    }
     return await this.healthService.getOverallHealth();
   }
 }

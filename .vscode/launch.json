@@ -24,6 +24,25 @@
         "${workspaceFolder}/apps/api-gateway/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Debug Storage Service (Docker)",
+      "address": "localhost",
+      "port": 9229,
+      "localRoot": "${workspaceFolder}/apps/storage-service",
+      "remoteRoot": "/app/apps/storage-service",
+      "protocol": "inspector",
+      "restart": true,
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "sourceMaps": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/apps/storage-service/**",
+        "!**/node_modules/**"
+      ]
     }
   ]
 }

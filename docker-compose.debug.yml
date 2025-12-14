@@ -15,7 +15,7 @@ services:
     networks:
       - storage-network
 
-  # Storage Service (Development with TSX hot-reload)
+  # Storage Service (Development with Debug enabled)
   storage-service:
     build:
       context: .
@@ -53,6 +53,12 @@ services:
       # File watching
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: 1000
+    command:
+      - nodemon
+      - --config
+      - nodemon.json
+      - --exec
+      - node --inspect=0.0.0.0:9229 -r ts-node/register/transpile-only -r tsconfig-paths/register src/main.ts
     ports:
       - "4000:4000"
       - "4001:4001"

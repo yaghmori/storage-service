@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import Redis from 'ioredis';
 import { DatabaseConfig } from '../config/database.config';
@@ -7,6 +7,12 @@ import { DatabaseService } from '../database/database.service';
 
 @Injectable()
 export class HealthService {
+  constructor(
+    private readonly redisConfig: RedisConfig,
+    private readonly databaseService: DatabaseService,
+    private readonly databaseConfig: DatabaseConfig,
+  ) {}
+
   async checkRedis(): Promise<{
     status: string;
     latency?: number;
@@ -137,7 +143,7 @@ export class HealthService {
 
     // Determine overall status
     const allHealthy = database.status === 'ok' && redis.status === 'ok';
-    const overallStatus = allHealthy ? 'healthy1' : 'degraded';
+    const overallStatus = allHealthy ? 'healthy' : 'degraded';
 
     return {
       status: overallStatus,
@@ -146,21 +152,5 @@ export class HealthService {
       system: this.getSystemInfo(),
       application: this.getApplicationInfo(),
     };
-  }
-
-  constructor(
-    @Inject(RedisConfig) private readonly redisConfig: RedisConfig,
-    @Inject(DatabaseService) private readonly databaseService: DatabaseService,
-    @Inject(DatabaseConfig) private readonly databaseConfig: DatabaseConfig,
-  ) {
-    if (!redisConfig) {
-      throw new Error('RedisConfig is not available');
-    }
-    if (!databaseService) {
-      throw new Error('DatabaseService is not available');
-    }
-    if (!databaseConfig) {
-      throw new Error('DatabaseConfig is not available');
-    }
   }
 }

@@ -8,60 +8,20 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "webpack-cli build",
-          "args": [
-            "--node-env=production"
-          ],
+          "args": ["--node-env=production"],
           "cwd": "apps/storage-service"
         },
         "configurations": {
           "development": {
-            "args": [
-              "--node-env=development"
-            ]
+            "args": ["--node-env=development"]
           }
         }
-      },
-      "prune-lockfile": {
-        "dependsOn": [
-          "build"
-        ],
-        "cache": true,
-        "executor": "@nx/js:prune-lockfile",
-        "outputs": [
-          "{workspaceRoot}/apps/storage-service/dist/package.json",
-          "{workspaceRoot}/apps/storage-service/dist/package-lock.json"
-        ],
-        "options": {
-          "buildTarget": "build"
-        }
-      },
-      "copy-workspace-modules": {
-        "dependsOn": [
-          "build"
-        ],
-        "cache": true,
-        "outputs": [
-          "{workspaceRoot}/apps/storage-service/dist/workspace_modules"
-        ],
-        "executor": "@nx/js:copy-workspace-modules",
-        "options": {
-          "buildTarget": "build"
-        }
-      },
-      "prune": {
-        "dependsOn": [
-          "prune-lockfile",
-          "copy-workspace-modules"
-        ],
-        "executor": "nx:noop"
       },
       "serve": {
         "continuous": true,
         "executor": "@nx/js:node",
         "defaultConfiguration": "development",
-        "dependsOn": [
-          "build"
-        ],
+        "dependsOn": ["build"],
         "options": {
           "buildTarget": "@org/storage-service:build",
           "runBuildTargetDependencies": false
@@ -75,16 +35,54 @@
           }
         }
       },
+      "serve:tsx": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "nodemon --watch src --exec \"ts-node --project tsconfig.app.json -r tsconfig-paths/register src/main.ts\"",
+          "cwd": "apps/storage-service"
+        }
+      },
+      "serve:tsx:debug": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "nodemon --watch src --exec \"node --inspect=0.0.0.0:9229 -r ts-node/register -r tsconfig-paths/register src/main.ts\"",
+          "cwd": "apps/storage-service"
+        }
+      },
+      "prune-lockfile": {
+        "dependsOn": ["build"],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/storage-service/dist/package.json",
+          "{workspaceRoot}/apps/storage-service/dist/package-lock.json"
+        ],
+        "options": {
+          "buildTarget": "build"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": ["build"],
+        "cache": true,
+        "outputs": [
+          "{workspaceRoot}/apps/storage-service/dist/workspace_modules"
+        ],
+        "executor": "@nx/js:copy-workspace-modules",
+        "options": {
+          "buildTarget": "build"
+        }
+      },
+      "prune": {
+        "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
+        "executor": "nx:noop"
+      },
       "test": {
         "options": {
           "passWithNoTests": true
         }
       },
       "docker:build": {
-        "dependsOn": [
-          "build",
-          "prune"
-        ]
+        "dependsOn": ["build", "prune"]
       },
       "migrate": {
         "executor": "nx:run-commands",
@@ -140,6 +138,10 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@nestjs/testing": "^11.0.0"
+    "@nestjs/testing": "^11.0.0",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.21.0"
   }
 }
