@@ -48,6 +48,8 @@ logs
 # Large directories that aren't needed in build context
 apps/*/node_modules
 apps/*/dist
+# Exception: allow storage-service dist for Docker build
+!apps/storage-service/dist
 apps/*/.nx
 .nx
 .cache
