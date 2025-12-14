@@ -25,13 +25,8 @@ export class RedisConfig {
     return {
       host: this.host,
       port: this.port,
-      password: this.password,
+      ...(this.password && { password: this.password }),
       db: this.db,
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
     };
   }
 }

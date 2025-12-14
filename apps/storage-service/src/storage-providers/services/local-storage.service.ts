@@ -2,14 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
+import { LocalConfig } from '../types/storage-provider-config.types';
 
 @Injectable()
 export class LocalStorageService {
-  createInstance(config: any): IStorageProvider {
+  createInstance(config: LocalConfig): IStorageProvider {
     const basePath = config.path || './uploads';
 
     // Ensure directory exists
-    fs.mkdir(basePath, { recursive: true }).catch(() => {});
+    fs.mkdir(basePath, { recursive: true }).catch((error) => {
+      console.error(`Error creating directory ${basePath}:`, error);
+    });
 
     return {
       upload: async (key: string, buffer: Buffer) => {
@@ -25,7 +28,9 @@ export class LocalStorageService {
       },
       delete: async (key: string) => {
         const filePath = join(basePath, key);
-        await fs.unlink(filePath).catch(() => {});
+        await fs.unlink(filePath).catch((error) => {
+          console.error(`Error deleting file ${filePath}:`, error);
+        });
       },
       exists: async (key: string) => {
         const filePath = join(basePath, key);

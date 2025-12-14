@@ -1,14 +1,15 @@
-import { IsString, IsObject, IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
+import type { StorageProviderConfig, StorageProviderType } from '../types/storage-provider-config.types';
 
 export class CreateStorageProviderDto {
   @IsString()
-  name: string;
+  name!: string;
 
   @IsString()
-  type: 's3' | 'minio' | 'local';
+  type!: StorageProviderType;
 
   @IsObject()
-  config: any;
+  config!: StorageProviderConfig;
 
   @IsBoolean()
   @IsOptional()

@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
-import { FilesService } from '../../files/services/files.service';
-import { VariantsService } from '../../variants/variants.service';
-import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 import { AnalyticsService } from '../../analytics/services/analytics.service';
+import { FilesService } from '../../files/services/files.service';
+import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
+import { VariantType } from '../../variants/repositories/variants.repository';
+import { VariantsService } from '../../variants/services/variants.service';
 
 @Injectable()
 export class ServingService {
@@ -16,20 +17,19 @@ export class ServingService {
 
   async streamFile(
     fileId: string,
-    variantType?: string,
+    variantType?: VariantType,
     size?: number,
     response?: Response,
     ipAddress?: string,
     userAgent?: string,
   ) {
-    let file;
     let variant = null;
     let provider;
     let key;
     let contentType: string;
 
     // Get file first (needed for fallback and metadata)
-    file = await this.filesService.findById(fileId);
+    const file = await this.filesService.findById(fileId);
 
     if (variantType) {
       // Query variants table - single source of truth
@@ -47,12 +47,12 @@ export class ServingService {
         // If size specified, filter by size
         if (size) {
           variants = variants.filter(
-            (v) => v.width === size || v.height === size,
+            (v: any) => v.width === size || v.height === size,
           );
         }
 
         // Use first matching variant (or best match)
-        variant = variants[0] || variants.find((v) => v.width === size) || variants[0];
+        variant = variants[0] || variants.find((v: any) => v.width === size) || variants[0];
         provider = await this.storageFactory.getProvider(variant.storageProviderId);
         key = variant.variantKey;
         contentType = `image/${variant.format || 'jpeg'}`;

@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema/schema';
@@ -12,8 +12,8 @@ export class ProcessingJobsRepository {
 
   async create(data: {
     fileId: string;
-    jobType: string;
-    status?: string;
+    jobType: 'image' | 'video' | 'metadata' | 'thumbnail' | 'transcode';
+    status?: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
     bullmqJobId?: string;
   }) {
     const result = await this.db
@@ -30,7 +30,7 @@ export class ProcessingJobsRepository {
 
   async updateStatus(
     id: string,
-    status: string,
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled',
     errorMessage?: string,
   ) {
     const result = await this.db
@@ -50,6 +50,33 @@ export class ProcessingJobsRepository {
       .select()
       .from(schema.processingJobs)
       .where(eq(schema.processingJobs.fileId, fileId));
+  }
+
+  async findByBullmqJobId(bullmqJobId: string) {
+    const result = await this.db
+      .select()
+      .from(schema.processingJobs)
+      .where(eq(schema.processingJobs.bullmqJobId, bullmqJobId))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateStatusByBullmqJobId(
+    bullmqJobId: string,
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled',
+    errorMessage?: string,
+  ) {
+    const result = await this.db
+      .update(schema.processingJobs)
+      .set({
+        status,
+        errorMessage,
+        startedAt: status === 'processing' ? new Date() : undefined,
+        completedAt: status === 'completed' || status === 'failed' ? new Date() : undefined,
+      })
+      .where(eq(schema.processingJobs.bullmqJobId, bullmqJobId))
+      .returning();
+    return result[0];
   }
 }
 

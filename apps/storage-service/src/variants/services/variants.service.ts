@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { VariantsRepository } from '../repositories/variants.repository';
+import { VariantsRepository, VariantType } from '../repositories/variants.repository';
 
 @Injectable()
 export class VariantsService {
@@ -9,7 +9,7 @@ export class VariantsService {
     return this.repository.findByFileId(fileId);
   }
 
-  async findByFileIdAndType(fileId: string, variantType: string) {
+  async findByFileIdAndType(fileId: string, variantType: VariantType) {
     return this.repository.findByFileIdAndType(fileId, variantType);
   }
 
@@ -19,7 +19,7 @@ export class VariantsService {
 
   async create(data: {
     fileId: string;
-    variantType: string;
+    variantType: VariantType;
     variantKey: string;
     storageProviderId: number;
     size: bigint;

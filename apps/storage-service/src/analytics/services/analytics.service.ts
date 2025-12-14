@@ -12,7 +12,7 @@ export class AnalyticsService {
     userAgent?: string;
     userId?: number;
     bytesDownloaded?: bigint;
-    downloadMethod?: string;
+    downloadMethod?: 'direct' | 'signed_url' | 'cdn';
     referer?: string;
   }) {
     return this.repository.create(data);

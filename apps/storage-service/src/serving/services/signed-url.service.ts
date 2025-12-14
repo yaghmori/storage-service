@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { FilesService } from '../../files/services/files.service';
-import { VariantsService } from '../../variants/variants.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
+import { VariantType } from '../../variants/repositories/variants.repository';
+import { VariantsService } from '../../variants/services/variants.service';
 
 @Injectable()
 export class SignedUrlService {
@@ -13,36 +14,46 @@ export class SignedUrlService {
 
   async generateSignedUrl(
     fileId: string,
-    variantType?: string,
-    expiresIn: number = 3600,
+    variantType?: VariantType,
+    expiresIn = 3600,
   ) {
-    let file;
+    const file = await this.filesService.findById(fileId);
     let variant = null;
     let provider;
     let key;
+    let providerConfig;
 
     // Get file first
-    file = await this.filesService.findById(fileId);
 
     if (variantType) {
       // Query variants table - single source of truth
-      let variants = await this.variantsService.findByFileIdAndType(
+      const variants = await this.variantsService.findByFileIdAndType(
         fileId,
         variantType,
       );
       if (!variants || variants.length === 0) {
         // Fallback to original if variant not found
         provider = await this.filesService.getFileProvider(fileId);
+        providerConfig = await this.storageFactory.getProviderConfig(file.storageProviderId);
         key = file.storageKey;
       } else {
         variant = variants[0];
         provider = await this.storageFactory.getProvider(variant.storageProviderId);
+        providerConfig = await this.storageFactory.getProviderConfig(variant.storageProviderId);
         key = variant.variantKey;
       }
     } else {
       // Serve original file
       provider = await this.filesService.getFileProvider(fileId);
+      providerConfig = await this.storageFactory.getProviderConfig(file.storageProviderId);
       key = file.storageKey;
+    }
+
+    // For local storage, return a proper download URL using file ID
+    if (providerConfig?.type === 'local') {
+      const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'http://localhost:4000';
+      const variantParam = variantType ? `?variant=${variantType}` : '';
+      return `${baseUrl}/api/files/${fileId}/download${variantParam}`;
     }
 
     return provider.getSignedUrl(key, expiresIn);

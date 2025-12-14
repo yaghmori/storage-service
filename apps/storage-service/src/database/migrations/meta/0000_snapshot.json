@@ -1,5 +1,5 @@
 {
-  "id": "c3c9c4cf-f978-4e52-81a6-2ddba6946cd0",
+  "id": "fbc93d29-bb5b-45d6-8a92-9e8f4f90d0bb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1390,6 +1390,13 @@
           "notNull": true,
           "default": true
         },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1426,6 +1433,21 @@
           "columns": [
             {
               "expression": "is_active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "storage_providers_default_idx": {
+          "name": "storage_providers_default_idx",
+          "columns": [
+            {
+              "expression": "is_default",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

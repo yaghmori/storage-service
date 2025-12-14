@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Injectable } from '@nestjs/common';
+import { Readable } from 'stream';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
+import { S3Config } from '../types/storage-provider-config.types';
 
 @Injectable()
 export class S3StorageService {
-  createInstance(config: any): IStorageProvider {
+  createInstance(config: S3Config): IStorageProvider {
     const client = new S3Client({
       region: config.region || 'us-east-1',
       credentials: {
@@ -35,7 +37,8 @@ export class S3StorageService {
         const response = await client.send(command);
         const chunks: Uint8Array[] = [];
         if (response.Body) {
-          for await (const chunk of response.Body as any) {
+          const stream = response.Body as Readable;
+          for await (const chunk of stream) {
             chunks.push(chunk);
           }
         }
@@ -60,7 +63,7 @@ export class S3StorageService {
           return false;
         }
       },
-      getSignedUrl: async (key: string, expiresIn: number = 3600) => {
+      getSignedUrl: async (key: string, expiresIn = 3600) => {
         const command = new GetObjectCommand({
           Bucket: config.bucket,
           Key: key,

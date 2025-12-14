@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { FilesController } from './controllers/files.controller';
 import { FilesMicroserviceController } from './controllers/files-microservice.controller';
 import { FilesService } from './services/files.service';
@@ -8,9 +8,10 @@ import { FileDeletionService } from './services/file-deletion.service';
 import { FilesRepository } from './repositories/files.repository';
 import { DatabaseModule } from '../database/database.module';
 import { StorageProvidersModule } from '../storage-providers/storage-providers.module';
+import { VariantsModule } from '../variants/variants.module';
 
 @Module({
-  imports: [DatabaseModule, StorageProvidersModule],
+  imports: [DatabaseModule, StorageProvidersModule, forwardRef(() => VariantsModule)],
   controllers: [FilesController, FilesMicroserviceController],
   providers: [
     FilesService,

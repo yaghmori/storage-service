@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import * as exifr from 'exifr';
-import { FilesService } from '../../files/services/files.service';
-import { DatabaseService } from '../../database/database.service';
 import { eq } from 'drizzle-orm';
+import * as exifr from 'exifr';
+import { DatabaseService } from '../../database/database.service';
 import * as schema from '../../database/schema/schema';
+import { FilesService } from '../../files/services/files.service';
 
 @Injectable()
 export class MetadataExtractionService {
@@ -30,11 +30,6 @@ export class MetadataExtractionService {
       mergeOutput: true,
     });
 
-    // Separate metadata types (single source of truth: fileMetadata table)
-    const exifData = allMetadata.exif || allMetadata;
-    const iptcData = allMetadata.iptc || {};
-    const xmpData = allMetadata.xmp || {};
-
     // Store metadata in database (single source of truth)
     const db = this.databaseService.getDb();
     const existing = await db
@@ -47,20 +42,14 @@ export class MetadataExtractionService {
       await db
         .update(schema.fileMetadata)
         .set({
-          metadata: allMetadata as any,
-          exifData: exifData as any,
-          iptcData: iptcData as any,
-          xmpData: xmpData as any,
+          metadata: allMetadata as unknown,
           updatedAt: new Date(),
         })
         .where(eq(schema.fileMetadata.fileId, fileId));
     } else {
       await db.insert(schema.fileMetadata).values({
         fileId,
-        metadata: allMetadata as any,
-        exifData: exifData as any,
-        iptcData: iptcData as any,
-        xmpData: xmpData as any,
+        metadata: allMetadata as unknown,
       });
     }
 

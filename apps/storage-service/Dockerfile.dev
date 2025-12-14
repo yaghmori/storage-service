@@ -1,35 +1,133 @@
 # Development Dockerfile for storage-service with hot-reload support
-FROM docker.io/node:lts-alpine
+# Multi-stage build for better caching and optimization
 
-# Install pnpm and development tools globally
-RUN npm install -g pnpm nodemon ts-node typescript tsconfig-paths
+# ============================================================================
+# Stage 1: Base - Install pnpm and base tools
+# ============================================================================
+FROM docker.io/node:lts-alpine AS base
+
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Setup pnpm (creates global bin directory and configures PATH)
+RUN pnpm setup || true
+
+# Configure npm for better network resilience
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000
+
+# Install development tools globally with retry logic
+# Use npm for global packages (more reliable than pnpm global install)
+RUN npm install -g nodemon ts-node typescript tsconfig-paths || \
+    (echo "First attempt failed, retrying..." && \
+     sleep 5 && \
+     npm install -g --fetch-retries=5 nodemon ts-node typescript tsconfig-paths) || \
+    (echo "Second retry failed, trying again..." && \
+     sleep 10 && \
+     npm install -g --fetch-retries=10 nodemon ts-node typescript tsconfig-paths)
 
 WORKDIR /app
 
-# Configure pnpm for faster installs
+# Configure pnpm for faster installs with caching and better network handling
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN pnpm config set store-dir /pnpm-store
+ENV PNPM_STORE_DIR="/pnpm/store"
+# Increase network concurrency for parallel downloads
+ENV PNPM_NETWORK_CONCURRENCY=20
+# Aggressive retry settings for slow/failing packages
+ENV PNPM_FETCH_RETRIES=10
+ENV PNPM_FETCH_RETRY_MINTIMEOUT=30000
+ENV PNPM_FETCH_RETRY_MAXTIMEOUT=300000
+# Increase timeout for slow packages
+ENV PNPM_FETCH_TIMEOUT=300000
+# Enable strict peer dependencies to avoid hanging
+ENV PNPM_STRICT_PEER_DEPENDENCIES=false
 
-# Copy root package files for workspace setup
+# ============================================================================
+# Stage 2: Dependencies - Install all dependencies
+# ============================================================================
+FROM base AS dependencies
+
+# Copy only package files first for better layer caching
 COPY package.json pnpm-lock.yaml ./
 COPY nx.json tsconfig.base.json tsconfig.json ./
-
-# Copy app package files
 COPY apps/storage-service/package.json ./apps/storage-service/
 COPY apps/storage-service/tsconfig*.json ./apps/storage-service/
 
-# Install all dependencies (workspace dependencies will be resolved)
-# Use --prefer-offline to use cache if available
-RUN pnpm install --frozen-lockfile --prefer-offline || pnpm install --frozen-lockfile
+# Install dependencies with BuildKit cache mount for pnpm store
+# Using multiple cache mounts for better performance
+# Added retry wrapper with progressive fallback for slow packages
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    --mount=type=cache,id=pnpm-cache,target=/root/.pnpm-cache \
+    sh -c ' \
+      install_with_retry() { \
+        local attempt=1; \
+        local max_attempts=5; \
+        while [ $attempt -le $max_attempts ]; do \
+          echo "=== Installation attempt $attempt of $max_attempts ==="; \
+          if pnpm install --frozen-lockfile --prefer-offline "$@" 2>&1; then \
+            echo "✓ Installation successful!"; \
+            return 0; \
+          else \
+            local exit_code=$?; \
+            echo "✗ Attempt $attempt failed (exit code: $exit_code), waiting before retry..."; \
+            sleep $((attempt * 10)); \
+            attempt=$((attempt + 1)); \
+          fi; \
+        done; \
+        echo "✗ All $max_attempts attempts failed"; \
+        return 1; \
+      }; \
+      \
+      echo "Starting installation with standard settings (concurrency: ${PNPM_NETWORK_CONCURRENCY:-20})..."; \
+      if install_with_retry; then \
+        echo "✓ Installation completed successfully!"; \
+      else \
+        echo "Standard installation failed, trying with reduced concurrency (5)..."; \
+        if PNPM_NETWORK_CONCURRENCY=5 install_with_retry; then \
+          echo "✓ Installation completed with reduced concurrency!"; \
+        else \
+          echo "Reduced concurrency failed, trying without optional dependencies..."; \
+          if install_with_retry --no-optional; then \
+            echo "✓ Installation completed without optional dependencies!"; \
+          else \
+            echo "Final attempt with minimal concurrency (3) and no optional deps..."; \
+            PNPM_NETWORK_CONCURRENCY=3 pnpm install --frozen-lockfile --prefer-offline --no-optional || exit 1; \
+          fi; \
+        fi; \
+      fi \
+    '
 
-# Copy source code structure (will be overridden by volume mounts in dev)
-# Only copy necessary files to reduce build context
+# ============================================================================
+# Stage 3: Development - Final stage with dev tools and runtime
+# ============================================================================
+FROM base AS development
+
+# Dev tools are already installed in base stage, no need to reinstall
+
+# Copy configuration files
+COPY package.json pnpm-lock.yaml ./
+COPY nx.json tsconfig.base.json tsconfig.json ./
+COPY apps/storage-service/package.json ./apps/storage-service/
+COPY apps/storage-service/tsconfig*.json ./apps/storage-service/
+COPY apps/storage-service/nodemon.json ./apps/storage-service/
+
+# Copy installed dependencies from dependencies stage
+# Note: With pnpm workspace, dependencies are hoisted to root node_modules
+# Copy root node_modules (contains all dependencies for the workspace)
+COPY --from=dependencies /app/node_modules ./node_modules
+# Create app directory structure (node_modules will be preserved by volume mount in docker-compose)
+# pnpm hoists dependencies to root, so app-specific node_modules may not exist - that's fine
+RUN mkdir -p ./apps/storage-service
+
+# Copy source code (will be overridden by volume mounts in dev)
 COPY apps/storage-service/src ./apps/storage-service/src
 
 # Expose ports
 EXPOSE 4000 4001
 
-# Use nodemon to watch for changes with proper path resolution
-CMD ["nodemon", "--watch", "apps/storage-service/src", "--ext", "ts", "--exec", "ts-node --project apps/storage-service/tsconfig.app.json -r tsconfig-paths/register apps/storage-service/src/main.ts"]
+# Change to the app directory and use nodemon for hot reload
+WORKDIR /app/apps/storage-service
+CMD ["nodemon"]
 

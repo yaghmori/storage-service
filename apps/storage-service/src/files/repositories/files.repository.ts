@@ -1,29 +1,47 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema/schema';
 
 @Injectable()
 export class FilesRepository {
+  private readonly logger = new Logger(FilesRepository.name);
+
   constructor(
     @Inject('DRIZZLE_DB')
     private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
   async findById(id: string) {
-    const result = await this.db
-      .select()
-      .from(schema.files)
-      .where(eq(schema.files.id, id))
-      .limit(1);
-    return result[0] || null;
+    try {
+      const result = await this.db
+        .select()
+        .from(schema.files)
+        .where(eq(schema.files.id, id))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      this.logger.error(`Error finding file by ID ${id}:`, error);
+      throw error;
+    }
   }
 
   async findByHash(fileHash: string) {
-    return this.db
-      .select()
-      .from(schema.files)
-      .where(eq(schema.files.fileHash, fileHash));
+    try {
+      return await this.db
+        .select()
+        .from(schema.files)
+        .where(eq(schema.files.fileHash, fileHash));
+    } catch (error) {
+      this.logger.error(`Error finding file by hash ${fileHash}:`, error);
+      // Check if it's a table doesn't exist error
+      if (error instanceof Error && error.message.includes('does not exist')) {
+        throw new Error(
+          `Database table 'files' does not exist. Please run migrations: nx run @org/storage-service:migrate:up`,
+        );
+      }
+      throw error;
+    }
   }
 
   async findByKeyAndProvider(storageKey: string, storageProviderId: number) {

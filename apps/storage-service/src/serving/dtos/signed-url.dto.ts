@@ -1,5 +1,5 @@
 export class SignedUrlDto {
-  url: string;
-  expiresIn: number;
+  url!: string;
+  expiresIn!: number;
 }
 

@@ -1,20 +1,20 @@
 import { sql } from 'drizzle-orm';
 import {
-  bigint,
-  boolean,
-  check,
-  index,
-  integer,
-  jsonb,
-  pgEnum,
-  pgTable,
-  real,
-  serial,
-  text,
-  timestamp,
-  unique,
-  uuid,
-  varchar,
+    bigint,
+    boolean,
+    check,
+    index,
+    integer,
+    jsonb,
+    pgEnum,
+    pgTable,
+    real,
+    serial,
+    text,
+    timestamp,
+    unique,
+    uuid,
+    varchar,
 } from 'drizzle-orm/pg-core';
 
 // Enum types
@@ -32,12 +32,14 @@ export const storageProviders = pgTable('storage_providers', {
   type: storageProviderTypeEnum('type').notNull(),
   config: jsonb('config').notNull(),
   isActive: boolean('is_active').notNull().default(true),
+  isDefault: boolean('is_default').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => ({
   // Indexes for performance
   typeIdx: index('storage_providers_type_idx').on(table.type),
   activeIdx: index('storage_providers_active_idx').on(table.isActive),
+  defaultIdx: index('storage_providers_default_idx').on(table.isDefault),
 }));
 
 export const files = pgTable('files', {

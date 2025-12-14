@@ -40,37 +40,49 @@ export class FilesService {
     uploadedBy?: number;
     tags?: string;
   }) {
-    // Smart duplicate detection
-    const duplicateCheck = await this.duplicationService.smartDuplicateDetection(
-      data.fileHash,
-      '', // Will be set after creation
-    );
+    // Check for existing files with the same hash BEFORE inserting
+    // The unique constraint on fileHash prevents inserting duplicates
+    const existingFiles = await this.duplicationService.detectDuplicatesByHash(data.fileHash);
 
-    if (duplicateCheck.isDuplicate && duplicateCheck.originalFileId) {
-      // File is a duplicate - increment reference count of original
-      const original = await this.repository.findById(duplicateCheck.originalFileId);
-      if (original) {
-        const incremented = await this.repository.incrementReferenceCount(original.id);
-        this.logger.log(
-          `Duplicate detected: File with hash ${data.fileHash} already exists. Using original file ${original.id}. Reference count: ${incremented?.referenceCount}`,
-        );
-        return incremented;
-      }
-    }
+    if (existingFiles.length > 0) {
+      // File with this hash already exists - this is a duplicate upload
+      // Use the oldest file as the original
+      const original = existingFiles.sort(
+        (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+      )[0];
 
-    // No duplicate found, create new file
-    const newFile = await this.repository.create(data);
-
-    // Check again with the new file ID to mark it properly
-    if (duplicateCheck.isDuplicate && duplicateCheck.originalFileId) {
-      await this.duplicationService.markAsDuplicate(
-        newFile.id,
-        duplicateCheck.originalFileId,
-        'sha256',
+      // Increment reference count of the original file
+      const updated = await this.repository.incrementReferenceCount(original.id);
+      this.logger.log(
+        `Duplicate detected: File with hash ${data.fileHash} already exists. Using original file ${original.id}. Reference count: ${updated?.referenceCount}`,
       );
+      return updated || original;
     }
 
-    return newFile;
+    // No duplicate found, create new file record
+    // This will succeed because no file with this hash exists
+    try {
+      const newFile = await this.repository.create(data);
+      return newFile;
+    } catch (error) {
+      // Handle race condition: if another request inserted the same file between our check and insert
+      if (error instanceof Error && error.message.includes('unique') && error.message.includes('file_hash')) {
+        this.logger.warn(
+          `Race condition detected: File with hash ${data.fileHash} was inserted by another process. Retrying...`,
+        );
+        // Retry: find the existing file
+        const existingFiles = await this.duplicationService.detectDuplicatesByHash(data.fileHash);
+        if (existingFiles.length > 0) {
+          const original = existingFiles.sort(
+            (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+          )[0];
+          const updated = await this.repository.incrementReferenceCount(original.id);
+          return updated || original;
+        }
+      }
+      // Re-throw if it's not a unique constraint violation
+      throw error;
+    }
   }
 
   async deleteFile(id: string, hardDelete = false) {
@@ -144,6 +156,10 @@ export class FilesService {
     [key: string]: unknown;
   }) {
     return this.repository.update(id, data);
+  }
+
+  async incrementReferenceCount(id: string) {
+    return this.repository.incrementReferenceCount(id);
   }
 }
 

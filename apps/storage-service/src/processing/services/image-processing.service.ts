@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import * as sharp from 'sharp';
+import { extname } from 'path';
+import sharp from 'sharp';
 import { FilesService } from '../../files/services/files.service';
-import { VariantsService } from '../../variants/variants.service';
+import { VariantsService } from '../../variants/services/variants.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 
 @Injectable()
@@ -20,8 +21,8 @@ export class ImageProcessingService {
     const provider = await this.filesService.getFileProvider(fileId);
     const fileBuffer = await provider.download(file.storageKey);
 
-    const sizes = options.sizes || [100, 200, 500, 1000];
-    const formats = options.formats || ['webp', 'avif'];
+    const sizes = options.sizes || [200, 800];
+    const formats = options.formats || ['webp'];
 
     const variants = [];
 
@@ -30,61 +31,48 @@ export class ImageProcessingService {
     const originalWidth = imageMetadata.width || 0;
     const originalHeight = imageMetadata.height || 0;
 
+    const providerConfig = await this.storageFactory.getProviderConfig(file.storageProviderId);
+
+    // Get the base filename without extension
+    const baseKey = file.storageKey.replace(extname(file.storageKey), '');
+
     for (const size of sizes) {
-      // Generate thumbnail
-      const thumbnailBuffer = await sharp(fileBuffer)
-        .resize(size, size, { fit: 'inside', withoutEnlargement: true })
-        .toBuffer();
-
-      const thumbnailKey = `${file.storageKey}_thumb_${size}`;
-      await provider.upload(thumbnailKey, thumbnailBuffer, 'image/jpeg');
-
-      const providerConfig = await this.storageFactory.getProviderConfig(file.storageProviderId);
-      await this.variantsService.create({
-        fileId,
-        variantType: 'thumbnail',
-        variantKey: thumbnailKey,
-        storageProviderId: providerConfig!.id,
-        size: BigInt(thumbnailBuffer.length),
-        width: size,
-        height: size,
-        format: 'jpeg',
-      });
-
-      variants.push({ type: 'thumbnail', size, key: thumbnailKey });
-
-      // Generate format variants
       for (const format of formats) {
-        const formatBuffer = await sharp(fileBuffer)
+        // Generate resized image in the specified format
+        const variantBuffer = await sharp(fileBuffer)
           .resize(size, size, { fit: 'inside', withoutEnlargement: true })
-          .toFormat(format as any)
+          .toFormat(format, { quality: 85 })
           .toBuffer();
 
-        const formatKey = `${file.storageKey}_${format}_${size}`;
-        await provider.upload(formatKey, formatBuffer, `image/${format}`);
+        // Proper file extension: base_200.webp or base_800.webp
+        const variantKey = `${baseKey}_${size}.${format}`;
+        await provider.upload(variantKey, variantBuffer, `image/${format}`);
+
+        // Determine variant type based on size
+        const variantType = size <= 200 ? 'thumbnail' : 'medium';
 
         await this.variantsService.create({
           fileId,
-          variantType: format,
-          variantKey: formatKey,
+          variantType,
+          variantKey,
           storageProviderId: providerConfig!.id,
-          size: BigInt(formatBuffer.length),
+          size: BigInt(variantBuffer.length),
           width: size,
           height: size,
           format,
+          quality: 85,
         });
 
-        variants.push({ type: format, size, key: formatKey });
+        variants.push({ type: variantType, size, format, key: variantKey });
       }
     }
 
     // Update main file record with dimensions and processing status
-    // All variant keys are stored in file_variants table - no duplication
     await this.filesService.updateFile(fileId, {
       width: originalWidth,
       height: originalHeight,
-      aspectRatio: originalWidth && originalHeight 
-        ? `${originalWidth}:${originalHeight}` 
+      aspectRatio: originalWidth && originalHeight
+        ? `${originalWidth}:${originalHeight}`
         : undefined,
       isProcessed: true,
       processingStatus: 'completed',
@@ -93,4 +81,3 @@ export class ImageProcessingService {
     return variants;
   }
 }
-

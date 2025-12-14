@@ -1,7 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+
+import { Inject, Injectable } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema/schema';
+import { StorageProviderConfig, StorageProviderType } from '../types/storage-provider-config.types';
 
 @Injectable()
 export class StorageProvidersRepository {
@@ -30,7 +32,21 @@ export class StorageProvidersRepository {
       .where(eq(schema.storageProviders.isActive, true));
   }
 
-  async findByType(type: string) {
+  async findDefault() {
+    const result = await this.db
+      .select()
+      .from(schema.storageProviders)
+      .where(
+        and(
+          eq(schema.storageProviders.isActive, true),
+          eq(schema.storageProviders.isDefault, true),
+        ),
+      )
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async findByType(type: StorageProviderType) {
     return this.db
       .select()
       .from(schema.storageProviders)
@@ -44,9 +60,10 @@ export class StorageProvidersRepository {
 
   async create(data: {
     name: string;
-    type: string;
-    config: any;
+    type: StorageProviderType;
+    config: StorageProviderConfig;
     isActive?: boolean;
+    isDefault?: boolean;
   }) {
     const result = await this.db
       .insert(schema.storageProviders)
@@ -55,6 +72,7 @@ export class StorageProvidersRepository {
         type: data.type,
         config: data.config,
         isActive: data.isActive ?? true,
+        isDefault: data.isDefault ?? false,
       })
       .returning();
     return result[0];

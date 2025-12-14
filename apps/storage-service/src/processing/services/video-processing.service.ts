@@ -1,24 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { FilesService } from '../../files/services/files.service';
-import { VariantsService } from '../../variants/variants.service';
-import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
-import * as ffmpeg from 'fluent-ffmpeg';
-import { promisify } from 'util';
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
+import ffmpeg from 'fluent-ffmpeg';
+import { unlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { FilesService } from '../../files/services/files.service';
+import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
+import { VariantsService } from '../../variants/services/variants.service';
 
 @Injectable()
 export class VideoProcessingService {
   constructor(
     private readonly filesService: FilesService,
     private readonly variantsService: VariantsService,
-    private readonly storageFactory: StorageFactoryService,
+    private readonly storageFactory: StorageFactoryService
   ) {}
 
   async processVideo(
     fileId: string,
-    options: { previewFrames?: number; thumbnail?: boolean } = {},
+    options: { previewFrames?: number; thumbnail?: boolean } = {}
   ) {
     const file = await this.filesService.findById(fileId);
     const provider = await this.filesService.getFileProvider(fileId);
@@ -47,7 +46,7 @@ export class VideoProcessingService {
               folder: tempDir,
               size: '320x240',
             })
-            .on('end', resolve)
+            .on('end', () => resolve())
             .on('error', reject);
         });
 
@@ -57,7 +56,9 @@ export class VideoProcessingService {
 
         await provider.upload(thumbKey, thumbBuffer, 'image/jpeg');
 
-        const providerConfig = await this.storageFactory.getProviderConfig(file.storageProviderId);
+        const providerConfig = await this.storageFactory.getProviderConfig(
+          file.storageProviderId
+        );
         await this.variantsService.create({
           fileId,
           variantType: 'thumbnail',
@@ -68,7 +69,9 @@ export class VideoProcessingService {
         });
 
         variants.push({ type: 'thumbnail', key: thumbKey });
-        await unlink(thumbPath).catch(() => {});
+        await unlink(thumbPath).catch((error) => {
+          console.error(error);
+        });
       }
 
       // Extract preview frames
@@ -84,7 +87,7 @@ export class VideoProcessingService {
               folder: tempDir,
               size: '640x480',
             })
-            .on('end', resolve)
+            .on('end', () => resolve())
             .on('error', reject);
         });
 
@@ -93,7 +96,9 @@ export class VideoProcessingService {
 
         await provider.upload(frameKey, frameBuffer, 'image/jpeg');
 
-        const providerConfig = await this.storageFactory.getProviderConfig(file.storageProviderId);
+        const providerConfig = await this.storageFactory.getProviderConfig(
+          file.storageProviderId
+        );
         await this.variantsService.create({
           fileId,
           variantType: 'preview-frame',
@@ -104,15 +109,20 @@ export class VideoProcessingService {
         });
 
         variants.push({ type: 'preview-frame', frame: i, key: frameKey });
-        await unlink(framePath).catch(() => {});
+        await unlink(framePath).catch((error) => {
+          console.error(error);
+        });
       }
 
       return variants;
     } finally {
       // Cleanup temp files
-      await unlink(tempInputPath).catch(() => {});
-      await unlink(tempOutputPath).catch(() => {});
+      await unlink(tempInputPath).catch((error) => {
+        console.error(error);
+      });
+      await unlink(tempOutputPath).catch((error) => {
+        console.error(error);
+      });
     }
   }
 }
-

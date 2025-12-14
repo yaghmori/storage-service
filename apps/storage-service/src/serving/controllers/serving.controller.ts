@@ -2,12 +2,12 @@ import {
   Controller,
   Get,
   Param,
-  Res,
   Query,
   Req,
-  NotFoundException,
+  Res
 } from '@nestjs/common';
-import { Response, Request } from 'express';
+import type { Request, Response } from 'express';
+import { VariantType } from '../../variants/repositories/variants.repository';
 import { ServingService } from '../services/serving.service';
 import { SignedUrlService } from '../services/signed-url.service';
 
@@ -26,12 +26,13 @@ export class ServingController {
     @Query('variant') variant?: string,
     @Query('size') size?: string,
   ) {
-    const ipAddress = request.ip || request.headers['x-forwarded-for'] as string;
+    const forwardedFor = request.headers['x-forwarded-for'];
+    const ipAddress = (forwardedFor ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]) : undefined);
     const userAgent = request.headers['user-agent'];
 
     await this.servingService.streamFile(
       id,
-      variant,
+      variant as VariantType | undefined,
       size ? parseInt(size, 10) : undefined,
       response,
       ipAddress,
@@ -47,7 +48,7 @@ export class ServingController {
   ) {
     const url = await this.signedUrlService.generateSignedUrl(
       id,
-      variant,
+      variant as VariantType | undefined,
       expiresIn ? parseInt(expiresIn, 10) : 3600,
     );
     return { url, expiresIn: expiresIn ? parseInt(expiresIn, 10) : 3600 };

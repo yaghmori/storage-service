@@ -1,38 +1,47 @@
-import { Processor, Process } from '@nestjs/bull';
-import { Job } from 'bullmq';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { VideoProcessingService } from '../services/video-processing.service';
-import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
-import { QueuesService, VideoProcessingJobData } from '../../queues/queues.service';
+import { Job } from 'bullmq';
 import { VIDEO_PROCESSING_QUEUE } from '../../queues/queue-names';
+import { VideoProcessingJobData } from '../../queues/queues.service';
+import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
+import { VideoProcessingService } from '../services/video-processing.service';
 
-@Processor(VIDEO_PROCESSING_QUEUE)
-export class VideoProcessingProcessor {
+@Processor(VIDEO_PROCESSING_QUEUE, { concurrency: 1 })
+export class VideoProcessingProcessor extends WorkerHost {
   private readonly logger = new Logger(VideoProcessingProcessor.name);
 
   constructor(
     private readonly videoProcessingService: VideoProcessingService,
     private readonly jobsRepository: ProcessingJobsRepository,
-  ) {}
+  ) {
+    super();
+  }
 
-  @Process('process-video')
-  async handleVideoProcessing(job: Job<VideoProcessingJobData>) {
-    this.logger.log(`Processing video job ${job.id} for file ${job.data.fileId}`);
-    
+  async process(job: Job<VideoProcessingJobData>) {
+    const jobId = job.id || `temp-${Date.now()}`;
+    this.logger.log(`Processing video job ${jobId} for file ${job.data.fileId}`);
+
     // Convert fileId to string if it's a number
     const fileId = typeof job.data.fileId === 'number' ? String(job.data.fileId) : job.data.fileId;
 
-    try {
-      // Create job record
-      const jobRecord = await this.jobsRepository.create({
-        fileId,
-        jobType: 'video',
-        status: 'processing',
-        bullmqJobId: job.id,
-      });
+    let jobRecord: Awaited<ReturnType<typeof this.jobsRepository.create>> | null = null;
 
-      // Update job status to processing
-      await this.jobsRepository.updateStatus(jobRecord.id, 'processing');
+    try {
+      // Find existing job record (created when job was added to queue)
+      jobRecord = job.id ? await this.jobsRepository.findByBullmqJobId(job.id) : null;
+
+      // If record doesn't exist, create it (backward compatibility)
+      if (!jobRecord) {
+        jobRecord = await this.jobsRepository.create({
+          fileId,
+          jobType: 'video',
+          status: 'processing',
+          bullmqJobId: job.id,
+        });
+      } else if (job.id) {
+        // Update existing record to processing
+        await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'processing');
+      }
 
       // Process video
       const variants = await this.videoProcessingService.processVideo(
@@ -41,7 +50,11 @@ export class VideoProcessingProcessor {
       );
 
       // Update job status to completed
-      await this.jobsRepository.updateStatus(jobRecord.id, 'completed');
+      if (job.id) {
+        await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'completed');
+      } else if (jobRecord) {
+        await this.jobsRepository.updateStatus(jobRecord.id, 'completed');
+      }
 
       this.logger.log(
         `Video processing completed for file ${fileId}, created ${variants.length} variants`,
@@ -50,25 +63,35 @@ export class VideoProcessingProcessor {
       return { success: true, variants };
     } catch (error) {
       this.logger.error(
-        `Video processing failed for file ${fileId}: ${error.message}`,
-        error.stack,
+        `Video processing failed for file ${fileId}: ${(error as Error).message}`,
+        (error as Error).stack,
       );
 
       // Update job status to failed
-      const jobRecord = await this.jobsRepository.create({
-        fileId,
-        jobType: 'video',
-        status: 'failed',
-        bullmqJobId: job.id,
-      });
-      await this.jobsRepository.updateStatus(
-        jobRecord.id,
-        'failed',
-        error.message,
-      );
+      if (job.id) {
+        let failedJobRecord = await this.jobsRepository.findByBullmqJobId(job.id);
+        if (!failedJobRecord) {
+          failedJobRecord = await this.jobsRepository.create({
+            fileId,
+            jobType: 'video',
+            status: 'failed',
+            bullmqJobId: job.id,
+          });
+        }
+        await this.jobsRepository.updateStatusByBullmqJobId(
+          job.id,
+          'failed',
+          (error as Error).message,
+        );
+      } else if (jobRecord) {
+        await this.jobsRepository.updateStatus(
+          jobRecord.id,
+          'failed',
+          (error as Error).message,
+        );
+      }
 
       throw error;
     }
   }
 }
-

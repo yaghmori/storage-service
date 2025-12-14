@@ -1,17 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import * as MinIO from 'minio';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
+import { MinIOConfig } from '../types/storage-provider-config.types';
 
 @Injectable()
 export class MinIOStorageService {
-  createInstance(config: any): IStorageProvider {
+  async createInstance(config: MinIOConfig): Promise<IStorageProvider> {
     const client = new MinIO.Client({
       endPoint: config.endpoint?.replace('http://', '').replace('https://', '') || 'localhost',
-      port: config.port ? parseInt(config.port, 10) : 9000,
+      port: config.port ? parseInt((config.port as string), 10) : 9000,
       useSSL: config.useSSL || false,
       accessKey: config.accessKeyId,
       secretKey: config.secretAccessKey,
     });
+
+    // Ensure bucket exists, create if it doesn't
+    const bucketName = config.bucket;
+    if (bucketName) {
+      try {
+        const exists = await client.bucketExists(bucketName);
+        if (!exists) {
+          await client.makeBucket(bucketName, 'us-east-1');
+        }
+      } catch (error) {
+        throw new Error(
+          `Failed to check/create MinIO bucket "${bucketName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+    }
 
     return {
       upload: async (key: string, buffer: Buffer, contentType?: string) => {
@@ -40,7 +56,7 @@ export class MinIOStorageService {
           return false;
         }
       },
-      getSignedUrl: async (key: string, expiresIn: number = 3600) => {
+      getSignedUrl: async (key: string, expiresIn = 3600) => {
         return client.presignedGetObject(config.bucket, key, expiresIn);
       },
       getPublicUrl: async (key: string) => {

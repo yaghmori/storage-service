@@ -10,6 +10,7 @@ export default defineConfig({
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_NAME || 'storage_service',
+    ssl: false, // Disable SSL for local development
   },
   verbose: true,
   strict: true,

@@ -1,7 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { Inject, Injectable } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/schema/schema';
+
+export type VariantType = 'thumbnail' | 'webp' | 'avif' | 'medium' | 'large' | 'xlarge' | 'preview-frame' | 'thumbnail-video' | 'preview-video';
 
 @Injectable()
 export class VariantsRepository {
@@ -17,14 +19,15 @@ export class VariantsRepository {
       .where(eq(schema.fileVariants.fileId, fileId));
   }
 
-  async findByFileIdAndType(fileId: string, variantType: string) {
+  async findByFileIdAndType(fileId: string, variantType: VariantType) {
     return this.db
       .select()
       .from(schema.fileVariants)
       .where(
         and(
           eq(schema.fileVariants.fileId, fileId),
-          eq(schema.fileVariants.variantType, variantType),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          eq(schema.fileVariants.variantType, variantType as any),
         ),
       );
   }
@@ -40,7 +43,7 @@ export class VariantsRepository {
 
   async create(data: {
     fileId: string;
-    variantType: string;
+    variantType: VariantType;
     variantKey: string;
     storageProviderId: number;
     size: bigint;
@@ -53,7 +56,8 @@ export class VariantsRepository {
       .insert(schema.fileVariants)
       .values({
         fileId: data.fileId,
-        variantType: data.variantType,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        variantType: data.variantType as any,
         variantKey: data.variantKey,
         storageProviderId: data.storageProviderId,
         size: data.size,

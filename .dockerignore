@@ -1,6 +1,8 @@
 # Dependencies
 node_modules
 npm-debug.log
+.pnpm-store
+pnpm-debug.log
 # Note: pnpm-lock.yaml is needed for Docker builds, so we don't exclude it
 
 # Build outputs

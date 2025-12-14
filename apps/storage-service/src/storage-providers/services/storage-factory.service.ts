@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
 import { StorageProvidersRepository } from '../repositories/storage-providers.repository';
-import { S3StorageService } from './s3-storage.service';
-import { MinIOStorageService } from './minio-storage.service';
+import { LocalConfig, MinIOConfig, S3Config, StorageProvider } from '../types/storage-provider-config.types';
 import { LocalStorageService } from './local-storage.service';
+import { MinIOStorageService } from './minio-storage.service';
+import { S3StorageService } from './s3-storage.service';
 
 @Injectable()
 export class StorageFactoryService {
@@ -20,37 +21,58 @@ export class StorageFactoryService {
       throw new Error(`Storage provider ${providerId} not found or inactive`);
     }
 
-    return this.createProviderInstance(provider);
+    return await this.createProviderInstance(provider as StorageProvider);
   }
 
   async getDefaultProvider(): Promise<IStorageProvider> {
-    const providers = await this.repository.findActive();
-    if (providers.length === 0) {
-      throw new Error('No active storage providers found');
+    // First try to find a provider marked as default
+    let provider = await this.repository.findDefault();
+    
+    // If no default provider is set, use the first active provider
+    if (!provider) {
+      const providers = await this.repository.findActive();
+      if (providers.length === 0) {
+        throw new Error('No active storage providers found');
+      }
+      provider = providers[0];
     }
 
-    // Use first active provider as default (can be enhanced with priority/round-robin)
-    return this.createProviderInstance(providers[0]);
+    return await this.createProviderInstance(provider as StorageProvider);
   }
 
   async getProviderConfig(providerId?: number) {
     if (providerId) {
       return this.repository.findById(providerId);
     }
+    
+    // Try to find default provider first
+    const defaultProvider = await this.repository.findDefault();
+    if (defaultProvider) {
+      return defaultProvider;
+    }
+    
+    // Fallback to first active provider
     const providers = await this.repository.findActive();
     return providers[0] || null;
   }
 
-  private createProviderInstance(provider: any): IStorageProvider {
-    switch (provider.type) {
+  async findProviderByType(type: 'local' | 'minio' | 's3') {
+    const providers = await this.repository.findByType(type);
+    return providers[0] || null;
+  }
+
+  private async createProviderInstance(provider: StorageProvider): Promise<IStorageProvider> {
+    const { type, config } = provider;
+
+    switch (type) {
       case 's3':
-        return this.s3Service.createInstance(provider.config);
+        return this.s3Service.createInstance(config as S3Config);
       case 'minio':
-        return this.minioService.createInstance(provider.config);
+        return await this.minioService.createInstance(config as MinIOConfig);
       case 'local':
-        return this.localService.createInstance(provider.config);
+        return this.localService.createInstance(config as LocalConfig);
       default:
-        throw new Error(`Unknown storage provider type: ${provider.type}`);
+        throw new Error(`Unknown storage provider type: ${type}`);
     }
   }
 }

@@ -14,7 +14,10 @@ import * as schema from './schema/schema';
       provide: 'DRIZZLE_DB',
       useFactory: (config: DatabaseConfig) => {
         const connectionString = config.connectionString;
-        const client = postgres(connectionString, { max: 10 });
+        const client = postgres(connectionString, {
+          max: 10,
+          ssl: false, // Disable SSL for local development
+        });
         return drizzle(client, { schema });
       },
       inject: [DatabaseConfig],

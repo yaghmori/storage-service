@@ -21,7 +21,14 @@ export class SeedService {
       return;
     }
 
-    // Seed default local storage provider
+    // Check if MinIO is configured to determine default provider
+    const isMinIOConfigured =
+      process.env.MINIO_ENDPOINT &&
+      process.env.MINIO_ACCESS_KEY &&
+      process.env.MINIO_SECRET_KEY &&
+      process.env.MINIO_BUCKET;
+
+    // Seed local storage provider (fallback if MinIO not configured)
     const localProvider = await this.db
       .insert(schema.storageProviders)
       .values({
@@ -31,18 +38,16 @@ export class SeedService {
           path: process.env.UPLOAD_PATH || './uploads',
         },
         isActive: true,
+        isDefault: !isMinIOConfigured, // Only default if MinIO is not configured
       })
       .returning();
 
-    this.logger.log(`Created local storage provider with ID: ${localProvider[0].id}`);
+    this.logger.log(
+      `Created local storage provider with ID: ${localProvider[0].id}${!isMinIOConfigured ? ' (marked as default)' : ''}`,
+    );
 
-    // Seed MinIO provider if configured
-    if (
-      process.env.MINIO_ENDPOINT &&
-      process.env.MINIO_ACCESS_KEY &&
-      process.env.MINIO_SECRET_KEY &&
-      process.env.MINIO_BUCKET
-    ) {
+    // Seed MinIO provider if configured (set as default)
+    if (isMinIOConfigured) {
       const minioProvider = await this.db
         .insert(schema.storageProviders)
         .values({
@@ -57,10 +62,11 @@ export class SeedService {
             useSSL: process.env.MINIO_USE_SSL === 'true',
           },
           isActive: process.env.MINIO_ACTIVE !== 'false',
+          isDefault: true, // Mark MinIO as default provider
         })
         .returning();
 
-      this.logger.log(`Created MinIO storage provider with ID: ${minioProvider[0].id}`);
+      this.logger.log(`Created MinIO storage provider with ID: ${minioProvider[0].id} (marked as default)`);
     }
 
     // Seed AWS S3 provider if configured

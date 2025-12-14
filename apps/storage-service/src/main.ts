@@ -2,23 +2,31 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { TcpExceptionFilter } from './common/filters/tcp-exception.filter';
 
 async function bootstrap() {
   // Create HTTP application
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
 
   // Set global prefix
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
 
   // Connect TCP microservice
-  app.connectMicroservice<MicroserviceOptions>({
+  const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.TCP,
     options: {
       host: process.env.TCP_HOST || '0.0.0.0',
       port: parseInt(process.env.TCP_PORT || '4001', 10),
+      retryAttempts: 5,
+      retryDelay: 3000,
     },
   });
+
+  // Apply exception filter to microservice
+  microservice.useGlobalFilters(new TcpExceptionFilter());
 
   // Start all microservices
   await app.startAllMicroservices();

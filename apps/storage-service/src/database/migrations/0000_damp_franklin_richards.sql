@@ -142,6 +142,7 @@ CREATE TABLE "storage_providers" (
 	"type" "storage_provider_type" NOT NULL,
 	"config" jsonb NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
+	"is_default" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "storage_providers_name_unique" UNIQUE("name")
@@ -185,4 +186,5 @@ CREATE INDEX "processing_jobs_job_type_idx" ON "processing_jobs" USING btree ("j
 CREATE INDEX "processing_jobs_bullmq_job_id_idx" ON "processing_jobs" USING btree ("bullmq_job_id");--> statement-breakpoint
 CREATE INDEX "processing_jobs_file_status_idx" ON "processing_jobs" USING btree ("file_id","status");--> statement-breakpoint
 CREATE INDEX "storage_providers_type_idx" ON "storage_providers" USING btree ("type");--> statement-breakpoint
-CREATE INDEX "storage_providers_active_idx" ON "storage_providers" USING btree ("is_active");
+CREATE INDEX "storage_providers_active_idx" ON "storage_providers" USING btree ("is_active");--> statement-breakpoint
+CREATE INDEX "storage_providers_default_idx" ON "storage_providers" USING btree ("is_default");

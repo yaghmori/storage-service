@@ -6,10 +6,16 @@ export class DatabaseConfig {
   constructor(private configService: ConfigService) {}
 
   get connectionString(): string {
-    return (
-      this.configService.get<string>('DATABASE_URL') ||
-      'postgresql://postgres:postgres@localhost:5432/storage_service'
-    );
+    const url = this.configService.get<string>('DATABASE_URL') ||
+      'postgresql://postgres:postgres@localhost:5432/storage_service';
+    
+    // Ensure SSL is disabled for local development if not already specified
+    if (!url.includes('sslmode=')) {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}sslmode=disable`;
+    }
+    
+    return url;
   }
 
   get host(): string {

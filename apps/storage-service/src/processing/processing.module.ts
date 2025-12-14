@@ -1,23 +1,17 @@
-import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
-import { ProcessingService } from './services/processing.service';
-import { ImageProcessingService } from './services/image-processing.service';
-import { VideoProcessingService } from './services/video-processing.service';
-import { MetadataExtractionService } from './services/metadata-extraction.service';
-import { ImageProcessingProcessor } from './processors/image-processing.processor';
-import { VideoProcessingProcessor } from './processors/video-processing.processor';
-import { MetadataExtractionProcessor } from './processors/metadata-extraction.processor';
-import { ProcessingJobsRepository } from './repositories/processing-jobs.repository';
-import { FilesModule } from '../files/files.module';
-import { VariantsModule } from '../variants/variants.module';
-import { StorageProvidersModule } from '../storage-providers/storage-providers.module';
+import { Module, forwardRef } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
+import { FilesModule } from '../files/files.module';
 import { QueuesModule } from '../queues/queues.module';
-import {
-  IMAGE_PROCESSING_QUEUE,
-  VIDEO_PROCESSING_QUEUE,
-  METADATA_EXTRACTION_QUEUE,
-} from '../queues/queue-names';
+import { StorageProvidersModule } from '../storage-providers/storage-providers.module';
+import { VariantsModule } from '../variants/variants.module';
+import { ImageProcessingProcessor } from './processors/image-processing.processor';
+import { MetadataExtractionProcessor } from './processors/metadata-extraction.processor';
+import { VideoProcessingProcessor } from './processors/video-processing.processor';
+import { ProcessingJobsRepository } from './repositories/processing-jobs.repository';
+import { ImageProcessingService } from './services/image-processing.service';
+import { MetadataExtractionService } from './services/metadata-extraction.service';
+import { ProcessingService } from './services/processing.service';
+import { VideoProcessingService } from './services/video-processing.service';
 
 @Module({
   imports: [
@@ -25,12 +19,7 @@ import {
     VariantsModule,
     StorageProvidersModule,
     DatabaseModule,
-    QueuesModule,
-    BullModule.registerQueue(
-      { name: IMAGE_PROCESSING_QUEUE },
-      { name: VIDEO_PROCESSING_QUEUE },
-      { name: METADATA_EXTRACTION_QUEUE },
-    ),
+    forwardRef(() => QueuesModule),
   ],
   providers: [
     ProcessingService,
@@ -47,6 +36,7 @@ import {
     ImageProcessingService,
     VideoProcessingService,
     MetadataExtractionService,
+    ProcessingJobsRepository,
   ],
 })
 export class ProcessingModule {}

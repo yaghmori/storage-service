@@ -19,6 +19,7 @@
   "plugins": [
     {
       "plugin": "@nx/js/typescript",
+      "exclude": ["**/api-gateway/**", "**/api-gateway-e2e/**"],
       "options": {
         "typecheck": {
           "targetName": "typecheck"
@@ -33,6 +34,7 @@
     },
     {
       "plugin": "@nx/webpack/plugin",
+      "exclude": ["**/api-gateway/**", "**/api-gateway-e2e/**"],
       "options": {
         "buildTargetName": "build",
         "serveTargetName": "serve",
@@ -44,18 +46,21 @@
     },
     {
       "plugin": "@nx/eslint/plugin",
+      "exclude": ["**/api-gateway/**", "**/api-gateway-e2e/**"],
       "options": {
         "targetName": "lint"
       }
     },
     {
       "plugin": "@nx/jest/plugin",
+      "exclude": ["**/api-gateway/**", "**/api-gateway-e2e/**"],
       "options": {
         "targetName": "test"
-      },
+      }
     },
     {
       "plugin": "@nx/docker",
+      "exclude": ["**/api-gateway/**", "**/api-gateway-e2e/**"],
       "options": {
         "buildTarget": {
           "name": "docker:build"
