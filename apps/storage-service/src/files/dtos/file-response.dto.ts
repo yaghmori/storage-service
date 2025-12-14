@@ -1,6 +1,6 @@
 export class FileResponseDto {
-  id!: number;
-  storageProviderId!: number;
+  id!: string;
+  storageProviderId!: string;
   key!: string;
   originalFilename!: string;
   mimeType!: string;

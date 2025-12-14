@@ -19,13 +19,14 @@ RUN npm config set fetch-retries 5 && \
 
 # Install development tools globally with retry logic
 # Use npm for global packages (more reliable than pnpm global install)
-RUN npm install -g nodemon ts-node typescript tsconfig-paths || \
+# tsx is faster than nodemon+ts-node (uses esbuild under the hood)
+RUN npm install -g tsx ts-node typescript tsconfig-paths || \
     (echo "First attempt failed, retrying..." && \
      sleep 5 && \
-     npm install -g --fetch-retries=5 nodemon ts-node typescript tsconfig-paths) || \
+     npm install -g --fetch-retries=5 tsx ts-node typescript tsconfig-paths) || \
     (echo "Second retry failed, trying again..." && \
      sleep 10 && \
-     npm install -g --fetch-retries=10 nodemon ts-node typescript tsconfig-paths)
+     npm install -g --fetch-retries=10 tsx ts-node typescript tsconfig-paths)
 
 WORKDIR /app
 
@@ -111,7 +112,6 @@ COPY package.json pnpm-lock.yaml ./
 COPY nx.json tsconfig.base.json tsconfig.json ./
 COPY apps/storage-service/package.json ./apps/storage-service/
 COPY apps/storage-service/tsconfig*.json ./apps/storage-service/
-COPY apps/storage-service/nodemon.json ./apps/storage-service/
 
 # Copy installed dependencies from dependencies stage
 # Note: With pnpm workspace, dependencies are hoisted to root node_modules
@@ -127,7 +127,17 @@ COPY apps/storage-service/src ./apps/storage-service/src
 # Expose ports
 EXPOSE 4000 4001
 
-# Change to the app directory and use nodemon for hot reload
+# Change to the app directory and use tsx watch for hot reload
+# tsx is much faster than nodemon+ts-node (10-100x faster restarts)
+# Configure file watching for Docker on Windows (polling mode)
+# TSC_WATCHFILE enables TypeScript compiler polling for file changes
+# CHOKIDAR_USEPOLLING enables chokidar (used by tsx) polling mode
+ENV TSC_WATCHFILE=DynamicPriorityPolling
+ENV CHOKIDAR_USEPOLLING=true
+ENV CHOKIDAR_INTERVAL=1000
 WORKDIR /app/apps/storage-service
-CMD ["nodemon"]
+# tsx watch automatically watches all imported TypeScript files
+# tsx.config.json is automatically detected and used for watch configuration
+# Config files (tsconfig.base.json, nx.json) are read at startup, so changes require manual restart
+CMD ["tsx", "watch", "--tsconfig", "tsconfig.app.json", "-r", "tsconfig-paths/register", "src/main.ts"]
 

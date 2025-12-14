@@ -1,20 +1,19 @@
 import { sql } from 'drizzle-orm';
 import {
-    bigint,
-    boolean,
-    check,
-    index,
-    integer,
-    jsonb,
-    pgEnum,
-    pgTable,
-    real,
-    serial,
-    text,
-    timestamp,
-    unique,
-    uuid,
-    varchar,
+  bigint,
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  unique,
+  uuid,
+  varchar
 } from 'drizzle-orm/pg-core';
 
 // Enum types
@@ -27,7 +26,7 @@ export const downloadMethodEnum = pgEnum('download_method', ['direct', 'signed_u
 export const detectionMethodEnum = pgEnum('detection_method', ['sha256', 'content', 'manual', 'ai']);
 
 export const storageProviders = pgTable('storage_providers', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
   type: storageProviderTypeEnum('type').notNull(),
   config: jsonb('config').notNull(),
@@ -47,7 +46,7 @@ export const files = pgTable('files', {
   id: uuid('id').defaultRandom().primaryKey(),
 
   // Storage information
-  storageProviderId: integer('storage_provider_id').notNull().references(() => storageProviders.id, {
+  storageProviderId: uuid('storage_provider_id').notNull().references(() => storageProviders.id, {
     onDelete: 'restrict' // Prevent deletion of provider if files exist
   }),
   storageKey: varchar('storage_key', { length: 500 }).notNull(), // The actual key in storage
@@ -123,7 +122,7 @@ export const files = pgTable('files', {
   // Access control
   visibility: fileVisibilityEnum('visibility').default('public'),
   downloadPassword: text('download_password'), // Hashed password if protected
-  uploadedBy: integer('uploaded_by'), // User ID if available
+  uploadedBy: uuid('uploaded_by'), // User ID (UUID) if available
 
   // External integrations
   externalId: varchar('external_id', { length: 255 }),
@@ -175,7 +174,7 @@ export const fileVariants = pgTable('file_variants', {
   fileId: uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
   variantType: variantTypeEnum('variant_type').notNull(),
   variantKey: varchar('variant_key', { length: 500 }).notNull(),
-  storageProviderId: integer('storage_provider_id').notNull().references(() => storageProviders.id, {
+  storageProviderId: uuid('storage_provider_id').notNull().references(() => storageProviders.id, {
     onDelete: 'restrict'
   }),
   size: bigint('size', { mode: 'bigint' }).notNull(),
@@ -230,7 +229,7 @@ export const downloadLogs = pgTable('download_logs', {
   variantId: uuid('variant_id').references(() => fileVariants.id, { onDelete: 'set null' }),
   ipAddress: varchar('ip_address', { length: 45 }),
   userAgent: text('user_agent'),
-  userId: integer('user_id'), // User ID if available
+  userId: uuid('user_id'), // User ID (UUID) if available
   bytesDownloaded: bigint('bytes_downloaded', { mode: 'bigint' }), // Actual bytes downloaded
   downloadMethod: downloadMethodEnum('download_method'),
   referer: text('referer'), // HTTP referer
@@ -247,26 +246,27 @@ export const downloadLogs = pgTable('download_logs', {
   fileDateIdx: index('download_logs_file_date_idx').on(table.fileId, table.downloadedAt),
 }));
 
-// File Duplicates - tracks duplicate relationships
+// File Duplicates - tracks duplicate upload attempts
+// Since we have a unique constraint on fileHash, we can't create multiple file records with the same hash.
+// This table tracks when users attempt to upload files that already exist.
+// All file metadata (mimeType, size, originalFileName) can be retrieved from the files table via originalFileId.
 export const fileDuplicates = pgTable('file_duplicates', {
   id: uuid('id').defaultRandom().primaryKey(),
   originalFileId: uuid('original_file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
-  duplicateFileId: uuid('duplicate_file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
   detectedAt: timestamp('detected_at', { withTimezone: false }).notNull().defaultNow(),
   detectionMethod: detectionMethodEnum('detection_method').notNull().default('sha256'),
-  similarityScore: real('similarity_score'), // 0.0 to 1.0 for content-based detection
-  isConfirmed: boolean('is_confirmed').default(false), // Manually confirmed duplicate
-  confirmedBy: integer('confirmed_by'), // User ID who confirmed
-  confirmedAt: timestamp('confirmed_at', { withTimezone: false }),
+  similarityScore: real('similarity_score'), // 0.0 to 1.0 for content-based detection (future use)
+  uploadedBy: uuid('uploaded_by'), // User ID (UUID) who uploaded (if available) - useful for tracking who uploaded duplicates
+  isConfirmed: boolean('is_confirmed').default(false), // Manually confirmed duplicate (future use)
+  confirmedBy: uuid('confirmed_by'), // User ID (UUID) who confirmed (future use)
+  confirmedAt: timestamp('confirmed_at', { withTimezone: false }), // When confirmed (future use)
 }, (table) => ({
-  // Unique constraint: prevent duplicate entries
-  uniqueDuplicate: unique('file_duplicates_unique').on(table.originalFileId, table.duplicateFileId),
-  // Indexes
+  // Indexes for performance
   originalFileIdx: index('file_duplicates_original_idx').on(table.originalFileId),
-  duplicateFileIdx: index('file_duplicates_duplicate_idx').on(table.duplicateFileId),
-  // Check constraint: original and duplicate must be different
-  differentFilesCheck: check('file_duplicates_different_check', sql`${table.originalFileId} != ${table.duplicateFileId}`),
+  detectedAtIdx: index('file_duplicates_detected_at_idx').on(table.detectedAt),
+  uploadedByIdx: index('file_duplicates_uploaded_by_idx').on(table.uploadedBy),
   // Check constraint: similarity score must be between 0 and 1
   similarityScoreCheck: check('file_duplicates_similarity_check', sql`${table.similarityScore} IS NULL OR (${table.similarityScore} >= 0 AND ${table.similarityScore} <= 1)`),
 }));
+
 

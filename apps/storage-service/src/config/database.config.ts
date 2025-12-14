@@ -1,20 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DatabaseConfig {
-  constructor(private configService: ConfigService) {}
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigService,
+  ) {}
 
   get connectionString(): string {
     const url = this.configService.get<string>('DATABASE_URL') ||
       'postgresql://postgres:postgres@localhost:5432/storage_service';
-    
+
     // Ensure SSL is disabled for local development if not already specified
     if (!url.includes('sslmode=')) {
       const separator = url.includes('?') ? '&' : '?';
       return `${url}${separator}sslmode=disable`;
     }
-    
+
     return url;
   }
 

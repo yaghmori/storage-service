@@ -1,12 +1,14 @@
 import {
   Body,
   Controller,
-  ParseIntPipe,
+  HttpCode,
+  HttpStatus,
   Post,
   UploadedFile,
-  UseInterceptors,
+  UseInterceptors
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UploadService } from '../services/upload.service';
 
 @Controller('upload')
@@ -15,12 +17,15 @@ export class UploadController {
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.CREATED) // Default to 201, will be handled by interceptor if needed
   async uploadFile(
     @UploadedFile() file: any,
-    @Body('storageProviderId', new ParseIntPipe({ optional: true }))
-    storageProviderId?: number,
+    @Body('storageProviderId')
+    storageProviderId?: string,
+    @CurrentUser() user?: { id?: string },
   ) {
-    return this.uploadService.uploadFile(file, storageProviderId);
+    // Return data directly - transform interceptor will wrap with data and meta
+    return await this.uploadService.uploadFile(file, storageProviderId, user?.id);
   }
 }
 

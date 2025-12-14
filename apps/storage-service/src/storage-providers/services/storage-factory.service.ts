@@ -15,7 +15,7 @@ export class StorageFactoryService {
     private readonly localService: LocalStorageService,
   ) {}
 
-  async getProvider(providerId: number): Promise<IStorageProvider> {
+  async getProvider(providerId: string): Promise<IStorageProvider> {
     const provider = await this.repository.findById(providerId);
     if (!provider || !provider.isActive) {
       throw new Error(`Storage provider ${providerId} not found or inactive`);
@@ -27,7 +27,7 @@ export class StorageFactoryService {
   async getDefaultProvider(): Promise<IStorageProvider> {
     // First try to find a provider marked as default
     let provider = await this.repository.findDefault();
-    
+
     // If no default provider is set, use the first active provider
     if (!provider) {
       const providers = await this.repository.findActive();
@@ -40,17 +40,17 @@ export class StorageFactoryService {
     return await this.createProviderInstance(provider as StorageProvider);
   }
 
-  async getProviderConfig(providerId?: number) {
+  async getProviderConfig(providerId?: string) {
     if (providerId) {
       return this.repository.findById(providerId);
     }
-    
+
     // Try to find default provider first
     const defaultProvider = await this.repository.findDefault();
     if (defaultProvider) {
       return defaultProvider;
     }
-    
+
     // Fallback to first active provider
     const providers = await this.repository.findActive();
     return providers[0] || null;

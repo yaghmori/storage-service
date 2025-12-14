@@ -1,5 +1,5 @@
 {
-  "id": "fbc93d29-bb5b-45d6-8a92-9e8f4f90d0bb",
+  "id": "91a635a7-4dc8-4518-83da-bdb5f662deba",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -41,7 +41,7 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -221,12 +221,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "duplicate_file_id": {
-          "name": "duplicate_file_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "detected_at": {
           "name": "detected_at",
           "type": "timestamp",
@@ -248,6 +242,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "uploaded_by": {
+          "name": "uploaded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_confirmed": {
           "name": "is_confirmed",
           "type": "boolean",
@@ -257,7 +257,7 @@
         },
         "confirmed_by": {
           "name": "confirmed_by",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -284,11 +284,26 @@
           "method": "btree",
           "with": {}
         },
-        "file_duplicates_duplicate_idx": {
-          "name": "file_duplicates_duplicate_idx",
+        "file_duplicates_detected_at_idx": {
+          "name": "file_duplicates_detected_at_idx",
           "columns": [
             {
-              "expression": "duplicate_file_id",
+              "expression": "detected_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "file_duplicates_uploaded_by_idx": {
+          "name": "file_duplicates_uploaded_by_idx",
+          "columns": [
+            {
+              "expression": "uploaded_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -313,38 +328,12 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "file_duplicates_duplicate_file_id_files_id_fk": {
-          "name": "file_duplicates_duplicate_file_id_files_id_fk",
-          "tableFrom": "file_duplicates",
-          "tableTo": "files",
-          "columnsFrom": [
-            "duplicate_file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "file_duplicates_unique": {
-          "name": "file_duplicates_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "original_file_id",
-            "duplicate_file_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "file_duplicates_different_check": {
-          "name": "file_duplicates_different_check",
-          "value": "\"file_duplicates\".\"original_file_id\" != \"file_duplicates\".\"duplicate_file_id\""
-        },
         "file_duplicates_similarity_check": {
           "name": "file_duplicates_similarity_check",
           "value": "\"file_duplicates\".\"similarity_score\" IS NULL OR (\"file_duplicates\".\"similarity_score\" >= 0 AND \"file_duplicates\".\"similarity_score\" <= 1)"
@@ -460,7 +449,7 @@
         },
         "storage_provider_id": {
           "name": "storage_provider_id",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -635,7 +624,7 @@
         },
         "storage_provider_id": {
           "name": "storage_provider_id",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -908,7 +897,7 @@
         },
         "uploaded_by": {
           "name": "uploaded_by",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -1360,9 +1349,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "name": {
           "name": "name",

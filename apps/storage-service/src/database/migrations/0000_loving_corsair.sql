@@ -11,7 +11,7 @@ CREATE TABLE "download_logs" (
 	"variant_id" uuid,
 	"ip_address" varchar(45),
 	"user_agent" text,
-	"user_id" integer,
+	"user_id" uuid,
 	"bytes_downloaded" bigint,
 	"download_method" "download_method",
 	"referer" text,
@@ -21,15 +21,13 @@ CREATE TABLE "download_logs" (
 CREATE TABLE "file_duplicates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"original_file_id" uuid NOT NULL,
-	"duplicate_file_id" uuid NOT NULL,
 	"detected_at" timestamp DEFAULT now() NOT NULL,
 	"detection_method" "detection_method" DEFAULT 'sha256' NOT NULL,
 	"similarity_score" real,
+	"uploaded_by" uuid,
 	"is_confirmed" boolean DEFAULT false,
-	"confirmed_by" integer,
+	"confirmed_by" uuid,
 	"confirmed_at" timestamp,
-	CONSTRAINT "file_duplicates_unique" UNIQUE("original_file_id","duplicate_file_id"),
-	CONSTRAINT "file_duplicates_different_check" CHECK ("file_duplicates"."original_file_id" != "file_duplicates"."duplicate_file_id"),
 	CONSTRAINT "file_duplicates_similarity_check" CHECK ("file_duplicates"."similarity_score" IS NULL OR ("file_duplicates"."similarity_score" >= 0 AND "file_duplicates"."similarity_score" <= 1))
 );
 --> statement-breakpoint
@@ -46,7 +44,7 @@ CREATE TABLE "file_variants" (
 	"file_id" uuid NOT NULL,
 	"variant_type" "variant_type" NOT NULL,
 	"variant_key" varchar(500) NOT NULL,
-	"storage_provider_id" integer NOT NULL,
+	"storage_provider_id" uuid NOT NULL,
 	"size" bigint NOT NULL,
 	"width" integer,
 	"height" integer,
@@ -60,7 +58,7 @@ CREATE TABLE "file_variants" (
 --> statement-breakpoint
 CREATE TABLE "files" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"storage_provider_id" integer NOT NULL,
+	"storage_provider_id" uuid NOT NULL,
 	"storage_key" varchar(500) NOT NULL,
 	"storage_bucket" varchar(255),
 	"file_name" varchar(255) NOT NULL,
@@ -104,7 +102,7 @@ CREATE TABLE "files" (
 	"is_nsfw" boolean DEFAULT false,
 	"visibility" "file_visibility" DEFAULT 'public',
 	"download_password" text,
-	"uploaded_by" integer,
+	"uploaded_by" uuid,
 	"external_id" varchar(255),
 	"external_provider" varchar(100),
 	"cdn_url" text,
@@ -137,7 +135,7 @@ CREATE TABLE "processing_jobs" (
 );
 --> statement-breakpoint
 CREATE TABLE "storage_providers" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"type" "storage_provider_type" NOT NULL,
 	"config" jsonb NOT NULL,
@@ -151,7 +149,6 @@ CREATE TABLE "storage_providers" (
 ALTER TABLE "download_logs" ADD CONSTRAINT "download_logs_file_id_files_id_fk" FOREIGN KEY ("file_id") REFERENCES "public"."files"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "download_logs" ADD CONSTRAINT "download_logs_variant_id_file_variants_id_fk" FOREIGN KEY ("variant_id") REFERENCES "public"."file_variants"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_duplicates" ADD CONSTRAINT "file_duplicates_original_file_id_files_id_fk" FOREIGN KEY ("original_file_id") REFERENCES "public"."files"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "file_duplicates" ADD CONSTRAINT "file_duplicates_duplicate_file_id_files_id_fk" FOREIGN KEY ("duplicate_file_id") REFERENCES "public"."files"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_metadata" ADD CONSTRAINT "file_metadata_file_id_files_id_fk" FOREIGN KEY ("file_id") REFERENCES "public"."files"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_variants" ADD CONSTRAINT "file_variants_file_id_files_id_fk" FOREIGN KEY ("file_id") REFERENCES "public"."files"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "file_variants" ADD CONSTRAINT "file_variants_storage_provider_id_storage_providers_id_fk" FOREIGN KEY ("storage_provider_id") REFERENCES "public"."storage_providers"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -164,7 +161,8 @@ CREATE INDEX "download_logs_ip_address_idx" ON "download_logs" USING btree ("ip_
 CREATE INDEX "download_logs_user_id_idx" ON "download_logs" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "download_logs_file_date_idx" ON "download_logs" USING btree ("file_id","downloaded_at");--> statement-breakpoint
 CREATE INDEX "file_duplicates_original_idx" ON "file_duplicates" USING btree ("original_file_id");--> statement-breakpoint
-CREATE INDEX "file_duplicates_duplicate_idx" ON "file_duplicates" USING btree ("duplicate_file_id");--> statement-breakpoint
+CREATE INDEX "file_duplicates_detected_at_idx" ON "file_duplicates" USING btree ("detected_at");--> statement-breakpoint
+CREATE INDEX "file_duplicates_uploaded_by_idx" ON "file_duplicates" USING btree ("uploaded_by");--> statement-breakpoint
 CREATE INDEX "file_metadata_file_id_idx" ON "file_metadata" USING btree ("file_id");--> statement-breakpoint
 CREATE INDEX "file_variants_file_id_idx" ON "file_variants" USING btree ("file_id");--> statement-breakpoint
 CREATE INDEX "file_variants_type_idx" ON "file_variants" USING btree ("variant_type");--> statement-breakpoint

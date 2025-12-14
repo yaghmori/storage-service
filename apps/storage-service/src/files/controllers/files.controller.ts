@@ -1,4 +1,5 @@
 import { Controller, Delete, Get, HttpCode, HttpStatus, Param, Query } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FilesService } from '../services/files.service';
 
 @Controller('files')
@@ -15,8 +16,9 @@ export class FilesController {
   async deleteFile(
     @Param('id') id: string,
     @Query('hard') hardDelete?: string,
+    @CurrentUser() user?: { id?: string },
   ) {
-    return this.filesService.deleteFile(id, hardDelete === 'true');
+    return this.filesService.deleteFile(id, hardDelete === 'true', user?.id);
   }
 }
 

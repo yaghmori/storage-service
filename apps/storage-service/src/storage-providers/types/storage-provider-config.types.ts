@@ -27,7 +27,7 @@ export type StorageProviderConfig = S3Config | MinIOConfig | LocalConfig;
 export type StorageProviderType = 's3' | 'minio' | 'local';
 
 export interface StorageProvider {
-  id: number;
+  id: string;
   name: string;
   type: StorageProviderType;
   config: StorageProviderConfig;

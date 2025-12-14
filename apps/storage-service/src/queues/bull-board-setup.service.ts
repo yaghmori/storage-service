@@ -3,7 +3,7 @@ import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 /* eslint-enable @nx/enforce-module-boundaries */
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { RedisConfig } from '../config/redis.config';
 import {
@@ -16,7 +16,9 @@ import {
 export class BullBoardSetupService implements OnModuleInit {
   public serverAdapter!: ExpressAdapter;
 
-  constructor(private readonly redisConfig: RedisConfig) {}
+  constructor(
+    @Inject(RedisConfig) private readonly redisConfig: RedisConfig,
+  ) {}
 
   onModuleInit() {
     // Create BullMQ Queue instances directly for Bull Board

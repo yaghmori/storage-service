@@ -49,8 +49,10 @@ services:
       # Node
       NODE_ENV: development
       # File watching (for Docker on Windows)
+      # tsx uses chokidar and TypeScript compiler for file watching
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: 1000
+      TSC_WATCHFILE: DynamicPriorityPolling
     ports:
       - "4000:4000"
       - "4001:4001"

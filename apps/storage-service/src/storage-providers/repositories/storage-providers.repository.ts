@@ -16,7 +16,7 @@ export class StorageProvidersRepository {
     return this.db.select().from(schema.storageProviders);
   }
 
-  async findById(id: number) {
+  async findById(id: string) {
     const result = await this.db
       .select()
       .from(schema.storageProviders)
@@ -78,7 +78,7 @@ export class StorageProvidersRepository {
     return result[0];
   }
 
-  async update(id: number, data: Partial<typeof schema.storageProviders.$inferInsert>) {
+  async update(id: string, data: Partial<typeof schema.storageProviders.$inferInsert>) {
     const result = await this.db
       .update(schema.storageProviders)
       .set({ ...data, updatedAt: new Date() })
@@ -87,7 +87,7 @@ export class StorageProvidersRepository {
     return result[0] || null;
   }
 
-  async delete(id: number) {
+  async delete(id: string) {
     await this.db
       .delete(schema.storageProviders)
       .where(eq(schema.storageProviders.id, id));

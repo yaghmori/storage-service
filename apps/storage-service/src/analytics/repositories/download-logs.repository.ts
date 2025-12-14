@@ -15,7 +15,7 @@ export class DownloadLogsRepository {
     variantId?: string;
     ipAddress?: string;
     userAgent?: string;
-    userId?: number;
+    userId?: string;
     bytesDownloaded?: bigint;
     downloadMethod?: 'direct' | 'signed_url' | 'cdn';
     referer?: string;

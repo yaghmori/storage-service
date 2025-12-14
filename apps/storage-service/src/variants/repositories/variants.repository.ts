@@ -45,7 +45,7 @@ export class VariantsRepository {
     fileId: string;
     variantType: VariantType;
     variantKey: string;
-    storageProviderId: number;
+    storageProviderId: string;
     size: bigint;
     width?: number;
     height?: number;

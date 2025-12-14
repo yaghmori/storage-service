@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module, forwardRef } from '@nestjs/common';
+import { ConfigModule } from '../config/config.module';
 import { RedisConfig } from '../config/redis.config';
 import { ProcessingModule } from '../processing/processing.module';
 import { BullBoardSetupService } from './bull-board-setup.service';
@@ -9,6 +10,7 @@ import { QueuesService } from './queues.service';
 
 @Module({
   imports: [
+    ConfigModule, // Explicitly import to ensure RedisConfig is available
     forwardRef(() => ProcessingModule),
     BullModule.forRootAsync({
       useFactory: (redisConfig: RedisConfig) => {

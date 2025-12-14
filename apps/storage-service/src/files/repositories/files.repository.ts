@@ -44,7 +44,7 @@ export class FilesRepository {
     }
   }
 
-  async findByKeyAndProvider(storageKey: string, storageProviderId: number) {
+  async findByKeyAndProvider(storageKey: string, storageProviderId: string) {
     const result = await this.db
       .select()
       .from(schema.files)
@@ -59,7 +59,7 @@ export class FilesRepository {
   }
 
   async create(data: {
-    storageProviderId: number;
+    storageProviderId: string;
     storageKey: string;
     storageBucket?: string;
     fileName: string;
@@ -69,7 +69,7 @@ export class FilesRepository {
     size: bigint;
     fileHash: string;
     checksum?: string;
-    uploadedBy?: number;
+    uploadedBy?: string;
     tags?: string;
     referenceCount?: number;
   }) {

@@ -27,4 +27,3 @@ import * as schema from './schema/schema';
   exports: ['DRIZZLE_DB', DatabaseService],
 })
 export class DatabaseModule {}
-

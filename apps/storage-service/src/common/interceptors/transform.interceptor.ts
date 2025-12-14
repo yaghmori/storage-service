@@ -89,9 +89,11 @@ export class TransformInterceptor<T>
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse();
     const statusCode = response.statusCode;
+    const startTime = Date.now();
 
     return next.handle().pipe(
       map((data) => {
+        const duration = Date.now() - startTime;
         // Handle 204 No Content - no data should be returned or only meta
         if (statusCode === HttpStatus.NO_CONTENT) {
           // If data is empty/null/undefined, return empty object
@@ -122,8 +124,15 @@ export class TransformInterceptor<T>
         // Convert BigInt values to numbers before serialization
         const convertedData = convertBigIntToNumber(data) as T;
 
-        // Build standard success response
-        return buildSuccessResponse(convertedData, undefined, request.headers);
+        // Build standard success response with enhanced meta
+        return buildSuccessResponse(
+          convertedData,
+          {
+            duration,
+            version: process.env.APP_VERSION || process.env.npm_package_version,
+          },
+          request.headers,
+        );
       }),
     );
   }

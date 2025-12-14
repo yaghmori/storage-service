@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { FilesChecksumService } from '../../files/services/files-checksum.service';
 import { FileDuplicationService } from '../../files/services/file-duplication.service';
+import { FilesChecksumService } from '../../files/services/files-checksum.service';
 import { FilesService } from '../../files/services/files.service';
 import { QueuesService } from '../../queues/queues.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
@@ -21,7 +21,8 @@ export class UploadService {
 
   async uploadFile(
     file: { buffer: Buffer; originalname: string; mimetype: string },
-    storageProviderId?: number,
+    storageProviderId?: string,
+    userId?: string,
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -41,33 +42,37 @@ export class UploadService {
 
       this.logger.log(`Duplicate file detected: ${originalFile.id}, skipping upload and storage`);
 
-      // Create a lightweight duplicate file record (no actual upload to storage)
-      const duplicateRecord = await this.filesService.createFile({
-        storageProviderId: originalFile.storageProviderId,
-        storageKey: originalFile.storageKey, // Reuse the same storage key
-        storageBucket: originalFile.storageBucket || undefined,
-        fileName: `${uuidv4()}${extname(file.originalname)}`, // Unique filename for tracking
-        originalFileName: file.originalname,
-        fileExtension: extname(file.originalname).replace('.', ''),
-        mimeType: file.mimetype,
-        size: BigInt(buffer.length),
-        fileHash: sha256Hash,
-      });
-
-      // Create duplicate relationship in fileDuplicates table
-      await this.fileDuplicationService.markAsDuplicate(
-        duplicateRecord.id,
-        originalFile.id,
-        'sha256',
-      );
+      // Increment reference count of the original file
+      const updatedFile = await this.filesService.incrementReferenceCount(originalFile.id);
 
       this.logger.log(
-        `Created duplicate record ${duplicateRecord.id} linked to original ${originalFile.id}`,
+        `Duplicate upload detected. Incremented reference count for original file ${originalFile.id}. New count: ${updatedFile?.referenceCount || originalFile.referenceCount + 1}`,
       );
 
-      // Return the duplicate record (not the original)
-      // This gives the user a unique file ID they can reference
-      return duplicateRecord;
+      // Record duplicate upload event in file_duplicates table
+      // All file metadata (mimeType, size, originalFileName) is already in the files table
+      await this.fileDuplicationService.markAsDuplicate(
+        originalFile.id,
+        'sha256',
+        undefined,
+        userId,
+      );
+
+      this.logger.log(`Recorded duplicate upload event for file ${originalFile.id}`);
+
+      // Return the original file with duplicate information
+      const fileToReturn = updatedFile || originalFile;
+      return {
+        id: fileToReturn.id,
+        originalFileName: fileToReturn.originalFileName,
+        mimeType: fileToReturn.mimeType,
+        size: Number(fileToReturn.size),
+        isDuplicate: true,
+        originalFileId: originalFile.id,
+        message: `File already exists in the system. Using existing file (ID: ${originalFile.id}). Reference count increased to ${fileToReturn.referenceCount}.`,
+        uploadedToStorage: false,
+        createdAt: fileToReturn.createdAt,
+      };
     }
 
     // Get provider config
@@ -129,10 +134,23 @@ export class UploadService {
       throw new BadRequestException('File record not found');
     }
 
+    // Note: We don't record non-duplicate uploads in file_duplicates table
+    // Only duplicate upload attempts are recorded there
+
     // Schedule processing jobs in background - don't block upload response
     this.scheduleProcessingJobs(fileRecord.id, file.mimetype);
 
-    return fileRecord;
+    // Return minimal file information
+    return {
+      id: fileRecord.id,
+      originalFileName: fileRecord.originalFileName,
+      mimeType: fileRecord.mimeType,
+      size: Number(fileRecord.size),
+      isDuplicate: false,
+      message: 'File uploaded successfully.',
+      uploadedToStorage: true,
+      createdAt: fileRecord.createdAt,
+    };
   }
 
   /**

@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StorageConfig {
-  constructor(private configService: ConfigService) {}
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigService,
+  ) {}
 
   get defaultProvider(): string {
     return this.configService.get<string>('DEFAULT_STORAGE_PROVIDER') || 'local';

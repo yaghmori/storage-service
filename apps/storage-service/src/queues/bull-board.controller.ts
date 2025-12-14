@@ -1,19 +1,22 @@
-import { All, Controller, Get, Req, Res } from '@nestjs/common';
+import { All, Controller, Get, Inject, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { BullBoardSetupService } from './bull-board-setup.service';
 
 @Controller('admin/queues')
 export class BullBoardController {
-  constructor(private readonly bullBoardSetup: BullBoardSetupService) {}
+  constructor(
+    @Inject(BullBoardSetupService)
+    private readonly bullBoardSetup: BullBoardSetupService,
+  ) {}
 
   @Get()
   serveBullBoardRoot(@Req() req: Request, @Res() res: Response): void {
     this.serveBullBoard(req, res);
   }
 
-  @All('*')
+  @All('*path')
   serveBullBoard(@Req() req: Request, @Res() res: Response): void {
-    if (!this.bullBoardSetup.serverAdapter) {
+    if (!this.bullBoardSetup || !this.bullBoardSetup.serverAdapter) {
       res.status(503).send('Bull Board is not initialized yet');
       return;
     }

@@ -2,7 +2,6 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
-import { TcpExceptionFilter } from './common/filters/tcp-exception.filter';
 
 async function bootstrap() {
   // Create HTTP application
@@ -15,7 +14,7 @@ async function bootstrap() {
   app.setGlobalPrefix(globalPrefix);
 
   // Connect TCP microservice
-  const microservice = app.connectMicroservice<MicroserviceOptions>({
+  app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.TCP,
     options: {
       host: process.env.TCP_HOST || '0.0.0.0',
@@ -25,10 +24,7 @@ async function bootstrap() {
     },
   });
 
-  // Apply exception filter to microservice
-  microservice.useGlobalFilters(new TcpExceptionFilter());
-
-  // Start all microservices
+  // Start all microservices (exception filter will be applied via APP_FILTER provider)
   await app.startAllMicroservices();
 
   // Start HTTP server

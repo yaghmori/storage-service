@@ -1,12 +1,12 @@
 import type {
-    ApiErrorResponse,
-    ApiSuccessResponse,
-    CursorPagination,
-    ErrorDetail,
-    MetaResponse,
-    OffsetPagination,
-    PaginatedResponse,
-    PaginationLinks,
+  ApiErrorResponse,
+  ApiSuccessResponse,
+  CursorPagination,
+  ErrorDetail,
+  MetaResponse,
+  OffsetPagination,
+  PaginatedResponse,
+  PaginationLinks,
 } from '../types/api-response.types';
 import { createMeta } from './meta.util';
 
@@ -20,8 +20,8 @@ export function buildSuccessResponse<T>(
   meta: Partial<MetaResponse> | undefined,
   headers: Record<string, unknown>
 ): ApiSuccessResponse<T> {
-  const baseMeta =
-    (meta as MetaResponse | undefined) ?? createMeta(headers);
+  // Merge provided meta options with base meta
+  const baseMeta = createMeta(headers, meta);
   return {
     data,
     meta: baseMeta,

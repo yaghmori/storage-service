@@ -1,9 +1,9 @@
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
 
 export class CreateFileDto {
-  @IsNumber()
+  @IsUUID()
   @IsNotEmpty()
-  storageProviderId!: number;
+  storageProviderId!: string;
 
   @IsString()
   @IsNotEmpty()

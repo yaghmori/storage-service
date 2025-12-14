@@ -8,7 +8,7 @@ export interface MetaResponse {
   count?: number;
   total?: number;
   version?: string;
-  duration?: number;
+  duration?: number; // Response time in milliseconds
   cached?: boolean;
   message?: string;
 }

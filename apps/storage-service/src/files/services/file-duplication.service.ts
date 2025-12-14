@@ -30,30 +30,35 @@ export class FileDuplicationService {
   }
 
   /**
-   * Mark file as duplicate and link to original
-   * Single source of truth: fileDuplicates table
+   * Mark duplicate upload attempt
+   * Records when a user attempts to upload a file that already exists
+   *
+   * @param originalFileId - File ID of the original file
+   * @param detectionMethod - Method used to detect the duplicate
+   * @param similarityScore - Optional similarity score for content-based detection
+   * @param uploadedBy - Optional user ID (UUID) who uploaded
    */
   async markAsDuplicate(
-    duplicateFileId: string,
     originalFileId: string,
     detectionMethod: 'sha256' | 'content' | 'manual' | 'ai' = 'sha256',
     similarityScore?: number,
+    uploadedBy?: string,
   ) {
     const db = this.databaseService.getDb();
 
-    // Create duplicate relationship record (single source of truth)
+    // Create duplicate upload attempt record
     await db.insert(schema.fileDuplicates).values({
       originalFileId,
-      duplicateFileId,
       detectionMethod,
       similarityScore,
+      uploadedBy,
     });
 
     // Increment reference count of original
     await this.filesRepository.incrementReferenceCount(originalFileId);
 
     this.logger.log(
-      `Marked file ${duplicateFileId} as duplicate of ${originalFileId} (method: ${detectionMethod})`,
+      `Recorded duplicate upload attempt for original file ${originalFileId} (method: ${detectionMethod})`,
     );
   }
 
@@ -69,61 +74,70 @@ export class FileDuplicationService {
   }
 
   /**
-   * Get the original file if this is a duplicate
-   * Single source of truth: fileDuplicates table
+   * Check if a user has uploaded this file as a duplicate
+   * Returns the duplicate record if found
    */
-  async getOriginalFile(fileId: string) {
+  async getUserDuplicateUpload(fileId: string, userId?: string) {
+    if (!userId) {
+      return null;
+    }
+
     const db = this.databaseService.getDb();
-    const duplicate = await db
+    const duplicates = await db
       .select()
       .from(schema.fileDuplicates)
-      .where(eq(schema.fileDuplicates.duplicateFileId, fileId))
+      .where(
+        and(
+          eq(schema.fileDuplicates.originalFileId, fileId),
+          eq(schema.fileDuplicates.uploadedBy, userId),
+        ),
+      )
       .limit(1);
 
-    if (duplicate.length > 0) {
-      return this.filesRepository.findById(duplicate[0].originalFileId);
-    }
+    return duplicates[0] || null;
+  }
+
+  /**
+   * Remove a duplicate upload record (when user deletes their duplicate upload)
+   */
+  async removeDuplicateUpload(duplicateId: string) {
+    const db = this.databaseService.getDb();
+    await db
+      .delete(schema.fileDuplicates)
+      .where(eq(schema.fileDuplicates.id, duplicateId));
+  }
+
+  /**
+   * Get the original file if this is a duplicate
+   * Note: Since we prevent duplicate file records (unique constraint on fileHash),
+   * this method is mainly for future use cases (e.g., content-based duplicate detection)
+   */
+  async getOriginalFile(fileId: string) {
+    // Since we don't create duplicate file records, this would need to check
+    // by hash or other means. For now, return null as files are never duplicates.
     return null;
   }
 
   /**
    * Check if file is a duplicate
-   * Single source of truth: fileDuplicates table
+   * Note: Since we prevent duplicate file records (unique constraint on fileHash),
+   * files are never actually duplicates. This method is for future use cases.
    */
   async isDuplicate(fileId: string): Promise<boolean> {
-    const db = this.databaseService.getDb();
-    const duplicate = await db
-      .select()
-      .from(schema.fileDuplicates)
-      .where(eq(schema.fileDuplicates.duplicateFileId, fileId))
-      .limit(1);
-
-    return duplicate.length > 0;
+    // Since we prevent duplicate file records, files are never duplicates
+    return false;
   }
 
   /**
    * Consolidate duplicates - merge all duplicates into original
+   * Note: Since we prevent duplicate file records (unique constraint on fileHash),
+   * there are no duplicate file records to consolidate.
+   * This method is kept for future use cases (e.g., content-based duplicate detection).
    */
   async consolidateDuplicates(originalFileId: string): Promise<number> {
-    const duplicates = await this.getDuplicates(originalFileId);
-    let consolidated = 0;
-
-    for (const dup of duplicates) {
-      try {
-        // Transfer any metadata/tags from duplicate to original if needed
-        // Then soft delete the duplicate
-        const file = await this.filesRepository.findById(dup.duplicateFileId);
-        if (file && !file.deletedAt) {
-          await this.filesRepository.softDelete(dup.duplicateFileId);
-          consolidated++;
-        }
-      } catch (error) {
-        this.logger.error(`Failed to consolidate duplicate ${dup.duplicateFileId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-
-    this.logger.log(`Consolidated ${consolidated} duplicates into original file ${originalFileId}`);
-    return consolidated;
+    // Since we prevent duplicate file records, there's nothing to consolidate
+    this.logger.log(`No duplicate file records to consolidate for file ${originalFileId}`);
+    return 0;
   }
 
   /**
@@ -151,9 +165,11 @@ export class FileDuplicationService {
     )[0];
 
     // Mark current file as duplicate if not already marked
+    // Note: This method is for future use cases where we might allow duplicate file records
+    // For now, we prevent duplicates via unique constraint, so this won't be called
     const isAlreadyDuplicate = await this.isDuplicate(fileId);
     if (!isAlreadyDuplicate) {
-      await this.markAsDuplicate(fileId, original.id, 'sha256');
+      await this.markAsDuplicate(original.id, 'sha256');
     }
 
     return { isDuplicate: true, originalFileId: original.id };
