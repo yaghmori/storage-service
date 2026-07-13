@@ -1,0 +1,14 @@
+{
+  "watch": ["src", "../../libs/shared"],
+  "ext": "ts,json",
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist"],
+  "exec": "ts-node --project tsconfig.app.json -r tsconfig-paths/register src/main.ts",
+  "execMap": {
+    "ts": "ts-node --project tsconfig.app.json -r tsconfig-paths/register"
+  },
+  "delay": 500,
+  "verbose": true,
+  "legacyWatch": true,
+  "polling": true,
+  "interval": 1000
+}
