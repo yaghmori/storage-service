@@ -1,4 +1,4 @@
-import type { MetaResponse } from '@platform/messaging-contracts';
+import type { MetaResponse } from '@yaghmori/messaging-contracts';
 
 /**
  * Generate a unique request ID

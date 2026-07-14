@@ -7,7 +7,7 @@ import {
   Res
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { success } from '@platform/messaging-contracts';
+import { success } from '@yaghmori/messaging-contracts';
 import { VariantType } from '../../variants/repositories/variants.repository';
 import { ServingService } from '../services/serving.service';
 import { SignedUrlService } from '../services/signed-url.service';

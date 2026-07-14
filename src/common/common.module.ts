@@ -4,7 +4,7 @@ import {
   GlobalExceptionFilter,
   MicroserviceExceptionFilter,
   ResponseTransformInterceptor,
-} from '@platform/messaging-contracts';
+} from '@yaghmori/messaging-contracts';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { ValidationPipe } from './pipes/validation.pipe';
 

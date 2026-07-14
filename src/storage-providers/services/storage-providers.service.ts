@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import type { CreateStorageProviderRequest, StorageProviderResponse } from '@platform/messaging-contracts';
+import type { CreateStorageProviderRequest, StorageProviderResponse } from '@yaghmori/messaging-contracts';
 import { StorageProvidersRepository } from '../repositories/storage-providers.repository';
 import { toStorageProviderResponse } from '../storage-providers.mapper';
 import { StorageProviderConfig, StorageProviderType } from '../types/storage-provider-config.types';
