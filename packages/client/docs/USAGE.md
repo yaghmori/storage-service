@@ -98,21 +98,57 @@ StorageService.eventTypes.UPLOADED;
 <PackageReference Include="Yaghmori.StorageService" Version="0.1.*" />
 ```
 
+### TCP (easiest)
+
 ```csharp
 using Yaghmori.StorageService;
 
-var baseUrl = Environment.GetEnvironmentVariable("STORAGE_SERVICE_URL")
-    ?? "http://localhost:9000";
-using var http = new HttpClient { BaseAddress = new Uri(baseUrl) };
-http.DefaultRequestHeaders.Add("x-api-key",
-    Environment.GetEnvironmentVariable("STORAGE_SERVICE_API_KEY")!);
+await using var storage = new StorageServiceTcpClient("storage-service", 5002);
 
-var signedPath = StorageService.HttpPaths.SIGNED_URL.Replace("{id}", fileId);
-var res = await http.GetAsync(signedPath);
+var signed = await storage.GetSignedUrlAsync<JsonElement>(new { id = fileId });
+var info = await storage.GetFileInfoAsync<JsonElement>(new { id = fileId });
 
-var pattern = StorageService.Patterns.GET_SIGNED_URL;
-var topic = StorageService.Topics.FILE_UPLOADED;
+// Or any pattern
+await storage.SendAsync<JsonElement>(StorageService.Patterns.DeleteFile, new { id = fileId });
 ```
+
+### DI
+
+```csharp
+builder.Services.AddStorageServiceClient(o =>
+{
+    o.Host = "storage-service";
+    o.TcpPort = 4002;
+    o.BaseUrl = "http://storage-service:4000";
+    o.ApiKey = builder.Configuration["Storage:ApiKey"];
+});
+```
+
+### HTTP
+
+```csharp
+using var http = new StorageServiceHttpClient(new StorageServiceOptions
+{
+    BaseUrl = Environment.GetEnvironmentVariable("STORAGE_SERVICE_URL"),
+    ApiKey = Environment.GetEnvironmentVariable("STORAGE_SERVICE_API_KEY"),
+});
+await http.GetSignedUrlAsync(fileId);
+await http.HealthAsync();
+```
+
+### Kafka producer + consumer (.NET)
+
+```csharp
+using var producer = new StorageKafkaProducer(new StorageKafkaOptions());
+await producer.PublishAsync(StorageService.Topics.FileUploaded, new { id = fileId });
+
+using var consumer = new StorageKafkaConsumer(new StorageKafkaOptions(), "media-pipeline");
+```
+
+
+## Full multi-protocol guide
+
+→ **[PROTOCOL_GUIDE.md](./PROTOCOL_GUIDE.md)** — HTTP / TCP / Kafka for Node and .NET.
 
 ## Service env
 

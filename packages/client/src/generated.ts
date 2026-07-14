@@ -5,9 +5,7 @@ export const PORTS = {
 } as const;
 
 export const INJECTION_TOKEN = "STORAGE_SERVICE" as const;
-
 export const DOCKER_IMAGE = "ghcr.io/yaghmori/storage-service" as const;
-
 export const SERVICE_NAME = "storage-service" as const;
 
 export const ENV_KEYS = {
@@ -16,7 +14,6 @@ export const ENV_KEYS = {
   tcpPort: "STORAGE_SERVICE_TCP_PORT",
   httpPort: "STORAGE_SERVICE_HTTP_PORT",
 } as const;
-
 export const PATTERNS = {
   GET_FILE_INFO: "storage.get_file_info",
   DELETE_FILE: "storage.delete_file",
@@ -27,7 +24,6 @@ export const PATTERNS = {
   DELETE_ASSET: "deleteAsset",
   HEALTH_CHECK: "health.check",
 } as const;
-
 export const HTTP_PATHS = {
   UPLOAD: "/upload",
   GET_FILE: "/files/{id}",
@@ -36,13 +32,11 @@ export const HTTP_PATHS = {
   SIGNED_URL: "/files/{id}/signed-url",
   HEALTH: "/health",
 } as const;
-
 export const TOPICS = {
   FILE_UPLOADED: "file.uploaded",
   FILE_DELETED: "file.deleted",
   FILE_PROCESSED: "file.processed",
 } as const;
-
 export const EVENT_TYPES = {
   UPLOADED: "evt.storage.file.uploaded.v1",
   DELETED: "evt.storage.file.deleted.v1",

@@ -9,51 +9,51 @@ public static class StorageService
 
     public static class Ports
     {
-        public const int tcp = 4002;
-        public const int http = 4000;
+        public const int Tcp = 4002;
+        public const int Http = 4000;
     }
 
     public static class Env
     {
-        public const string httpBaseUrl = "STORAGE_SERVICE_URL";
-        public const string host = "STORAGE_SERVICE_HOST";
-        public const string tcpPort = "STORAGE_SERVICE_TCP_PORT";
-        public const string httpPort = "STORAGE_SERVICE_HTTP_PORT";
+        public const string HttpBaseUrl = "STORAGE_SERVICE_URL";
+        public const string Host = "STORAGE_SERVICE_HOST";
+        public const string TcpPort = "STORAGE_SERVICE_TCP_PORT";
+        public const string HttpPort = "STORAGE_SERVICE_HTTP_PORT";
     }
 
     public static class Patterns
     {
-        public const string GET_FILE_INFO = "storage.get_file_info";
-        public const string DELETE_FILE = "storage.delete_file";
-        public const string BATCH_OPERATIONS = "storage.batch_operations";
-        public const string GET_SIGNED_URL = "storage.get_signed_url";
-        public const string UPLOAD_FILE = "uploadFile";
-        public const string GET_ASSET_URL = "getAssetUrl";
-        public const string DELETE_ASSET = "deleteAsset";
-        public const string HEALTH_CHECK = "health.check";
+        public const string GetFileInfo = "storage.get_file_info";
+        public const string DeleteFile = "storage.delete_file";
+        public const string BatchOperations = "storage.batch_operations";
+        public const string GetSignedUrl = "storage.get_signed_url";
+        public const string UploadFile = "uploadFile";
+        public const string GetAssetUrl = "getAssetUrl";
+        public const string DeleteAsset = "deleteAsset";
+        public const string HealthCheck = "health.check";
     }
 
     public static class HttpPaths
     {
-        public const string UPLOAD = "/upload";
-        public const string GET_FILE = "/files/{id}";
-        public const string DELETE_FILE = "/files/{id}";
-        public const string DOWNLOAD = "/files/{id}/download";
-        public const string SIGNED_URL = "/files/{id}/signed-url";
-        public const string HEALTH = "/health";
+        public const string Upload = "/upload";
+        public const string GetFile = "/files/{id}";
+        public const string DeleteFile = "/files/{id}";
+        public const string Download = "/files/{id}/download";
+        public const string SignedUrl = "/files/{id}/signed-url";
+        public const string Health = "/health";
     }
 
     public static class Topics
     {
-        public const string FILE_UPLOADED = "file.uploaded";
-        public const string FILE_DELETED = "file.deleted";
-        public const string FILE_PROCESSED = "file.processed";
+        public const string FileUploaded = "file.uploaded";
+        public const string FileDeleted = "file.deleted";
+        public const string FileProcessed = "file.processed";
     }
 
     public static class EventTypes
     {
-        public const string UPLOADED = "evt.storage.file.uploaded.v1";
-        public const string DELETED = "evt.storage.file.deleted.v1";
-        public const string PROCESSED = "evt.storage.file.processed.v1";
+        public const string Uploaded = "evt.storage.file.uploaded.v1";
+        public const string Deleted = "evt.storage.file.deleted.v1";
+        public const string Processed = "evt.storage.file.processed.v1";
     }
 }

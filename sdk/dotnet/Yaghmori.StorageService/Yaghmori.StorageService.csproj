@@ -6,12 +6,16 @@
     <PackageId>Yaghmori.StorageService</PackageId>
     <Version>0.1.0</Version>
     <Authors>yaghmori</Authors>
-    <Description>Client constants for storage-service (ports, TCP patterns, Kafka topics)</Description>
+    <Description>Client SDK for storage-service — HTTP + NestJS TCP + Kafka constants</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/yaghmori/storage-service</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="..\..\..\packages\client\README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>
