@@ -1,10 +1,13 @@
-name: CI
+name: CI Dev — Build and push (dev tags)
+
+# PR → dev: typecheck + app build only (no GHCR push)
+# Push / dispatch on dev: typecheck + Docker build → ghcr.io/…:dev and :dev-<sha>
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
-    branches: [main, dev]
+    branches: [dev]
+  push:
+    branches: [dev]
   workflow_dispatch:
 
 permissions:
@@ -24,11 +27,21 @@ jobs:
         with:
           path: storage-service
 
-      - uses: actions/checkout@v4
+      - name: Checkout messaging-contracts (dev, fallback main)
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/messaging-contracts
           path: messaging-contracts
-          ref: ${{ github.base_ref || github.ref_name }}
+          ref: dev
+        continue-on-error: true
+
+      - name: Fallback messaging-contracts to main
+        if: hashFiles('messaging-contracts/package.json') == ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/messaging-contracts
+          path: messaging-contracts
+          ref: main
 
       - uses: pnpm/action-setup@v4
         with:
@@ -48,7 +61,7 @@ jobs:
           pnpm build
 
   docker:
-    name: Build and push GHCR
+    name: Build and push GHCR (:dev)
     needs: check
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -61,7 +74,16 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/messaging-contracts
           path: messaging-contracts
-          ref: ${{ github.ref_name }}
+          ref: dev
+        continue-on-error: true
+
+      - name: Fallback messaging-contracts to main
+        if: hashFiles('messaging-contracts/package.json') == ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/messaging-contracts
+          path: messaging-contracts
+          ref: main
 
       - name: Vendor contracts into Docker context
         run: |
@@ -85,11 +107,8 @@ jobs:
           set -euo pipefail
           SHORT="${GITHUB_SHA:0:7}"
           IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "tags=${IMG}:latest,${IMG}:${SHORT}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tags=${IMG}:dev,${IMG}:dev-${SHORT}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "tags=${IMG}:dev,${IMG}:dev-${SHORT}" >> "$GITHUB_OUTPUT"
+          echo "Pushing ${IMG}:dev and ${IMG}:dev-${SHORT}"
 
       - uses: docker/build-push-action@v6
         with:
@@ -97,5 +116,7 @@ jobs:
           file: storage-service/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=storage-service
+            type=gha,scope=storage-service-dev
+          cache-to: type=gha,mode=max,scope=storage-service-dev

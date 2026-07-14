@@ -1,0 +1,173 @@
+name: CI Main — Promote (or build) production tags
+
+# PR → main: typecheck + app build only (no GHCR push)
+# Push to main (merge commit): retag ghcr.io/…:dev-<merged-dev-tip> → :latest + :prod + :<mergeSha>
+# Squash / direct push / missing :dev tag: rebuild and push production tags
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Skip promote and rebuild production image"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  check:
+    name: Install, typecheck, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: storage-service
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/messaging-contracts
+          path: messaging-contracts
+          ref: main
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: storage-service/pnpm-lock.yaml
+
+      - name: Install + typecheck + build
+        working-directory: storage-service
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm type-check
+          pnpm build
+
+  promote:
+    name: Promote :dev-* → :latest / :prod
+    needs: check
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      promoted: ${{ steps.try.outputs.promoted }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Try promote from merged dev tip
+        id: try
+        env:
+          FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_rebuild || false }}
+        run: |
+          set -euo pipefail
+          echo "promoted=false" >> "$GITHUB_OUTPUT"
+
+          if [ "${FORCE_REBUILD}" = "true" ]; then
+            echo "force_rebuild=true — skip promote"
+            exit 0
+          fi
+
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          MERGE_SHORT="${GITHUB_SHA:0:7}"
+
+          if ! git rev-parse HEAD^2 >/dev/null 2>&1; then
+            echo "Not a merge commit (squash/rebase/direct push) — will rebuild."
+            exit 0
+          fi
+
+          HEAD2_FULL=$(git rev-parse HEAD^2)
+          DEV_SHORT="${HEAD2_FULL:0:7}"
+          SRC="${IMG}:dev-${DEV_SHORT}"
+
+          echo "Looking for ${SRC}"
+          if ! docker buildx imagetools inspect "$SRC" >/dev/null 2>&1; then
+            echo "Missing ${SRC} — will rebuild."
+            exit 0
+          fi
+
+          docker buildx imagetools create \
+            -t "${IMG}:latest" \
+            -t "${IMG}:prod" \
+            -t "${IMG}:${MERGE_SHORT}" \
+            "$SRC"
+
+          echo "promoted=true" >> "$GITHUB_OUTPUT"
+          echo "Promoted ${SRC} → :latest :prod :${MERGE_SHORT}"
+
+  docker-rebuild:
+    name: Rebuild production image (fallback)
+    needs: [check, promote]
+    if: |
+      always() &&
+      needs.check.result == 'success' &&
+      needs.promote.result == 'success' &&
+      needs.promote.outputs.promoted != 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: storage-service
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/messaging-contracts
+          path: messaging-contracts
+          ref: main
+
+      - name: Vendor contracts into Docker context
+        run: |
+          set -euo pipefail
+          mkdir -p storage-service/vendor
+          rm -rf storage-service/vendor/messaging-contracts
+          cp -a messaging-contracts storage-service/vendor/messaging-contracts
+          rm -rf storage-service/vendor/messaging-contracts/.git
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: tags
+        run: |
+          set -euo pipefail
+          SHORT="${GITHUB_SHA:0:7}"
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "tags=${IMG}:latest,${IMG}:prod,${IMG}:${SHORT}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: storage-service
+          file: storage-service/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: |
+            type=gha,scope=storage-service
+            type=gha,scope=storage-service-dev
+          cache-to: type=gha,mode=max,scope=storage-service
