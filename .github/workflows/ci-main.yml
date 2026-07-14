@@ -1,6 +1,5 @@
-# Push to `main`: promote the existing GHCR :dev image to production tags.
-# Same idea as eallyfe `.github/workflows/api-cd-main.yml` (no rebuild).
-name: CD Main — Promote
+# Push to `main` → retag existing :dev → :latest + :prod (no rebuild)
+name: CD (main)
 
 on:
   push:
@@ -16,27 +15,36 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  promote:
-    name: Promote :dev → :latest / :main
+  retag:
+    name: Retag :dev → :latest / :prod
     runs-on: ubuntu-latest
     steps:
+      - name: Lowercase image name
+        run: echo "IMAGE_NAME=${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Promote image tags
+      - name: Retag image
         run: |
           set -euo pipefail
           SOURCE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
           BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
 
-          echo "Pulling $SOURCE"
-          docker pull "$SOURCE"
+          echo "Source: $SOURCE"
+          if ! docker buildx imagetools inspect "$SOURCE" >/dev/null 2>&1; then
+            echo "::error::Missing $SOURCE — push to \`dev\` and wait for CI (dev) to succeed before merging to main."
+            exit 1
+          fi
 
-          for tag in latest main; do
-            echo "Promoting to ${BASE}:${tag}"
-            docker tag "$SOURCE" "${BASE}:${tag}"
-            docker push "${BASE}:${tag}"
-          done
+          docker buildx imagetools create \
+            --tag "${BASE}:latest" \
+            --tag "${BASE}:prod" \
+            "$SOURCE"
+
+          echo "Retagged $SOURCE → ${BASE}:latest, ${BASE}:prod"
