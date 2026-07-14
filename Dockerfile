@@ -12,10 +12,6 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml* ./
-COPY vendor/messaging-contracts ./vendor/messaging-contracts
-
-RUN node -e "const p=require('./package.json'); p.dependencies['@platform/messaging-contracts']='file:./vendor/messaging-contracts'; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));"
-
 RUN pnpm install && pnpm rebuild sharp || true
 
 COPY tsconfig.json tsconfig.app.json tsup.config.ts drizzle.config.ts nodemon.json ./
@@ -38,10 +34,8 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-COPY package.json ./
-COPY vendor/messaging-contracts ./vendor/messaging-contracts
-RUN node -e "const p=require('./package.json'); p.dependencies['@platform/messaging-contracts']='file:./vendor/messaging-contracts'; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
- && pnpm install --prod --ignore-scripts \
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --prod --ignore-scripts \
  && pnpm rebuild sharp || true
 
 COPY --from=build /app/dist ./dist
