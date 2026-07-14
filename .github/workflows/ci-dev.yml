@@ -1,8 +1,5 @@
 name: CI Dev — Build and push (dev tags)
 
-# PR → dev: typecheck + app build only (no GHCR push)
-# Push / dispatch on dev: typecheck + Docker build → ghcr.io/…:dev and :dev-<sha>
-
 on:
   pull_request:
     branches: [dev]
@@ -44,16 +41,22 @@ jobs:
           ref: main
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: pnpm
-          cache-dependency-path: storage-service/pnpm-lock.yaml
+          cache-dependency-path: |
+            storage-service/pnpm-lock.yaml
+            messaging-contracts/pnpm-lock.yaml
 
-      - name: Install + typecheck + build
+      - name: Install + build messaging-contracts
+        working-directory: messaging-contracts
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Install + typecheck + build storage-service
         working-directory: storage-service
         run: |
           pnpm install --frozen-lockfile
@@ -85,13 +88,27 @@ jobs:
           path: messaging-contracts
           ref: main
 
-      - name: Vendor contracts into Docker context
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build + vendor messaging-contracts
         run: |
           set -euo pipefail
-          mkdir -p storage-service/vendor
-          rm -rf storage-service/vendor/messaging-contracts
-          cp -a messaging-contracts storage-service/vendor/messaging-contracts
-          rm -rf storage-service/vendor/messaging-contracts/.git
+          cd messaging-contracts
+          pnpm install --frozen-lockfile
+          pnpm run build
+          cd ..
+          mkdir -p storage-service/vendor/messaging-contracts
+          rm -rf storage-service/vendor/messaging-contracts/*
+          cp messaging-contracts/package.json storage-service/vendor/messaging-contracts/
+          cp messaging-contracts/pnpm-lock.yaml storage-service/vendor/messaging-contracts/ 2>/dev/null || true
+          cp messaging-contracts/tsconfig.json storage-service/vendor/messaging-contracts/
+          cp -a messaging-contracts/dist storage-service/vendor/messaging-contracts/dist
+          cp messaging-contracts/LICENSE storage-service/vendor/messaging-contracts/ 2>/dev/null || true
+          node -e "const fs=require('fs'); const p='storage-service/vendor/messaging-contracts/package.json'; const j=JSON.parse(fs.readFileSync(p,'utf8')); delete j.scripts.prepare; fs.writeFileSync(p, JSON.stringify(j,null,2));"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -108,7 +125,6 @@ jobs:
           SHORT="${GITHUB_SHA:0:7}"
           IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "tags=${IMG}:dev,${IMG}:dev-${SHORT}" >> "$GITHUB_OUTPUT"
-          echo "Pushing ${IMG}:dev and ${IMG}:dev-${SHORT}"
 
       - uses: docker/build-push-action@v6
         with:
