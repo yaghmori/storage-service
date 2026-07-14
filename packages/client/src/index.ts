@@ -26,8 +26,14 @@ export {
 } from './config';
 export type { ServiceEndpoint } from './config';
 
+export { buildAuthHeaders, AUTH_HEADERS } from './auth';
+export type { ClientAuth } from './auth';
+
 export { StorageHttpClient, createStorageHttpClient } from './http';
 export type { StorageHttpClientOptions } from './http';
+
+export { StorageKafka, resolveKafkaConnection } from './kafka';
+export type { KafkaConnectionEnv } from './kafka';
 
 export { storageTcpClient } from './nest';
 export type { StorageTcpClientOptions } from './nest';

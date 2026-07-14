@@ -4,9 +4,11 @@ import {
   resolveHttpBaseUrl,
   type ServiceEndpoint,
 } from './config';
+import { buildAuthHeaders, type ClientAuth } from './auth';
 import { HTTP_PATHS } from './generated';
 
 export type StorageHttpClientOptions = ServiceEndpoint & {
+  auth?: ClientAuth | string;
   apiKey?: string;
   headers?: Record<string, string>;
   fetch?: typeof fetch;
@@ -20,9 +22,10 @@ export class StorageHttpClient {
   constructor(options: StorageHttpClientOptions = {}) {
     this.baseUrl = resolveHttpBaseUrl(options);
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+    const auth = options.auth ?? (options.apiKey ? { apiKey: options.apiKey } : undefined);
     this.headers = {
       accept: 'application/json',
-      ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+      ...buildAuthHeaders(auth, 'STORAGE_SERVICE_API_KEY'),
       ...options.headers,
     };
   }
@@ -43,13 +46,9 @@ export class StorageHttpClient {
     return this.request('GET', HTTP_PATHS.HEALTH);
   }
 
-  /**
-   * POST /upload with multipart body. Pass a FormData (browser/Node 18+).
-   * Field name is typically `file` — match your deployment.
-   */
   async upload(formData: FormData): Promise<unknown> {
     const headers = { ...this.headers };
-    delete headers['content-type'];
+    delete (headers as Record<string, string | undefined>)['content-type'];
     const res = await this.fetchImpl(joinUrl(this.baseUrl, HTTP_PATHS.UPLOAD), {
       method: 'POST',
       headers,
@@ -65,12 +64,7 @@ export class StorageHttpClient {
   private async request<T>(method: string, path: string): Promise<T> {
     const res = await this.fetchImpl(joinUrl(this.baseUrl, path), {
       method,
-      headers: {
-        ...this.headers,
-        ...(method !== 'GET' && method !== 'DELETE'
-          ? { 'content-type': 'application/json' }
-          : {}),
-      },
+      headers: this.headers,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
