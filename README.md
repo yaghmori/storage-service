@@ -27,7 +27,7 @@ Primary integration: **HTTP multipart upload** (`POST /upload`) + signed URL (`G
 
 ## TCP patterns
 
-Canonical (from `@platform/messaging-contracts`):
+Canonical (from `@yaghmori/messaging-contracts`):
 
 - `storage.get_file_info`
 - `storage.delete_file`
@@ -51,14 +51,12 @@ Prefer HTTP upload when calling from languages that already speak multipart.
 
 ## Contracts
 
-Depends on [`@platform/messaging-contracts`](https://github.com/) (`file:../messaging-contracts` for local Phase A).
+Depends on [`@yaghmori/messaging-contracts`](https://www.npmjs.com/package/@yaghmori/messaging-contracts) (`^0.1.0` from npm).
 
 ## Docker
 
 ```bash
-mkdir -p vendor
-cp -r ../messaging-contracts vendor/messaging-contracts
-docker compose build storage-service
+docker compose build
 docker compose up
 ```
 

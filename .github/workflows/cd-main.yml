@@ -1,5 +1,4 @@
-# main/master: promote the :dev image to production tags.
-# Same pattern as eallyfe `.github/workflows/api-cd-main.yml` (image promote only).
+# main: promote :dev Docker image + publish client SDK (npm + optional NuGet)
 name: Storage CD (main)
 
 on:
@@ -26,11 +25,9 @@ jobs:
       contents: read
       packages: write
       actions: write
-
     outputs:
       promoted-image: ${{ steps.promote.outputs.promoted_image }}
       promoted-digest: ${{ steps.promote.outputs.promoted_digest }}
-
     steps:
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -46,21 +43,106 @@ jobs:
           set -euo pipefail
           SOURCE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
           TARGET_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-
           docker pull "$SOURCE_IMAGE"
-
           TARGET_TAGS=("main" "latest")
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.tag }}" ]]; then
             TARGET_TAGS+=("${{ github.event.inputs.tag }}")
           fi
-
           for tag in "${TARGET_TAGS[@]}"; do
             TARGET_IMAGE="${TARGET_BASE}:${tag}"
             echo "Promoting to $TARGET_IMAGE"
             docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
             docker push "$TARGET_IMAGE"
           done
-
           DIGEST="$(docker image inspect "$SOURCE_IMAGE" --format='{{index .RepoDigests 0}}' || true)"
           echo "promoted_image=${TARGET_BASE}:latest" >> "$GITHUB_OUTPUT"
           echo "promoted_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+  publish-client:
+    name: Publish @yaghmori/storage-service (+ NuGet)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # NuGet Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+          scope: "@yaghmori"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Bump patch, build, publish npm
+        working-directory: packages/client
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Missing NPM_TOKEN secret"
+            exit 1
+          fi
+          pnpm install --frozen-lockfile
+          pnpm version patch --no-git-tag-version
+          VERSION="$(node -p "require('./package.json').version")"
+          sed -i "s|<Version>.*</Version>|<Version>${VERSION}</Version>|" \
+            ../../sdk/dotnet/Yaghmori.StorageService/Yaghmori.StorageService.csproj
+          pnpm run build
+          pnpm publish --access public --no-git-checks
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Pack NuGet
+        run: |
+          set -euo pipefail
+          dotnet pack sdk/dotnet/Yaghmori.StorageService/Yaghmori.StorageService.csproj -c Release -o ./nuget-out
+
+      # Prefer Trusted Publishing (OIDC). See packages/client/docs/NUGET_TRUSTED_PUBLISHING.md
+      # Set repo Variable NUGET_USER = nuget.org username (profile name, not email).
+      - name: NuGet login (Trusted Publishing)
+        id: nuget-login
+        if: ${{ vars.NUGET_USER != '' }}
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Publish NuGet
+        env:
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+          OIDC_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          KEY="${OIDC_KEY:-}"
+          if [ -z "$KEY" ] && [ -n "${NUGET_TOKEN:-}" ]; then
+            echo "Using legacy NUGET_TOKEN (prefer Trusted Publishing + Variable NUGET_USER)"
+            KEY="$NUGET_TOKEN"
+          fi
+          if [ -z "$KEY" ]; then
+            echo "Skip NuGet: set Variable NUGET_USER (Trusted Publishing) or secret NUGET_TOKEN"
+            exit 0
+          fi
+          dotnet nuget push ./nuget-out/*.nupkg \
+            --api-key "$KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Commit version bump
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/client/package.json sdk/dotnet/Yaghmori.StorageService/Yaghmori.StorageService.csproj
+          if git diff --staged --quiet; then
+            echo "No version files to commit"
+            exit 0
+          fi
+          git commit -m "chore(client): bump @yaghmori/storage-service to ${VERSION} [skip ci]"
+          git push

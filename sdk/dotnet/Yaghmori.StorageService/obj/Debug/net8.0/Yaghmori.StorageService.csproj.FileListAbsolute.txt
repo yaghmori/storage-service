@@ -1,0 +1,13 @@
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\bin\Debug\net8.0\Yaghmori.StorageService.deps.json
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\bin\Debug\net8.0\Yaghmori.StorageService.dll
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\bin\Debug\net8.0\Yaghmori.StorageService.pdb
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.csproj.AssemblyReference.cache
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.GeneratedMSBuildEditorConfig.editorconfig
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.AssemblyInfoInputs.cache
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.AssemblyInfo.cs
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.csproj.CoreCompileInputs.cache
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.sourcelink.json
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.dll
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\refint\Yaghmori.StorageService.dll
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\Yaghmori.StorageService.pdb
+G:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\obj\Debug\net8.0\ref\Yaghmori.StorageService.dll

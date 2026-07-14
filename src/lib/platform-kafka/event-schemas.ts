@@ -23,4 +23,4 @@ export {
   FileDeletedEventSchema,
   FileProcessedEventSchema,
   type EventEnvelopeType,
-} from '@platform/messaging-contracts';
+} from '@yaghmori/messaging-contracts';

@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { SERVICE_PORTS } from '@platform/messaging-contracts';
+import { SERVICE_PORTS } from '@yaghmori/messaging-contracts';
 import { AppModule } from './app.module';
 
 async function bootstrap() {

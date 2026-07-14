@@ -1,4 +1,4 @@
-import type { FileResponse } from '@platform/messaging-contracts';
+import type { FileResponse } from '@yaghmori/messaging-contracts';
 import type { files } from '../database/drizzle/schema';
 
 type FileRow = typeof files.$inferSelect;

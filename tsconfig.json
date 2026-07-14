@@ -18,11 +18,7 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "resolveJsonModule": true,
-    "paths": {
-      "@platform/messaging-contracts": ["../messaging-contracts/src/index.ts"],
-      "@platform/messaging-contracts/nest": ["../messaging-contracts/src/nest/index.ts"]
-    }
+    "resolveJsonModule": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]

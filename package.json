@@ -1,9 +1,9 @@
 {
-  "name": "@platform/storage-service",
+  "name": "@yaghmori/storage-service-server",
   "version": "1.0.0",
   "description": "Object storage microservice for platform assets (avatars, docs, images)",
   "license": "MIT",
-  "private": false,
+  "private": true,
   "main": "dist/main.js",
   "engines": {
     "node": ">=20.0.0"
@@ -42,7 +42,7 @@
     "@nestjs/microservices": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/terminus": "^11.0.0",
-    "@platform/messaging-contracts": "file:../messaging-contracts",
+    "@yaghmori/messaging-contracts": "^0.1.0",
     "bullmq": "^5.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
