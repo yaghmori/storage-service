@@ -1,0 +1,55 @@
+{
+  "name": "@yaghmori/storage-service",
+  "version": "0.1.0",
+  "description": "Client SDK for storage-service — ports, TCP patterns, Kafka topics, Zod DTOs",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./nest": {
+      "types": "./dist/nest.d.ts",
+      "default": "./dist/nest.js"
+    }
+  },
+  "files": ["dist", "contracts.json", "README.md"],
+  "scripts": {
+    "codegen": "node scripts/codegen.cjs",
+    "build": "pnpm run codegen && tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": { "zod": "^3.23.8" },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/microservices": "^11.0.0",
+    "rxjs": "^7.8.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": { "optional": true },
+    "@nestjs/microservices": { "optional": true },
+    "rxjs": { "optional": true }
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/microservices": "^11.0.0",
+    "@types/node": "^22.15.3",
+    "rxjs": "^7.8.0",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yaghmori/storage-service.git",
+    "directory": "packages/client"
+  },
+  "engines": { "node": ">=18.0.0" },
+  "packageManager": "pnpm@10.0.0"
+}

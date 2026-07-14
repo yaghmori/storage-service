@@ -1,0 +1,32 @@
+{
+  "name": "storage-service",
+  "npmPackage": "@yaghmori/storage-service",
+  "nugetPackage": "Yaghmori.StorageService",
+  "dockerImage": "ghcr.io/yaghmori/storage-service",
+  "description": "Client SDK for the standalone storage-service (TCP, Kafka, HTTP)",
+  "ports": {
+    "tcp": 4002,
+    "http": 4000
+  },
+  "injectionToken": "STORAGE_SERVICE",
+  "patterns": {
+    "GET_FILE_INFO": "storage.get_file_info",
+    "DELETE_FILE": "storage.delete_file",
+    "BATCH_OPERATIONS": "storage.batch_operations",
+    "GET_SIGNED_URL": "storage.get_signed_url",
+    "UPLOAD_FILE": "uploadFile",
+    "GET_ASSET_URL": "getAssetUrl",
+    "DELETE_ASSET": "deleteAsset",
+    "HEALTH_CHECK": "health.check"
+  },
+  "topics": {
+    "FILE_UPLOADED": "file.uploaded",
+    "FILE_DELETED": "file.deleted",
+    "FILE_PROCESSED": "file.processed"
+  },
+  "eventTypes": {
+    "UPLOADED": "evt.storage.file.uploaded.v1",
+    "DELETED": "evt.storage.file.deleted.v1",
+    "PROCESSED": "evt.storage.file.processed.v1"
+  }
+}

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>Yaghmori.StorageService</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>yaghmori</Authors>
+    <Description>Client constants for storage-service (ports, TCP patterns, Kafka topics)</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/yaghmori/storage-service</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\..\packages\client\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
