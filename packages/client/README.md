@@ -1,20 +1,28 @@
 # @yaghmori/storage-service
 
-Client SDK for **storage-service**. Docker + this package — no hardcoded ports/patterns.
+Client SDK for **storage-service** — HTTP, TCP, Kafka.  
+Defaults are suggestions; connect to **any host/port/URL**.
+
+## Quick start
 
 ```bash
 pnpm add @yaghmori/storage-service zod
-docker pull ghcr.io/yaghmori/storage-service:latest
 ```
 
 ```ts
-import { StorageService, storageTcpClient } from '@yaghmori/storage-service';
+import { createStorageHttpClient, StorageService } from '@yaghmori/storage-service';
 
-StorageService.ports.tcp;           // 4002
-StorageService.patterns.GET_SIGNED_URL;
-StorageService.topics.FILE_UPLOADED;
+const storage = createStorageHttpClient({
+  baseUrl: process.env.STORAGE_SERVICE_URL ?? 'http://localhost:4000',
+});
+
+await storage.getSignedUrl(id);
 ```
 
-.NET: `Yaghmori.StorageService` — constants under `StorageService.Ports` / `.Patterns` / `.Topics`.
+## Full guide
 
-Edit `contracts.json`, run `pnpm run codegen`. Publish on `main` via CD (`NPM_TOKEN`, optional `NUGET_TOKEN`).
+See **[docs/USAGE.md](./docs/USAGE.md)**.
+
+## Constants
+
+`StorageService.httpPaths` · `StorageService.patterns` · `StorageService.topics` · `StorageService.ports`

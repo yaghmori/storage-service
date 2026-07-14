@@ -21,7 +21,11 @@ export const DOCKER_IMAGE = ${JSON.stringify(contracts.dockerImage)} as const;
 
 export const SERVICE_NAME = ${JSON.stringify(contracts.name)} as const;
 
+${tsConstObject('ENV_KEYS', contracts.env)}
+
 ${tsConstObject('PATTERNS', contracts.patterns)}
+
+${tsConstObject('HTTP_PATHS', contracts.httpPaths)}
 
 ${tsConstObject('TOPICS', contracts.topics)}
 
@@ -30,13 +34,16 @@ ${tsConstObject('EVENT_TYPES', contracts.eventTypes)}
 export type StoragePattern = (typeof PATTERNS)[keyof typeof PATTERNS];
 export type StorageTopic = (typeof TOPICS)[keyof typeof TOPICS];
 export type StorageEventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
+export type StorageHttpPath = (typeof HTTP_PATHS)[keyof typeof HTTP_PATHS];
 
 export const StorageService = {
   name: SERVICE_NAME,
   token: INJECTION_TOKEN,
   image: DOCKER_IMAGE,
   ports: PORTS,
+  env: ENV_KEYS,
   patterns: PATTERNS,
+  httpPaths: HTTP_PATHS,
   topics: TOPICS,
   eventTypes: EVENT_TYPES,
 } as const;
@@ -45,13 +52,13 @@ export const StorageService = {
 const csEntries = (obj) =>
   Object.entries(obj)
     .map(([k, v]) => {
-      const lit = typeof v === 'number' ? v.toString() : `"${v}"`;
+      const lit = typeof v === 'number' ? v.toString() : `"${String(v).replace(/"/g, '\\"')}"`;
       const typ = typeof v === 'number' ? 'int' : 'string';
       return `        public const ${typ} ${k} = ${lit};`;
     })
     .join('\n');
 
-const cs = `// AUTO-GENERATED from contracts.json — do not edit by hand.
+const cs = `// AUTO-GENERATED from contracts.json - do not edit by hand.
 namespace Yaghmori.StorageService;
 
 public static class StorageService
@@ -65,9 +72,19 @@ public static class StorageService
 ${csEntries(contracts.ports)}
     }
 
+    public static class Env
+    {
+${csEntries(contracts.env)}
+    }
+
     public static class Patterns
     {
 ${csEntries(contracts.patterns)}
+    }
+
+    public static class HttpPaths
+    {
+${csEntries(contracts.httpPaths)}
     }
 
     public static class Topics

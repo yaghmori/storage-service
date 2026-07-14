@@ -16,7 +16,7 @@
       "default": "./dist/nest.js"
     }
   },
-  "files": ["dist", "contracts.json", "README.md"],
+  "files": ["dist", "contracts.json", "README.md", "docs"],
   "scripts": {
     "codegen": "node scripts/codegen.cjs",
     "build": "pnpm run codegen && tsc -p tsconfig.json",

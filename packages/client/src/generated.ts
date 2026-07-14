@@ -10,6 +10,13 @@ export const DOCKER_IMAGE = "ghcr.io/yaghmori/storage-service" as const;
 
 export const SERVICE_NAME = "storage-service" as const;
 
+export const ENV_KEYS = {
+  httpBaseUrl: "STORAGE_SERVICE_URL",
+  host: "STORAGE_SERVICE_HOST",
+  tcpPort: "STORAGE_SERVICE_TCP_PORT",
+  httpPort: "STORAGE_SERVICE_HTTP_PORT",
+} as const;
+
 export const PATTERNS = {
   GET_FILE_INFO: "storage.get_file_info",
   DELETE_FILE: "storage.delete_file",
@@ -19,6 +26,15 @@ export const PATTERNS = {
   GET_ASSET_URL: "getAssetUrl",
   DELETE_ASSET: "deleteAsset",
   HEALTH_CHECK: "health.check",
+} as const;
+
+export const HTTP_PATHS = {
+  UPLOAD: "/upload",
+  GET_FILE: "/files/{id}",
+  DELETE_FILE: "/files/{id}",
+  DOWNLOAD: "/files/{id}/download",
+  SIGNED_URL: "/files/{id}/signed-url",
+  HEALTH: "/health",
 } as const;
 
 export const TOPICS = {
@@ -36,13 +52,16 @@ export const EVENT_TYPES = {
 export type StoragePattern = (typeof PATTERNS)[keyof typeof PATTERNS];
 export type StorageTopic = (typeof TOPICS)[keyof typeof TOPICS];
 export type StorageEventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
+export type StorageHttpPath = (typeof HTTP_PATHS)[keyof typeof HTTP_PATHS];
 
 export const StorageService = {
   name: SERVICE_NAME,
   token: INJECTION_TOKEN,
   image: DOCKER_IMAGE,
   ports: PORTS,
+  env: ENV_KEYS,
   patterns: PATTERNS,
+  httpPaths: HTTP_PATHS,
   topics: TOPICS,
   eventTypes: EVENT_TYPES,
 } as const;

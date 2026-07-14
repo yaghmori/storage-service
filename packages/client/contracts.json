@@ -9,6 +9,12 @@
     "http": 4000
   },
   "injectionToken": "STORAGE_SERVICE",
+  "env": {
+    "httpBaseUrl": "STORAGE_SERVICE_URL",
+    "host": "STORAGE_SERVICE_HOST",
+    "tcpPort": "STORAGE_SERVICE_TCP_PORT",
+    "httpPort": "STORAGE_SERVICE_HTTP_PORT"
+  },
   "patterns": {
     "GET_FILE_INFO": "storage.get_file_info",
     "DELETE_FILE": "storage.delete_file",
@@ -18,6 +24,14 @@
     "GET_ASSET_URL": "getAssetUrl",
     "DELETE_ASSET": "deleteAsset",
     "HEALTH_CHECK": "health.check"
+  },
+  "httpPaths": {
+    "UPLOAD": "/upload",
+    "GET_FILE": "/files/{id}",
+    "DELETE_FILE": "/files/{id}",
+    "DOWNLOAD": "/files/{id}/download",
+    "SIGNED_URL": "/files/{id}/signed-url",
+    "HEALTH": "/health"
   },
   "topics": {
     "FILE_UPLOADED": "file.uploaded",
