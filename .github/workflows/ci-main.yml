@@ -36,6 +36,8 @@ jobs:
           ref: main
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
 
       - uses: actions/setup-node@v4
         with:
@@ -140,6 +142,8 @@ jobs:
           ref: main
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
 
       - uses: actions/setup-node@v4
         with:
