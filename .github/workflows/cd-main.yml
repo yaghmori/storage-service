@@ -1,0 +1,66 @@
+# main/master: promote the :dev image to production tags.
+# Same pattern as eallyfe `.github/workflows/api-cd-main.yml` (image promote only).
+name: Storage CD (main)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker image tag (optional)"
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  promote-image:
+    name: Promote dev Storage image to production tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+
+    outputs:
+      promoted-image: ${{ steps.promote.outputs.promoted_image }}
+      promoted-digest: ${{ steps.promote.outputs.promoted_digest }}
+
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote dev image tags
+        id: promote
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
+          TARGET_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          docker pull "$SOURCE_IMAGE"
+
+          TARGET_TAGS=("main" "latest")
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.tag }}" ]]; then
+            TARGET_TAGS+=("${{ github.event.inputs.tag }}")
+          fi
+
+          for tag in "${TARGET_TAGS[@]}"; do
+            TARGET_IMAGE="${TARGET_BASE}:${tag}"
+            echo "Promoting to $TARGET_IMAGE"
+            docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+            docker push "$TARGET_IMAGE"
+          done
+
+          DIGEST="$(docker image inspect "$SOURCE_IMAGE" --format='{{index .RepoDigests 0}}' || true)"
+          echo "promoted_image=${TARGET_BASE}:latest" >> "$GITHUB_OUTPUT"
+          echo "promoted_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
