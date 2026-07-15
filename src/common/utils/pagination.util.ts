@@ -2,7 +2,7 @@ import type {
     CursorPagination,
     OffsetPagination,
     PaginationLinks,
-} from '@yaghmori/messaging-contracts';
+} from '../../lib/contracts';
 
 /**
  * Parse pagination query parameters from request

@@ -27,7 +27,7 @@ Primary integration: **HTTP multipart upload** (`POST /upload`) + signed URL (`G
 
 ## TCP patterns
 
-Canonical (from `@yaghmori/messaging-contracts`):
+Canonical (from `src/lib/contracts`):
 
 - `storage.get_file_info`
 - `storage.delete_file`
@@ -44,14 +44,25 @@ Prefer HTTP upload when calling from languages that already speak multipart.
 
 ## Ports
 
-| Protocol | Default |
-|----------|---------|
-| HTTP | `4000` |
-| TCP | `4002` |
+| Protocol | Env | Default |
+|----------|-----|---------|
+| HTTP bind | `HOST` | `0.0.0.0` |
+| HTTP | `PORT` | `4000` |
+| TCP bind | `TCP_HOST` | same as `HOST` |
+| TCP | `TCP_PORT` | `4002` |
+
+Published images honor these at **runtime** — no rebuild needed:
+
+```bash
+docker run --rm -e PORT=7000 -e TCP_PORT=7001 -p 7000:7000 -p 7001:7001 \
+  ghcr.io/yaghmori/storage-service:latest
+```
+
+Compose: set `PORT` / `TCP_PORT`; publish mappings use `${PORT}:${PORT}` / `${TCP_PORT}:${TCP_PORT}`.
 
 ## Contracts
 
-Depends on [`@yaghmori/messaging-contracts`](https://www.npmjs.com/package/@yaghmori/messaging-contracts) (`^0.1.0` from npm).
+TCP/HTTP envelopes, ports, and Kafka topics live in `src/lib/contracts` (local to this service).
 
 ## Docker
 

@@ -4,7 +4,7 @@ import {
   GlobalExceptionFilter,
   MicroserviceExceptionFilter,
   ResponseTransformInterceptor,
-} from '@yaghmori/messaging-contracts';
+} from '../lib/contracts';
 import { AuthGuard } from './guards/auth.guard';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { ValidationPipe } from './pipes/validation.pipe';

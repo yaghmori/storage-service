@@ -1,5 +1,5 @@
 import { Controller, Delete, Get, HttpCode, HttpStatus, NotFoundException, Param, Query } from '@nestjs/common';
-import { success, emptySuccess, notFound } from '@yaghmori/messaging-contracts';
+import { success, emptySuccess, notFound } from '../../lib/contracts';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FilesService } from '../services/files.service';
 

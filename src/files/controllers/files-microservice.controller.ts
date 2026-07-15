@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { BATCH_OPERATION_TYPES, MESSAGE_PATTERNS } from '@yaghmori/messaging-contracts';
+import { BATCH_OPERATION_TYPES, MESSAGE_PATTERNS } from '../../lib/contracts';
 import type {
   BatchOperationsRequest,
   BatchOperationsResponse,
@@ -9,8 +9,8 @@ import type {
   GetFileInfoRequest,
   SignedUrlRequest,
   SignedUrlResponse,
-} from '@yaghmori/messaging-contracts';
-import { success, type ApiResponse } from '@yaghmori/messaging-contracts';
+} from '../../lib/contracts';
+import { success, type ApiResponse } from '../../lib/contracts';
 import { FilesService } from '../services/files.service';
 import { SignedUrlService } from '../../serving/services/signed-url.service';
 
@@ -18,7 +18,7 @@ import { SignedUrlService } from '../../serving/services/signed-url.service';
  * Files Microservice Controller
  *
  * VALIDATION STRATEGY:
- * - Input validation happens at the API Gateway using Zod schemas from @yaghmori/messaging-contracts
+ * - Input validation happens at the API Gateway using Zod schemas from 
  * - This controller trusts that data is already validated
  * - Focuses on business logic and domain-specific error handling
  */

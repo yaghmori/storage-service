@@ -1,4 +1,4 @@
-import type { VariantResponse } from '@yaghmori/messaging-contracts';
+import type { VariantResponse } from '../lib/contracts';
 import type { fileVariants } from '../database/drizzle/schema';
 
 type VariantRow = typeof fileVariants.$inferSelect;

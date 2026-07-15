@@ -1,4 +1,4 @@
-import type { ProcessingJobResponse } from '@yaghmori/messaging-contracts';
+import type { ProcessingJobResponse } from '../lib/contracts';
 import type { processingJobs } from '../database/drizzle/schema';
 
 type ProcessingJobRow = typeof processingJobs.$inferSelect;

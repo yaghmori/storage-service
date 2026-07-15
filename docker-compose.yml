@@ -41,14 +41,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # Before build: mkdir -p vendor && cp -r ../messaging-contracts vendor/messaging-contracts
     ports:
-      - "4000:4000"
-      - "4002:4002"
+      - "${PORT:-4000}:${PORT:-4000}"
+      - "${TCP_PORT:-4002}:${TCP_PORT:-4002}"
     environment:
       NODE_ENV: development
-      PORT: 4000
-      TCP_PORT: 4002
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-4000}
+      TCP_HOST: ${TCP_HOST:-0.0.0.0}
+      TCP_PORT: ${TCP_PORT:-4002}
       DATABASE_URL: postgresql://storage:storage@postgres:5432/storage_service
       REDIS_HOST: redis
       REDIS_PORT: 6379

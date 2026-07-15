@@ -12,5 +12,4 @@ export default defineConfig({
   minify: false,
   treeshake: true,
   external: ['sharp', 'pg-native', 'fluent-ffmpeg'],
-  noExternal: ['@yaghmori/messaging-contracts'],
 });

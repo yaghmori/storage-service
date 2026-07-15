@@ -1,1 +1,1 @@
-export { RpcLoggingInterceptor as LoggingInterceptor } from '@yaghmori/messaging-contracts';
+export { RpcLoggingInterceptor as LoggingInterceptor } from '../../lib/contracts';

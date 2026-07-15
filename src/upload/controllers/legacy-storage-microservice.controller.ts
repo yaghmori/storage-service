@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { MESSAGE_PATTERNS, success, type ApiResponse } from '@yaghmori/messaging-contracts';
+import { MESSAGE_PATTERNS, success, type ApiResponse } from '../../lib/contracts';
 import { FilesService } from '../../files/services/files.service';
 import { SignedUrlService } from '../../serving/services/signed-url.service';
 import { UploadService } from '../services/upload.service';

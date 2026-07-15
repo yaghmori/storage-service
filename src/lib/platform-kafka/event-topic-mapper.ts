@@ -1,4 +1,4 @@
-import { KAFKA_TOPICS } from '@yaghmori/messaging-contracts';
+import { KAFKA_TOPICS } from '../contracts';
 import { EventTypes } from './event-types';
 
 /**

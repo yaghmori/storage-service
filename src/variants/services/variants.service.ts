@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { VariantResponse } from '@yaghmori/messaging-contracts';
+import type { VariantResponse } from '../../lib/contracts';
 import { VariantsRepository, VariantType } from '../repositories/variants.repository';
 import { toVariantResponse } from '../variants.mapper';
 

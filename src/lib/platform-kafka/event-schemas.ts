@@ -1,5 +1,5 @@
 /**
- * Re-export platform event schemas from messaging-contracts.
+ * Re-export platform event schemas from local contracts.
  * EventSchemaRegistry alias keeps Kafka client validators working.
  */
 export {
@@ -23,4 +23,4 @@ export {
   FileDeletedEventSchema,
   FileProcessedEventSchema,
   type EventEnvelopeType,
-} from '@yaghmori/messaging-contracts';
+} from '../contracts';

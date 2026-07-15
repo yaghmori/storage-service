@@ -11,7 +11,7 @@ Configurable client for **storage-service** (HTTP · TCP · Kafka · auth).
 SDKs: npm · `sdk/dotnet`
 
 ```ts
-import { createStorageHttpClient } from '@yaghmori/storage-service';
+import { createStorageHttpClient } from "@yaghmori/storage-service";
 
 const storage = createStorageHttpClient({
   baseUrl: process.env.STORAGE_SERVICE_URL,

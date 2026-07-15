@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { FileResponse } from '@yaghmori/messaging-contracts';
+import type { FileResponse } from '../../lib/contracts';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 import { toFileResponse } from '../files.mapper';

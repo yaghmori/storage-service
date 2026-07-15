@@ -47,9 +47,6 @@ importers:
       '@nestjs/terminus':
         specifier: ^11.0.0
         version: 11.1.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nestjs/microservices@11.1.28)(reflect-metadata@0.1.14)(rxjs@7.8.2)
-      '@platform/messaging-contracts':
-        specifier: file:../messaging-contracts
-        version: file:../messaging-contracts(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nestjs/microservices@11.1.28)(express@5.2.1)(rxjs@7.8.2)
       bullmq:
         specifier: ^5.0.0
         version: 5.80.2
@@ -1174,27 +1171,6 @@ packages:
       '@nestjs/microservices':
         optional: true
       '@nestjs/platform-express':
-        optional: true
-
-  '@platform/messaging-contracts@file:../messaging-contracts':
-    resolution: {directory: ../messaging-contracts, type: directory}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      '@nestjs/common': ^11.0.0
-      '@nestjs/core': ^11.0.0
-      '@nestjs/microservices': ^11.0.0
-      express: '>=4.18.0'
-      rxjs: ^7.8.0
-    peerDependenciesMeta:
-      '@nestjs/common':
-        optional: true
-      '@nestjs/core':
-        optional: true
-      '@nestjs/microservices':
-        optional: true
-      express:
-        optional: true
-      rxjs:
         optional: true
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
@@ -3393,16 +3369,6 @@ snapshots:
     optionalDependencies:
       '@nestjs/microservices': 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.28)(ioredis@5.11.1)(kafkajs@2.2.4)(reflect-metadata@0.1.14)(rxjs@7.8.2)
       '@nestjs/platform-express': 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.28)
-
-  '@platform/messaging-contracts@file:../messaging-contracts(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nestjs/microservices@11.1.28)(express@5.2.1)(rxjs@7.8.2)':
-    dependencies:
-      zod: 3.25.76
-    optionalDependencies:
-      '@nestjs/common': 11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2)
-      '@nestjs/core': 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/microservices@11.1.28)(@nestjs/platform-express@11.1.28)(reflect-metadata@0.1.14)(rxjs@7.8.2)
-      '@nestjs/microservices': 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@11.1.28)(ioredis@5.11.1)(kafkajs@2.2.4)(reflect-metadata@0.1.14)(rxjs@7.8.2)
-      express: 5.2.1
-      rxjs: 7.8.2
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     optional: true

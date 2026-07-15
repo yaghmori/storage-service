@@ -1,6 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { RequestContextMiddleware } from '@yaghmori/messaging-contracts';
+import { RequestContextMiddleware } from './lib/contracts';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
 import { ConfigModule as AppConfigModule } from './config/config.module';

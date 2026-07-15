@@ -1,4 +1,4 @@
-import type { StorageProviderResponse } from '@yaghmori/messaging-contracts';
+import type { StorageProviderResponse } from '../lib/contracts';
 import type { storageProviders } from '../database/drizzle/schema';
 
 type StorageProviderRow = typeof storageProviders.$inferSelect;

@@ -4,7 +4,7 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'fs';
 import { Admin, Kafka, KafkaConfig as KafkaJSConfig, logLevel, SASLOptions } from 'kafkajs';
-import { KAFKA_TOPICS } from '@yaghmori/messaging-contracts';
+import { KAFKA_TOPICS } from '../contracts';
 
 export interface TopicConfig {
   topic: string;
