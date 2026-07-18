@@ -66,7 +66,7 @@ import { storageTcpClient, StorageService } from '@yaghmori/storage-service';
 ClientsModule.register([
   storageTcpClient({
     host: process.env.STORAGE_SERVICE_HOST ?? 'storage-service',
-    port: Number(process.env.STORAGE_SERVICE_TCP_PORT ?? 4002),
+    port: Number(process.env.STORAGE_SERVICE_TCP_PORT ?? 6001),
   }),
 ]);
 
@@ -118,8 +118,8 @@ await storage.SendAsync<JsonElement>(StorageService.Patterns.DeleteFile, new { i
 builder.Services.AddStorageServiceClient(o =>
 {
     o.Host = "storage-service";
-    o.TcpPort = 4002;
-    o.BaseUrl = "http://storage-service:4000";
+    o.TcpPort = 6001;
+    o.BaseUrl = "http://storage-service:6100";
     o.ApiKey = builder.Configuration["Storage:ApiKey"];
 });
 ```

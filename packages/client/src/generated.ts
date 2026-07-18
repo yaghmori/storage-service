@@ -1,7 +1,7 @@
 /* AUTO-GENERATED from contracts.json - do not edit by hand. Run: pnpm run codegen */
 export const PORTS = {
-  tcp: 4002,
-  http: 4000,
+  tcp: 6001,
+  http: 6100,
 } as const;
 
 export const INJECTION_TOKEN = "STORAGE_SERVICE" as const;

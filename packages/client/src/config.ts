@@ -13,18 +13,29 @@ function env(name: string): string | undefined {
 }
 
 export function resolveHttpBaseUrl(options: ServiceEndpoint = {}): string {
-  if (options.baseUrl) return options.baseUrl.replace(/\/$/, '');
-  const fromEnv = env(ENV_KEYS.httpBaseUrl) ?? env('STORAGE_SERVICE_URL');
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
-
-  const host = options.host ?? env(ENV_KEYS.host) ?? env('STORAGE_HOST') ?? '127.0.0.1';
-  const port = Number(
-    options.port ?? env(ENV_KEYS.httpPort) ?? env('STORAGE_HTTP_PORT') ?? PORTS.http,
-  );
-  const protocol = options.protocol ?? (port === 443 ? 'https' : 'http');
-  const defaultPort = protocol === 'https' ? 443 : 80;
-  const authority = port === defaultPort ? host : `${host}:${port}`;
-  return `${protocol}://${authority}`;
+  let base: string;
+  if (options.baseUrl) {
+    base = options.baseUrl.replace(/\/$/, '');
+  } else {
+    const fromEnv = env(ENV_KEYS.httpBaseUrl) ?? env('STORAGE_SERVICE_URL');
+    if (fromEnv) {
+      base = fromEnv.replace(/\/$/, '');
+    } else {
+      const host = options.host ?? env(ENV_KEYS.host) ?? env('STORAGE_HOST') ?? '127.0.0.1';
+      const port = Number(
+        options.port ?? env(ENV_KEYS.httpPort) ?? env('STORAGE_HTTP_PORT') ?? PORTS.http,
+      );
+      const protocol = options.protocol ?? (port === 443 ? 'https' : 'http');
+      const defaultPort = protocol === 'https' ? 443 : 80;
+      const authority = port === defaultPort ? host : `${host}:${port}`;
+      base = `${protocol}://${authority}`;
+    }
+  }
+  // Nest global prefix is `/api` — normalize so clients can pass host:port without `/api`
+  if (!base.endsWith('/api')) {
+    base = `${base}/api`;
+  }
+  return base;
 }
 
 export function resolveTcpEndpoint(options: ServiceEndpoint = {}): { host: string; port: number } {

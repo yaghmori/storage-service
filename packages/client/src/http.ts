@@ -10,6 +10,8 @@ import { HTTP_PATHS } from './generated';
 export type StorageHttpClientOptions = ServiceEndpoint & {
   auth?: ClientAuth | string;
   apiKey?: string;
+  /** Optional org UUID; must match the API key's organization when set */
+  orgId?: string;
   headers?: Record<string, string>;
   fetch?: typeof fetch;
 };
@@ -26,6 +28,7 @@ export class StorageHttpClient {
     this.headers = {
       accept: 'application/json',
       ...buildAuthHeaders(auth, 'STORAGE_SERVICE_API_KEY'),
+      ...(options.orgId ? { 'x-org-id': options.orgId } : {}),
       ...options.headers,
     };
   }

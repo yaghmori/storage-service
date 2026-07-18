@@ -1,0 +1,146 @@
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { createHmac, timingSafeEqual } from 'crypto';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { ApiKeyService } from '../services/api-key.service';
+
+function authDisabled(): boolean {
+  const mode = (process.env.AUTH_MODE || '').toLowerCase();
+  return (
+    process.env.AUTH_DISABLED === 'true' ||
+    process.env.AUTH_DISABLED === '1' ||
+    mode === 'disabled' ||
+    mode === 'none' ||
+    mode === 'off'
+  );
+}
+
+function staticApiKeys(): Set<string> {
+  const raw = process.env.AUTH_API_KEYS || process.env.AUTH_API_KEY || '';
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+function verifyHs256Jwt(
+  token: string,
+  secret: string,
+): { serviceName?: string; orgId?: string } | null {
+  try {
+    const [h, p, s] = token.split('.');
+    if (!h || !p || !s) return null;
+    const data = `${h}.${p}`;
+    const expected = createHmac('sha256', secret).update(data).digest('base64url');
+    const a = Buffer.from(expected);
+    const b = Buffer.from(s);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    const payload = JSON.parse(Buffer.from(p, 'base64url').toString('utf8')) as {
+      serviceName?: string;
+      orgId?: string;
+      exp?: number;
+    };
+    if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * HTTP auth for core storage routes (`/api/*`).
+ * API keys are bound to an organization; request.orgId is set from the key.
+ */
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(
+    @Inject(Reflector) private readonly reflector: Reflector,
+    @Inject(ApiKeyService) private readonly apiKeyService: ApiKeyService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+    if (authDisabled()) return true;
+
+    const request = context.switchToHttp().getRequest();
+    const authHeader = (request.headers.authorization || '') as string;
+    const jwtSecret = process.env.JWT_SECRET || '';
+
+    if (authHeader.startsWith('Bearer ') && jwtSecret) {
+      const payload = verifyHs256Jwt(authHeader.slice(7), jwtSecret);
+      if (payload?.serviceName) {
+        request.serviceName = payload.serviceName;
+        request.orgId = payload.orgId || process.env.AUTH_DEFAULT_ORG_ID || undefined;
+        request.user = {
+          serviceName: request.serviceName,
+          orgId: request.orgId,
+        };
+        return true;
+      }
+    }
+
+    const apiKey =
+      (request.headers['x-api-key'] as string | undefined) ||
+      (authHeader.startsWith('ApiKey ') ? authHeader.slice(7) : undefined);
+
+    if (apiKey) {
+      const staticKeys = staticApiKeys();
+      if (staticKeys.has(apiKey)) {
+        request.serviceName = process.env.AUTH_SERVICE_NAME || 'static-client';
+        request.orgId = process.env.AUTH_DEFAULT_ORG_ID || undefined;
+        request.user = {
+          serviceName: request.serviceName,
+          orgId: request.orgId,
+        };
+        return true;
+      }
+
+      const verification = await this.apiKeyService.verifyApiKey(apiKey);
+      if (verification.valid && verification.serviceName) {
+        request.serviceName = verification.serviceName;
+        request.orgId = verification.orgId;
+        request.user = {
+          serviceName: verification.serviceName,
+          orgId: verification.orgId,
+        };
+        return true;
+      }
+    }
+
+    throw new UnauthorizedException(
+      'Valid JWT (Authorization: Bearer) or API key (x-api-key) required. Configure AUTH_API_KEYS / DB api_keys / JWT_SECRET, or AUTH_DISABLED=true on trusted networks.',
+    );
+  }
+}
+
+/** Enforce body/header orgId matches the API key's organization. */
+export function resolveBoundOrgId(
+  request: {
+    orgId?: string;
+    headers?: Record<string, string | string[] | undefined>;
+  },
+  bodyOrgId?: string | null,
+): string | undefined {
+  const headerRaw = request.headers?.['x-org-id'];
+  const headerOrgId = Array.isArray(headerRaw) ? headerRaw[0] : headerRaw;
+  const keyOrgId = request.orgId;
+  const requested = bodyOrgId || headerOrgId || undefined;
+
+  if (keyOrgId && requested && requested !== keyOrgId) {
+    throw new ForbiddenException('orgId does not match the API key organization');
+  }
+  return keyOrgId || requested;
+}

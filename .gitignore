@@ -7,3 +7,7 @@ vendor/
 .DS_Store
 coverage/
 .tsbuildinfo
+
+# Next.js
+.next/
+out/
