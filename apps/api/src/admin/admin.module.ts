@@ -2,9 +2,13 @@ import { Module } from '@nestjs/common';
 import { CommonModule } from '../common/common.module';
 import { ConfigModule } from '../config/config.module';
 import { DatabaseModule } from '../database/database.module';
+import { FilesModule } from '../files/files.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { ProcessingModule } from '../processing/processing.module';
+import { QueuesModule } from '../queues/queues.module';
 import { ServingModule } from '../serving/serving.module';
 import { UploadModule } from '../upload/upload.module';
+import { VariantsModule } from '../variants/variants.module';
 import { AdminAuthModule } from './admin-auth.module';
 import { AdminUsersController } from './controllers/admin-users.controller';
 import { AnalyticsController } from './controllers/analytics.controller';
@@ -22,9 +26,13 @@ import { AdminApiKeyService } from './services/admin-api-key.service';
     ConfigModule,
     CommonModule,
     OrganizationsModule,
+    ProcessingModule,
+    VariantsModule,
     AdminAuthModule,
     UploadModule,
     ServingModule,
+    FilesModule,
+    QueuesModule,
   ],
   controllers: [
     DashboardController,

@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { ApiKeysEndpoints, replacePathParams } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { apiKeyKeys, invalidateApiKeys } from "@/lib/query-keys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface ApiKeyRow {
@@ -24,7 +24,7 @@ export type CreateApiKeyInput = {
 
 export function useApiKeysQuery(orgId?: string) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.API_KEYS.ALL, orgId],
+    queryKey: apiKeyKeys.list(orgId),
     queryFn: async () => {
       const response = await upstream.get(ApiKeysEndpoints.List, { params: { orgId } });
       const items = unwrapApiData<ApiKeyRow[]>(response.data);
@@ -44,7 +44,7 @@ export function useCreateApiKeyMutation(orgId?: string) {
       return unwrapApiData<ApiKeyRow & { key?: string }>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.API_KEYS.ALL });
+      invalidateApiKeys(queryClient);
     },
   });
 }
@@ -58,7 +58,7 @@ export function useRevokeApiKeyMutation(orgId?: string) {
       return id;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.API_KEYS.ALL });
+      invalidateApiKeys(queryClient);
     },
   });
 }
@@ -72,7 +72,7 @@ export function useDeleteApiKeyMutation(orgId?: string) {
       return id;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.API_KEYS.ALL });
+      invalidateApiKeys(queryClient);
     },
   });
 }

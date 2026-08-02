@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/provider/auth-provider";
 import { PAGE_ROUTES } from "@/lib/constants/page-routes";
-import { MUTATION_KEYS } from "@/lib/constants/query-keys";
+import { MUTATION_KEYS } from "@/lib/query-keys";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 

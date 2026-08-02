@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { DashboardEndpoints } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { dashboardKeys } from "@/lib/query-keys";
 import { useQuery } from "@tanstack/react-query";
 
 export interface DashboardStats {
@@ -16,7 +16,7 @@ export interface DashboardStats {
 
 export function useDashboardStatsQuery(orgId?: string) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.DASHBOARD.STATS, orgId],
+    queryKey: dashboardKeys.stats(orgId),
     queryFn: async () => {
       const response = await upstream.get(DashboardEndpoints.Stats, {
         params: { orgId },

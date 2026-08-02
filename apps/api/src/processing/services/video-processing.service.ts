@@ -31,10 +31,29 @@ export class VideoProcessingService {
       // Write buffer to temp file
       await writeFile(tempInputPath, fileBuffer);
 
-      const previewFrames = options.previewFrames || 5;
+      const previewFrames = options.previewFrames ?? 3;
       const thumbnail = options.thumbnail !== false;
 
       const variants = [];
+
+      // Replace prior video variants so regenerate is idempotent.
+      const existing = await this.variantsService.findByFileId(fileId);
+      for (const prior of existing) {
+        if (
+          prior.name !== 'thumbnail' &&
+          prior.name !== 'preview-frame' &&
+          prior.name !== 'thumbnail-video' &&
+          prior.name !== 'preview-video'
+        ) {
+          continue;
+        }
+        try {
+          await provider.delete(prior.key);
+        } catch {
+          // ignore missing objects
+        }
+        await this.variantsService.delete(prior.id);
+      }
 
       if (thumbnail) {
         // Generate thumbnail from first frame

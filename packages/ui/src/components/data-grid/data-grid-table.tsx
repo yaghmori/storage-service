@@ -259,7 +259,8 @@ function DataGridTableBodyRowSkeleton({ children }: { children: ReactNode }) {
         props.tableLayout?.cellBorder && "[&_>:last-child]:border-e-0",
         props.tableLayout?.stripped &&
           "odd:bg-muted/90 hover:bg-transparent odd:hover:bg-muted",
-        table.options.enableRowSelection && "[&_>:first-child]:relative",
+        table.options.enableRowSelection &&
+          "[&_>:first-child]:relative [&_td:has([role=checkbox])]:relative",
         props.tableClassNames?.bodyRow,
       )}
     >
@@ -376,7 +377,8 @@ function DataGridTableBodyRow<TData>({
         props.tableLayout?.cellBorder && "[&_>:last-child]:border-e-0",
         props.tableLayout?.stripped &&
           "odd:bg-muted/90 hover:bg-transparent odd:hover:bg-muted",
-        table.options.enableRowSelection && "[&_>:first-child]:relative",
+        table.options.enableRowSelection &&
+          "[&_>:first-child]:relative [&_td:has([role=checkbox])]:relative",
         props.tableClassNames?.bodyRow,
       )}
       {...motionProps}
@@ -447,7 +449,7 @@ function DataGridTableBodyRowCell<TData>({
         isLastLeftPinned ? "left" : isFirstRightPinned ? "right" : undefined
       }
       className={cn(
-        "align-middle",
+        "align-middle [&:has([role=checkbox])]:pe-0",
         bodyCellSpacing,
         props.tableLayout?.cellBorder && "border-e",
         props.tableLayout?.columnsResizable &&
@@ -515,31 +517,38 @@ function DataGridTableLoader() {
 
 function DataGridTableRowSelect<TData>({
   row,
-  size,
+  size = "md",
 }: {
   row: Row<TData>;
   size?: "sm" | "md" | "lg";
 }) {
+  const canSelect = row.getCanSelect();
+  const checkboxSize =
+    size === "sm" ? "size-3.5!" : size === "lg" ? "size-5!" : "size-4!";
+
   return (
     <>
       <div
         className={cn(
-          "hidden absolute top-0 bottom-0 align-middle self-center start-0 w-[2px] bg-primary",
+          "absolute start-0 top-0 bottom-0 hidden w-0.5 bg-primary",
           row.getIsSelected() && "block",
         )}
-      ></div>
+      />
       <Checkbox
         checked={row.getIsSelected()}
+        disabled={!canSelect}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="align-middle self-center items-center justify-center"
+        className={checkboxSize}
       />
     </>
   );
 }
 
-function DataGridTableRowSelectAll({ size }: { size?: "sm" | "md" | "lg" }) {
+function DataGridTableRowSelectAll({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const { table, recordCount, isLoading } = useDataGrid();
+  const checkboxSize =
+    size === "sm" ? "size-3.5!" : size === "lg" ? "size-5!" : "size-4!";
 
   return (
     <Checkbox
@@ -550,7 +559,7 @@ function DataGridTableRowSelectAll({ size }: { size?: "sm" | "md" | "lg" }) {
       disabled={isLoading || recordCount === 0}
       onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
       aria-label="Select all"
-      className="align-[inherit]"
+      className={checkboxSize}
     />
   );
 }

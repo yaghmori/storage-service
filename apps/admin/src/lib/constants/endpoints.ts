@@ -18,17 +18,21 @@ export const FilesEndpoints = {
   HardDelete: "admin/api/files/{0}/hard",
   SignedUrl: "admin/api/files/{0}/signed-url",
   Content: "admin/api/files/{0}/content",
+  Metadata: "admin/api/files/{0}/metadata",
+  Variants: "admin/api/files/{0}/variants",
+  RegenerateProcessing: "admin/api/files/{0}/regenerate-processing",
 } as const;
 
 /** Browser-friendly content URL via BFF (session cookie → admin JWT). */
 export function fileContentUrl(
   fileId: string,
-  opts?: { variant?: string; orgId?: string },
+  opts?: { variant?: string; orgId?: string; download?: boolean },
 ): string {
   const path = replacePathParams(FilesEndpoints.Content, fileId);
   const params = new URLSearchParams();
   if (opts?.variant) params.set("variant", opts.variant);
   if (opts?.orgId) params.set("orgId", opts.orgId);
+  if (opts?.download) params.set("download", "1");
   const query = params.toString();
   return `/api/upstream/${path}${query ? `?${query}` : ""}`;
 }
@@ -37,6 +41,7 @@ export const JobsEndpoints = {
   List: "admin/api/jobs",
   Detail: "admin/api/jobs/{0}",
   Cancel: "admin/api/jobs/{0}/cancel",
+  Retry: "admin/api/jobs/{0}/retry",
 } as const;
 
 export const AnalyticsEndpoints = {
@@ -67,6 +72,10 @@ export const OrgsEndpoints = {
   Create: "admin/api/orgs",
   Update: "admin/api/orgs/{0}",
   Delete: "admin/api/orgs/{0}",
+  ProcessingSettings: "admin/api/orgs/{0}/processing-settings",
+  Limits: "admin/api/orgs/{0}/limits",
+  Retention: "admin/api/orgs/{0}/retention",
+  Usage: "admin/api/orgs/{0}/usage",
 } as const;
 
 export const UsersEndpoints = {

@@ -143,6 +143,9 @@ export class SeedService {
       config: {
         endpoint: process.env.MINIO_ENDPOINT?.trim() || '',
         port: process.env.MINIO_PORT || '9000',
+        publicEndpoint:
+          process.env.MINIO_PUBLIC_ENDPOINT?.trim() ||
+          `http://localhost:${process.env.MINIO_PUBLIC_PORT?.trim() || process.env.MINIO_PORT || '9000'}`,
         accessKeyId: process.env.MINIO_ACCESS_KEY?.trim() || '',
         secretAccessKey: process.env.MINIO_SECRET_KEY?.trim() || '',
         bucket: process.env.MINIO_BUCKET?.trim() || 'storage',

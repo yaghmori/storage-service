@@ -86,6 +86,10 @@ export const organizations = pgTable(
     termsUrl: varchar('terms_url', { length: 500 }),
     appBaseUrl: varchar('app_base_url', { length: 500 }),
     metadata: json('metadata'),
+    /** Bytes occupied by files until hard purge (active + soft-deleted). */
+    usedBytes: bigint('used_bytes', { mode: 'bigint' }).default(0n).notNull(),
+    /** File count occupying storage until hard purge. */
+    objectCount: integer('object_count').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -285,6 +289,7 @@ export const fileMetadata = pgTable(
   },
   (table) => ({
     fileIdIdx: index('file_metadata_file_id_idx').on(table.fileId),
+    fileIdUnique: unique('file_metadata_file_id_unique').on(table.fileId),
   }),
 );
 
@@ -357,6 +362,9 @@ export const processingJobs = pgTable(
     statusIdx: index('processing_jobs_status_idx').on(table.status),
     jobTypeIdx: index('processing_jobs_job_type_idx').on(table.jobType),
     bullmqJobIdIdx: index('processing_jobs_bullmq_job_id_idx').on(table.bullmqJobId),
+    bullmqJobIdUnique: unique('processing_jobs_bullmq_job_id_unique').on(
+      table.bullmqJobId,
+    ),
     fileStatusIdx: index('processing_jobs_file_status_idx').on(table.fileId, table.status),
     retryCountCheck: check(
       'processing_jobs_retry_count_check',

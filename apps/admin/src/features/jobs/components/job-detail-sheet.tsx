@@ -1,16 +1,29 @@
 "use client";
 
+import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
 import { useActiveOrg } from "@/provider/org-provider";
 import {
   Badge,
+  Button,
   DateDisplay,
+  Progress,
   ResponsiveSheet,
   Separator,
 } from "@workspace/ui/components";
-import { JobStatusLabels, JobTypeLabels } from "@workspace/validation";
-import { Loader2 } from "lucide-react";
+import {
+  JobStatusLabels,
+  JobTypeDescriptions,
+  JobTypeLabels,
+  type JobType,
+} from "@workspace/validation";
+import { Check, Copy, Loader2, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { FilePreviewThumb } from "@/features/files/components/file-preview-thumb";
-import { useJobDetailQuery } from "../hooks/use-jobs-queries";
+import {
+  useJobDetailQuery,
+  useRetryJobMutation,
+} from "../hooks/use-jobs-queries";
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -27,6 +40,52 @@ function statusBadgeClass(status: string): string {
   }
 }
 
+function formatBytes(value: number | string | null | undefined): string {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function CopyableId({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(value);
+              setCopied(true);
+              toast.success("Copied");
+              window.setTimeout(() => setCopied(false), 1500);
+            } catch {
+              toast.error("Could not copy");
+            }
+          }}
+        >
+          {copied ? (
+            <Check className="size-3.5" />
+          ) : (
+            <Copy className="size-3.5" />
+          )}
+          <span className="sr-only">Copy {label}</span>
+        </Button>
+      </div>
+      <p className="break-all rounded-md border bg-muted/40 px-2.5 py-2 font-mono text-xs leading-relaxed">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export function JobDetailSheet({
   jobId,
   open,
@@ -41,6 +100,15 @@ export function JobDetailSheet({
     jobId ?? undefined,
     activeOrg?.id,
   );
+  const retryMutation = useRetryJobMutation(activeOrg?.id);
+
+  const typeKey = data?.jobType as JobType | undefined;
+  const progress =
+    data?.progress == null || !Number.isFinite(Number(data.progress))
+      ? null
+      : Math.max(0, Math.min(100, Number(data.progress)));
+  const canRetry =
+    data?.status === "failed" || data?.status === "cancelled";
 
   return (
     <ResponsiveSheet
@@ -57,11 +125,11 @@ export function JobDetailSheet({
             : "Job details"}
         </ResponsiveSheet.Title>
         <ResponsiveSheet.Description>
-          Processing job metadata and errors.
+          Full identifiers, status, and processor output for this job.
         </ResponsiveSheet.Description>
       </ResponsiveSheet.Header>
 
-      <ResponsiveSheet.Content className="space-y-4 px-4 pb-6">
+      <ResponsiveSheet.Content className="space-y-5 px-4 pb-6">
         {isLoading || !data ? (
           <div className="flex h-40 items-center justify-center text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -78,16 +146,36 @@ export function JobDetailSheet({
                 size="md"
               />
               <div className="min-w-0 space-y-1">
-                <p className="truncate font-medium">
+                <p className="break-words font-medium">
                   {data.fileName ?? data.fileId}
                 </p>
-                <p className="font-mono text-xs text-muted-foreground">
+                <p className="break-all font-mono text-xs text-muted-foreground">
                   {data.mimeType ?? "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatBytes(data.fileSize)}
                 </p>
               </div>
             </div>
 
+            {typeKey && JobTypeDescriptions[typeKey] ? (
+              <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                {JobTypeDescriptions[typeKey]}
+              </p>
+            ) : null}
+
             <dl className="grid gap-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Organization</dt>
+                <dd className="text-right">
+                  <p className="font-medium">
+                    {data.orgName ?? activeOrg?.name ?? "—"}
+                  </p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {data.orgSlug ?? activeOrg?.slug ?? "—"}
+                  </p>
+                </dd>
+              </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Status</dt>
                 <dd>
@@ -111,15 +199,22 @@ export function JobDetailSheet({
                   </Badge>
                 </dd>
               </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Progress</dt>
-                <dd className="tabular-nums">
-                  {data.progress == null ? "—" : `${data.progress}%`}
-                </dd>
+              <div className="space-y-2">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Progress</dt>
+                  <dd className="tabular-nums">
+                    {progress == null ? "—" : `${progress}%`}
+                  </dd>
+                </div>
+                {progress != null ? <Progress value={progress} /> : null}
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Retries</dt>
                 <dd className="tabular-nums">{data.retryCount}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Priority</dt>
+                <dd className="tabular-nums">{data.priority ?? "—"}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Created</dt>
@@ -147,26 +242,28 @@ export function JobDetailSheet({
                   )}
                 </dd>
               </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">BullMQ ID</dt>
-                <dd className="max-w-[220px] truncate font-mono text-xs">
-                  {data.bullmqJobId ?? "—"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Job ID</dt>
-                <dd className="max-w-[220px] truncate font-mono text-xs">
-                  {data.id}
-                </dd>
-              </div>
             </dl>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <CopyableId label="Job ID" value={data.id} />
+              <CopyableId label="File ID" value={data.fileId} />
+              <CopyableId
+                label="BullMQ ID"
+                value={data.bullmqJobId ?? "—"}
+              />
+              {data.orgId ? (
+                <CopyableId label="Organization ID" value={data.orgId} />
+              ) : null}
+            </div>
 
             {data.errorMessage ? (
               <>
                 <Separator />
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-destructive">Error</p>
-                  <pre className="max-h-48 overflow-auto rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs whitespace-pre-wrap">
+                  <pre className="max-h-64 overflow-auto rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs whitespace-pre-wrap break-words">
                     {data.errorMessage}
                   </pre>
                 </div>
@@ -175,6 +272,30 @@ export function JobDetailSheet({
           </>
         )}
       </ResponsiveSheet.Content>
+
+      {canRetry && data ? (
+        <ResponsiveSheet.Footer className="gap-2 px-4 pb-4">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={retryMutation.isPending}
+            onClick={() =>
+              retryMutation.mutate(data.id, {
+                onSuccess: () => toast.success("Job queued for retry"),
+                onError: (err) =>
+                  toast.error(extractApiErrorMessage(err, "Retry failed")),
+              })
+            }
+          >
+            {retryMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            Retry job
+          </Button>
+        </ResponsiveSheet.Footer>
+      ) : null}
     </ResponsiveSheet>
   );
 }

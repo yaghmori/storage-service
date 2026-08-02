@@ -4,17 +4,29 @@ export interface S3Config {
   accessKeyId: string;
   secretAccessKey: string;
   endpoint?: string;
+  /** Browser/CDN base for public URLs (optional). */
+  publicEndpoint?: string;
   forcePathStyle?: boolean;
+  /** Default signed URL TTL in seconds when caller omits expiresIn. */
+  signedUrlExpiresIn?: number;
 }
 
 export interface MinIOConfig {
   bucket: string;
   endpoint?: string;
+  /**
+   * Browser-facing base URL for signed/public URLs
+   * (e.g. http://localhost:9000 or https://cdn.allyfe.org).
+   * Keep `endpoint` as the API→MinIO host (e.g. minio).
+   */
+  publicEndpoint?: string;
   port?: number | string;
   useSSL?: boolean;
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
+  /** Default signed URL TTL in seconds when caller omits expiresIn. */
+  signedUrlExpiresIn?: number;
 }
 
 export interface LocalConfig {

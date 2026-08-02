@@ -25,6 +25,7 @@ export class ServingService {
     response?: Response,
     ipAddress?: string,
     userAgent?: string,
+    asDownload = false,
   ) {
     let variant = null;
     let provider;
@@ -71,11 +72,15 @@ export class ServingService {
     }
 
     if (response) {
+      const safeName = (file.originalFilename || 'file').replace(
+        /["\r\n]/g,
+        '_',
+      );
       response.setHeader('Content-Type', contentType);
       response.setHeader('Content-Length', buffer.length);
       response.setHeader(
         'Content-Disposition',
-        `inline; filename="${file.originalFilename}"`,
+        `${asDownload ? 'attachment' : 'inline'}; filename="${safeName}"`,
       );
       response.send(buffer);
     }

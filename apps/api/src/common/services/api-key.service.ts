@@ -18,7 +18,7 @@ export class ApiKeyService {
   async verifyApiKey(
     apiKey: string,
   ): Promise<{ valid: boolean; serviceName?: string; orgId?: string }> {
-    const keyHash = await this.hashApiKey(apiKey);
+    const keyHash = await this.hashApiKey(apiKey.trim());
 
     const [apiKeyRecord] = await this.db
       .select({

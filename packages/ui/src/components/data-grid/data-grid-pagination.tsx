@@ -28,11 +28,9 @@ function DataGridPagination({
   ...props
 }: DataGridPaginationProps) {
   const { table, recordCount } = useDataGrid();
-  const hasSelectableRows =
-    Boolean(table.options.enableRowSelection) ||
-    table
-      .getAllLeafColumns()
-      .some((column) => column.id === "select" || column.id === "selection");
+  const hasSelectColumn = table
+    .getAllLeafColumns()
+    .some((column) => column.id === "select" || column.id === "selection");
 
   return (
     <div
@@ -47,7 +45,7 @@ function DataGridPagination({
         <span className="font-semibold text-foreground">
           Total records: {recordCount}
         </span>
-        {!hasSelectableRows && (
+        {hasSelectColumn && (
           <span>
             {table.getFilteredSelectedRowModel().rows.length} of{" "}
             {table.getFilteredRowModel().rows.length} row(s) selected.

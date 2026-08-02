@@ -1,9 +1,24 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import { extname, basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { FileDuplicationService } from '../../files/services/file-duplication.service';
 import { FilesChecksumService } from '../../files/services/files-checksum.service';
 import { FilesService } from '../../files/services/files.service';
+import { OrganizationService } from '../../organizations/organization.service';
+import { OrgLimitsService } from '../../organizations/services/org-limits.service';
+import { OrgUsageService } from '../../organizations/services/org-usage.service';
+import { ProcessingSettingsService } from '../../processing/services/processing-settings.service';
+import type { ProcessingSettingsOverride } from '../../processing/types/processing-settings';
+import { enabledImageVariantSlots } from '../../processing/types/processing-settings';
 import { QueuesService } from '../../queues/queues.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 
@@ -17,6 +32,10 @@ export class UploadService {
     private readonly storageFactory: StorageFactoryService,
     private readonly queuesService: QueuesService,
     private readonly fileDuplicationService: FileDuplicationService,
+    private readonly processingSettings: ProcessingSettingsService,
+    private readonly organizations: OrganizationService,
+    private readonly limitsService: OrgLimitsService,
+    private readonly usageService: OrgUsageService,
   ) {}
 
   async uploadFile(
@@ -25,6 +44,7 @@ export class UploadService {
     storageProviderId?: string,
     userId?: string,
     storageKeyOverride?: string,
+    processingOverride?: ProcessingSettingsOverride | null,
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -33,7 +53,25 @@ export class UploadService {
       throw new BadRequestException('orgId is required');
     }
 
+    const org = await this.organizations.getById(orgId);
+    if (!org) {
+      throw new BadRequestException(`Unknown organization: ${orgId}`);
+    }
+    if (org.status !== 'active') {
+      throw new ForbiddenException(
+        `Organization is ${org.status}; uploads are disabled`,
+      );
+    }
+
     const buffer = file.buffer;
+    const size = buffer.length;
+    const mime = (file.mimetype || 'application/octet-stream').toLowerCase();
+
+    await this.assertWithinLimits(orgId, size, mime, {
+      usedBytes: Number(org.usedBytes ?? 0n),
+      objectCount: org.objectCount ?? 0,
+    });
+
     const sha256Hash = await this.checksumService.calculateSHA256(buffer);
 
     const existingFiles = await this.filesService.findByHash(sha256Hash, orgId);
@@ -118,7 +156,9 @@ export class UploadService {
         mimeType: file.mimetype,
         size: BigInt(buffer.length),
         fileHash: sha256Hash,
+        checksum: sha256Hash,
       });
+      await this.usageService.increment(orgId, buffer.length);
     } catch (error) {
       try {
         await provider.delete(key);
@@ -132,7 +172,13 @@ export class UploadService {
       throw new BadRequestException('File record not found');
     }
 
-    this.scheduleProcessingJobs(fileRecord.id, file.mimetype, orgId);
+    void this.scheduleProcessingJobs(
+      fileRecord.id,
+      file.mimetype,
+      orgId,
+      file.originalname,
+      processingOverride,
+    );
 
     return {
       id: fileRecord.id,
@@ -145,6 +191,84 @@ export class UploadService {
       storageKey: key,
       createdAt: fileRecord.createdAt,
     };
+  }
+
+  private async assertWithinLimits(
+    orgId: string,
+    size: number,
+    mime: string,
+    usage: { usedBytes: number; objectCount: number },
+  ): Promise<void> {
+    const limits = await this.limitsService.resolve(orgId);
+
+    if (size > limits.maxFileSizeBytes) {
+      throw new PayloadTooLargeException({
+        code: 'FILE_TOO_LARGE',
+        message: `File size ${size} exceeds max ${limits.maxFileSizeBytes} bytes`,
+        maxFileSizeBytes: limits.maxFileSizeBytes,
+      });
+    }
+
+    if (
+      limits.allowedMimeTypes.length > 0 &&
+      !limits.allowedMimeTypes.includes(mime)
+    ) {
+      throw new UnsupportedMediaTypeException({
+        code: 'MIME_NOT_ALLOWED',
+        message: `MIME type "${mime}" is not allowed`,
+        allowedMimeTypes: limits.allowedMimeTypes,
+      });
+    }
+
+    if (
+      limits.maxObjectCount != null &&
+      usage.objectCount >= limits.maxObjectCount
+    ) {
+      throw new HttpException(
+        {
+          code: 'OBJECT_QUOTA_EXCEEDED',
+          message: `Organization object count limit (${limits.maxObjectCount}) reached`,
+          maxObjectCount: limits.maxObjectCount,
+          objectCount: usage.objectCount,
+        },
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
+    }
+
+    if (
+      limits.storageQuotaBytes != null &&
+      usage.usedBytes + size > limits.storageQuotaBytes
+    ) {
+      throw new HttpException(
+        {
+          code: 'STORAGE_QUOTA_EXCEEDED',
+          message: `Upload would exceed storage quota (${limits.storageQuotaBytes} bytes)`,
+          storageQuotaBytes: limits.storageQuotaBytes,
+          usedBytes: usage.usedBytes,
+          fileSize: size,
+        },
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
+    }
+  }
+
+  /**
+   * Re-enqueue processing using current org settings (or an explicit override).
+   * Used by admin regenerate; does not snapshot settings from original upload.
+   */
+  async regenerateProcessing(
+    fileId: string,
+    orgId: string,
+    processingOverride?: ProcessingSettingsOverride | null,
+  ): Promise<{ scheduled: string[] }> {
+    const file = await this.filesService.findById(fileId, orgId);
+    return this.scheduleProcessingJobs(
+      file.id,
+      file.mimeType,
+      orgId,
+      file.originalFilename ?? undefined,
+      processingOverride,
+    );
   }
 
   /**
@@ -169,51 +293,88 @@ export class UploadService {
   }
 
   /**
-   * Schedule processing jobs based on file type
-   * This runs asynchronously and doesn't block the upload response
+   * Schedule processing jobs from resolved org settings.
+   * Resolution: per-upload override → org settings → platform defaults.
    *
-   * Best practices for image variants:
-   * - Thumbnail (200px): For lists, grids, and previews
-   * - Medium (800px): For detail views and responsive images
-   * - WebP format: Modern, efficient compression (80-90% smaller than JPEG)
+   * Canonical image variants: first size → `thumbnail`, second → `medium` (WebP by default).
    */
   private async scheduleProcessingJobs(
     fileId: string,
     mimetype: string,
-    _orgId: string,
-  ): Promise<void> {
+    orgId: string,
+    originalFileName?: string,
+    processingOverride?: ProcessingSettingsOverride | null,
+  ): Promise<{ scheduled: string[] }> {
+    const scheduled: string[] = [];
     try {
-      if (mimetype.startsWith('image/')) {
-        await this.queuesService.addImageProcessingJob({
-          fileId,
-          orgId: _orgId,
-          options: {
-            sizes: [200, 800],
-            formats: ['webp'],
-          },
-        });
-        this.logger.log(`Image processing job scheduled for file ${fileId}`);
+      const settings = await this.processingSettings.resolve(
+        orgId,
+        processingOverride,
+      );
+
+      if (
+        settings.enableImageProcessing &&
+        this.shouldQueueImageVariants(mimetype, originalFileName)
+      ) {
+        const variants = enabledImageVariantSlots(settings);
+        if (variants.length > 0) {
+          await this.queuesService.addImageProcessingJob({
+            fileId,
+            orgId,
+            options: {
+              variants,
+              formats: settings.imageFormats,
+            },
+          });
+          scheduled.push('image');
+          this.logger.log(`Image processing job scheduled for file ${fileId}`);
+        }
       }
 
-      if (mimetype.startsWith('video/')) {
+      if (settings.enableVideoProcessing && mimetype.startsWith('video/')) {
         await this.queuesService.addVideoProcessingJob({
           fileId,
-          orgId: _orgId,
+          orgId,
           options: {
-            previewFrames: 3,
-            thumbnail: true,
+            previewFrames: settings.videoPreviewFrames,
+            thumbnail: settings.videoThumbnail,
           },
         });
+        scheduled.push('video');
         this.logger.log(`Video processing job scheduled for file ${fileId}`);
       }
 
-      await this.queuesService.addMetadataExtractionJob({ fileId, orgId: _orgId });
-      this.logger.log(`Metadata extraction job scheduled for file ${fileId}`);
+      if (settings.enableMetadataExtraction) {
+        await this.queuesService.addMetadataExtractionJob({ fileId, orgId });
+        scheduled.push('metadata');
+        this.logger.log(`Metadata extraction job scheduled for file ${fileId}`);
+      }
     } catch (error) {
       this.logger.error(
         `Failed to schedule processing jobs for file ${fileId}:`,
         error instanceof Error ? error.stack : String(error),
       );
     }
+    return { scheduled };
+  }
+
+  /** Sharp-friendly rasters only — skip PSD and other non-raster "image/*" types. */
+  private shouldQueueImageVariants(
+    mimetype: string,
+    originalFileName?: string,
+  ): boolean {
+    const name = (originalFileName || '').toLowerCase();
+    if (name.endsWith('.psd') || name.endsWith('.psb')) {
+      return false;
+    }
+    if (
+      mimetype === 'image/vnd.adobe.photoshop' ||
+      mimetype === 'image/x-photoshop' ||
+      mimetype === 'image/psd' ||
+      mimetype === 'image/photoshop'
+    ) {
+      return false;
+    }
+    return mimetype.startsWith('image/');
   }
 }

@@ -71,8 +71,11 @@ export class S3StorageService {
         return getSignedUrl(client, command, { expiresIn });
       },
       getPublicUrl: async (key: string) => {
+        if (config.publicEndpoint?.trim()) {
+          return `${config.publicEndpoint.replace(/\/$/, '')}/${config.bucket}/${key}`;
+        }
         if (config.endpoint) {
-          return `${config.endpoint}/${config.bucket}/${key}`;
+          return `${config.endpoint.replace(/\/$/, '')}/${config.bucket}/${key}`;
         }
         return `https://${config.bucket}.s3.${config.region || 'us-east-1'}.amazonaws.com/${key}`;
       },

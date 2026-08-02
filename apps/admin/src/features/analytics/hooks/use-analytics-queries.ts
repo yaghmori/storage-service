@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { AnalyticsEndpoints } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { analyticsKeys } from "@/lib/query-keys";
 import { useQuery } from "@tanstack/react-query";
 
 export interface AnalyticsSummary {
@@ -39,7 +39,7 @@ interface DownloadsListResponse {
 
 export function useAnalyticsSummaryQuery(orgId?: string) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.ANALYTICS.ALL, "summary", orgId],
+    queryKey: analyticsKeys.summary(orgId),
     queryFn: async () => {
       const response = await upstream.get(AnalyticsEndpoints.Summary, {
         params: { orgId },
@@ -57,7 +57,7 @@ export function useDownloadsQuery(params?: {
   orgId?: string;
 }) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.ANALYTICS.ALL, "downloads", params ?? {}],
+    queryKey: analyticsKeys.downloads(params as Record<string, unknown> | undefined),
     queryFn: async () => {
       const response = await upstream.get(AnalyticsEndpoints.Downloads, {
         params,

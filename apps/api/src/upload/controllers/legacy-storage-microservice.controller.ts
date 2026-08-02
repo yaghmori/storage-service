@@ -1,20 +1,28 @@
-import { Controller } from '@nestjs/common';
+import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { MESSAGE_PATTERNS, success, type ApiResponse } from '../../lib/contracts';
+import { looksLikeUuid } from '../../common/guards/auth.guard';
 import { FilesService } from '../../files/services/files.service';
+import { OrganizationService } from '../../organizations/organization.service';
 import { SignedUrlService } from '../../serving/services/signed-url.service';
 import { UploadService } from '../services/upload.service';
 
 /**
  * Legacy TCP pattern aliases (Allyfe / older clients).
  * Prefer HTTP multipart upload + MESSAGE_PATTERNS.STORAGE.* patterns for new integrations.
+ *
+ * TCP has no API-key auth — callers must send orgId (UUID) or orgSlug.
+ * Falling back to AUTH_DEFAULT_ORG_ID alone is why files land under Default.
  */
 @Controller()
 export class LegacyStorageMicroserviceController {
+  private readonly logger = new Logger(LegacyStorageMicroserviceController.name);
+
   constructor(
     private readonly uploadService: UploadService,
     private readonly signedUrlService: SignedUrlService,
     private readonly filesService: FilesService,
+    private readonly organizations: OrganizationService,
   ) {}
 
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.UPLOAD_FILE)
@@ -34,6 +42,7 @@ export class LegacyStorageMicroserviceController {
       userId?: string;
       requestId?: string;
       orgId?: string;
+      orgSlug?: string;
       tenantId?: string;
     },
   ): Promise<ApiResponse<unknown> & { success: boolean; id?: string; url?: string }> {
@@ -50,11 +59,10 @@ export class LegacyStorageMicroserviceController {
       ? `${data.folder.replace(/\/$/, '')}/${filename}`
       : undefined;
 
-    const orgId =
-      data.orgId || data.tenantId || process.env.AUTH_DEFAULT_ORG_ID;
+    const orgId = await this.resolveTcpOrgId(data);
     if (!orgId) {
       throw new Error(
-        'uploadFile requires orgId/tenantId in payload or AUTH_DEFAULT_ORG_ID on the server',
+        'uploadFile requires orgId (UUID) or orgSlug/tenantId in payload, or AUTH_DEFAULT_ORG_ID on the server',
       );
     }
 
@@ -72,7 +80,12 @@ export class LegacyStorageMicroserviceController {
 
     let url: string | undefined;
     try {
-      url = await this.signedUrlService.generateSignedUrl(result.id, undefined, 3600);
+      const signed = await this.signedUrlService.generateSignedUrl(
+        result.id,
+        undefined,
+        3600,
+      );
+      url = signed.url;
     } catch {
       url = undefined;
     }
@@ -85,6 +98,36 @@ export class LegacyStorageMicroserviceController {
     };
   }
 
+  private async resolveTcpOrgId(data: {
+    orgId?: string;
+    orgSlug?: string;
+    tenantId?: string;
+  }): Promise<string | undefined> {
+    const rawId = data.orgId?.trim();
+    const rawSlug = (data.orgSlug || data.tenantId)?.trim();
+
+    if (rawId && looksLikeUuid(rawId)) {
+      return this.organizations.resolveOrgRef({ orgId: rawId });
+    }
+
+    // Treat non-UUID orgId as a slug (common client mistake).
+    const slug = rawSlug || (rawId && !looksLikeUuid(rawId) ? rawId : undefined);
+    if (slug) {
+      return this.organizations.resolveOrgRef({ orgSlug: slug });
+    }
+
+    const fallback = process.env.AUTH_DEFAULT_ORG_ID?.trim();
+    if (fallback) {
+      this.logger.warn(
+        `TCP upload missing orgId/orgSlug — using AUTH_DEFAULT_ORG_ID (${fallback}). Files will land under that org (often Default).`,
+      );
+      return looksLikeUuid(fallback)
+        ? fallback
+        : this.organizations.resolveOrgRef({ orgSlug: fallback });
+    }
+    return undefined;
+  }
+
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.GET_ASSET_URL)
   async getAssetUrl(
     @Payload()
@@ -93,6 +136,7 @@ export class LegacyStorageMicroserviceController {
       fileId?: string;
       id?: string;
       expiresIn?: number;
+      variant?: string;
       requestId?: string;
     },
   ): Promise<
@@ -106,14 +150,32 @@ export class LegacyStorageMicroserviceController {
     if (!fileId) {
       throw new Error('getAssetUrl requires assetId or fileId');
     }
-    const expiresIn = data.expiresIn || 3600;
-    const url = await this.signedUrlService.generateSignedUrl(fileId, undefined, expiresIn);
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-    return {
-      ...success({ url, signedUrl: url, expiresAt, expiresIn }, { requestId: data.requestId }),
-      success: true,
-      signedUrl: url,
+    const expiresIn =
+      typeof data.expiresIn === 'number' && Number.isFinite(data.expiresIn)
+        ? data.expiresIn
+        : undefined;
+    const variantType = data.variant?.trim()
+      ? (data.variant.trim() as import('../../variants/repositories/variants.repository').VariantType)
+      : undefined;
+    const signed = await this.signedUrlService.generateSignedUrl(
+      fileId,
+      variantType,
       expiresIn,
+    );
+    const expiresAt = new Date(Date.now() + signed.expiresIn * 1000).toISOString();
+    return {
+      ...success(
+        {
+          url: signed.url,
+          signedUrl: signed.url,
+          expiresAt,
+          expiresIn: signed.expiresIn,
+        },
+        { requestId: data.requestId },
+      ),
+      success: true,
+      signedUrl: signed.url,
+      expiresIn: signed.expiresIn,
     };
   }
 

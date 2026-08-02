@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../../database/database.service';
 import * as schema from '../../database/drizzle/schema';
+import { OrgUsageService } from '../../organizations/services/org-usage.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 import { VariantsRepository } from '../../variants/repositories/variants.repository';
 import { FilesRepository } from '../repositories/files.repository';
@@ -15,10 +16,12 @@ export class FileDeletionService {
     private readonly variantsRepository: VariantsRepository,
     private readonly storageFactory: StorageFactoryService,
     private readonly databaseService: DatabaseService,
+    private readonly usageService: OrgUsageService,
   ) {}
 
   /**
-   * Soft delete a file - marks as deleted but keeps record
+   * Soft delete a file - marks as deleted but keeps record.
+   * Quota is not freed until hard purge (soft-deleted files still occupy storage).
    */
   async softDelete(fileId: string): Promise<boolean> {
     const file = await this.filesRepository.findById(fileId);
@@ -80,9 +83,20 @@ export class FileDeletionService {
       await provider.delete(file.storageKey);
       this.logger.log(`Deleted file from storage: ${file.storageKey}`);
 
+      const orgId = file.orgId;
+      const size = file.size;
+
       // Delete database record (cascade will handle related records)
       await this.filesRepository.delete(fileId);
       this.logger.log(`Hard deleted file ${fileId}`);
+
+      try {
+        await this.usageService.decrement(orgId, size);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to decrement usage for org ${orgId} after hard delete: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
 
       return true;
     } catch (error) {
@@ -111,22 +125,29 @@ export class FileDeletionService {
   }
 
   /**
-   * Cleanup orphaned files (soft deleted files older than retention period)
+   * Cleanup orphaned files (soft deleted files older than retention period).
+   * When orgId is set, only that organization is scanned.
    */
-  async cleanupOrphanedFiles(retentionDays = 30): Promise<number> {
+  async cleanupOrphanedFiles(
+    retentionDays = 30,
+    orgId?: string,
+  ): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
     const db = this.databaseService.getDb();
+    const conditions = [
+      sql`${schema.files.deletedAt} IS NOT NULL`,
+      eq(schema.files.referenceCount, 0),
+    ];
+    if (orgId) {
+      conditions.push(eq(schema.files.orgId, orgId));
+    }
+
     const orphanedFiles = await db
       .select()
       .from(schema.files)
-      .where(
-        and(
-          sql`${schema.files.deletedAt} IS NOT NULL`, // Soft deleted
-          eq(schema.files.referenceCount, 0), // No references
-        ),
-      );
+      .where(and(...conditions));
 
     let deletedCount = 0;
     for (const file of orphanedFiles) {
@@ -141,7 +162,9 @@ export class FileDeletionService {
       }
     }
 
-    this.logger.log(`Cleaned up ${deletedCount} orphaned files`);
+    this.logger.log(
+      `Cleaned up ${deletedCount} orphaned files${orgId ? ` for org ${orgId}` : ''} (retention ${retentionDays}d)`,
+    );
     return deletedCount;
   }
 
@@ -175,4 +198,3 @@ export class FileDeletionService {
     return deletedCount;
   }
 }
-

@@ -56,6 +56,7 @@ services:
       UPLOAD_PATH: /app/uploads
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: storage

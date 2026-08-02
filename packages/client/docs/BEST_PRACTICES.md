@@ -16,6 +16,19 @@ See also email-service `docs/BEST_PRACTICES.md` (same transport / auth model).
 - **Duplicate-by-hash is per org** — the same bytes in org A and org B are separate objects.
 - Never log full signed URLs or storage keys.
 
+## MinIO internal vs public endpoint
+
+When the API runs in Docker, set provider `endpoint` to the internal hostname (`minio`) so uploads work.
+Set `publicEndpoint` (or env `MINIO_PUBLIC_ENDPOINT`) to the browser-reachable base URL used for signed URLs:
+
+- Local: `http://localhost:9000`
+- Production: `https://cdn.allyfe.org` (or your MinIO/S3 proxy)
+
+Without `publicEndpoint`, presigned URLs embed the internal host and browsers cannot open them.
+
+Optional provider field `signedUrlExpiresIn` (seconds, 60–604800) sets the default TTL when the
+caller omits `expiresIn`. Explicit request/query TTL always wins.
+
 ## HTTP base URL
 
 The Nest app uses global prefix `/api`. The Node SDK appends `/api` when missing, so both

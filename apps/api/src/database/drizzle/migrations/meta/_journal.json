@@ -15,6 +15,20 @@
       "when": 1767738312222,
       "tag": "0001_organizations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1767738312223,
+      "tag": "0002_job_metadata_uniques",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1767738312224,
+      "tag": "0003_org_usage_quota",
+      "breakpoints": true
     }
   ]
 }

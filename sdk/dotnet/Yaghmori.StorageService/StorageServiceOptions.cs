@@ -19,10 +19,17 @@ public sealed class StorageServiceOptions
             : StorageService.Ports.Http;
 
     public string? ApiKey { get; set; } =
-        Environment.GetEnvironmentVariable("STORAGE_SERVICE_API_KEY");
+        Environment.GetEnvironmentVariable("STORAGE_SERVICE_API_KEY")?.Trim();
 
     public string? BearerToken { get; set; } =
         Environment.GetEnvironmentVariable("STORAGE_SERVICE_BEARER");
+
+    /// <summary>
+    /// Storage org UUID or slug. Sent as x-org-id so uploads bind to the correct tenant
+    /// (not AUTH_DEFAULT_ORG_ID / Default when using TCP or mismatched keys).
+    /// </summary>
+    public string? OrgId { get; set; } =
+        Environment.GetEnvironmentVariable("STORAGE_SERVICE_ORG_ID")?.Trim();
 
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 

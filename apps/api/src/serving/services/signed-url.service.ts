@@ -4,6 +4,41 @@ import { StorageFactoryService } from '../../storage-providers/services/storage-
 import { VariantType } from '../../variants/repositories/variants.repository';
 import { VariantsService } from '../../variants/services/variants.service';
 
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;
+
+function resolveSignedUrlTtl(
+  requested: number | undefined,
+  providerConfig: unknown,
+): number {
+  if (
+    typeof requested === 'number' &&
+    Number.isFinite(requested) &&
+    requested > 0
+  ) {
+    return Math.floor(requested);
+  }
+
+  const raw =
+    providerConfig &&
+    typeof providerConfig === 'object' &&
+    'signedUrlExpiresIn' in providerConfig
+      ? (providerConfig as { signedUrlExpiresIn?: unknown }).signedUrlExpiresIn
+      : undefined;
+
+  const fromProvider =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && raw.trim() !== ''
+        ? Number(raw)
+        : NaN;
+
+  if (Number.isFinite(fromProvider) && fromProvider > 0) {
+    return Math.floor(fromProvider);
+  }
+
+  return DEFAULT_SIGNED_URL_TTL_SECONDS;
+}
+
 @Injectable()
 export class SignedUrlService {
   constructor(
@@ -15,13 +50,13 @@ export class SignedUrlService {
   async generateSignedUrl(
     fileId: string,
     variantType?: VariantType,
-    expiresIn = 3600,
+    expiresIn?: number,
   ) {
     const file = await this.filesService.findById(fileId);
     let variant = null;
     let provider;
     let key;
-    let providerConfig;
+    let providerRow;
 
     if (variantType) {
       variant = await this.variantsService.findByFileIdAndType(
@@ -32,30 +67,36 @@ export class SignedUrlService {
       if (!variant) {
         provider = await this.filesService.getFileProvider(fileId);
         key = file.key;
-        providerConfig = await this.storageFactory.getProviderConfig(
+        providerRow = await this.storageFactory.getProviderConfig(
           file.storageProviderId,
         );
       } else {
         provider = await this.filesService.getFileProvider(fileId);
         key = variant.key;
-        providerConfig = await this.storageFactory.getProviderConfig(
+        providerRow = await this.storageFactory.getProviderConfig(
           file.storageProviderId,
         );
       }
     } else {
       provider = await this.filesService.getFileProvider(fileId);
       key = file.key;
-      providerConfig = await this.storageFactory.getProviderConfig(
+      providerRow = await this.storageFactory.getProviderConfig(
         file.storageProviderId,
       );
     }
 
-    if (providerConfig?.type === 'local') {
+    const ttl = resolveSignedUrlTtl(expiresIn, providerRow?.config);
+
+    if (providerRow?.type === 'local') {
       const baseUrl =
         process.env.APP_URL || process.env.BASE_URL || 'http://localhost:6100';
-      return `${baseUrl}/api/files/${fileId}/download${variantType ? `?variant=${variantType}` : ''}`;
+      return {
+        url: `${baseUrl}/api/files/${fileId}/download${variantType ? `?variant=${variantType}` : ''}`,
+        expiresIn: ttl,
+      };
     }
 
-    return provider.getSignedUrl(key, expiresIn);
+    const url = await provider.getSignedUrl(key, ttl);
+    return { url, expiresIn: ttl };
   }
 }

@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { UsersEndpoints, replacePathParams } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { invalidateUsers, userKeys } from "@/lib/query-keys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface AdminUserRow {
@@ -18,7 +18,7 @@ export interface AdminUserRow {
 
 export function useAdminUsersQuery() {
   return useQuery({
-    queryKey: QUERY_KEYS.USERS.ALL,
+    queryKey: userKeys.all,
     queryFn: async () => {
       const response = await upstream.get(UsersEndpoints.List);
       const items = unwrapApiData<AdminUserRow[]>(response.data);
@@ -39,7 +39,7 @@ export function useCreateAdminUserMutation() {
       return unwrapApiData<AdminUserRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS.ALL });
+      invalidateUsers(queryClient);
     },
   });
 }
@@ -64,7 +64,7 @@ export function useUpdateAdminUserMutation() {
       return unwrapApiData<AdminUserRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS.ALL });
+      invalidateUsers(queryClient);
     },
   });
 }
@@ -77,7 +77,7 @@ export function useDeleteAdminUserMutation() {
       await upstream.delete(path);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS.ALL });
+      invalidateUsers(queryClient);
     },
   });
 }

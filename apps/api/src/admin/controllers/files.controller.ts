@@ -19,7 +19,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { and, count, desc, eq, ilike, isNull, or, SQL } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, isNotNull, isNull, or, SQL } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -27,12 +27,15 @@ import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { toJsonSafe } from '../../common/utils/json-safe.util';
 import * as schema from '../../database/drizzle/schema';
+import { FileDeletionService } from '../../files/services/file-deletion.service';
 import { emptySuccess } from '../../lib/contracts';
 import { SkipResponseTransform } from '../../lib/contracts/nest';
 import { SignedUrlService } from '../../serving/services/signed-url.service';
 import { ServingService } from '../../serving/services/serving.service';
+import { platformMulterFileLimits } from '../../upload/multer-limits';
 import { UploadService } from '../../upload/services/upload.service';
 import { VariantType } from '../../variants/repositories/variants.repository';
+import { VariantsService } from '../../variants/services/variants.service';
 import {
   CurrentAdmin,
   type AdminRequestUser,
@@ -53,6 +56,11 @@ class ListFilesQueryDto {
   @Transform(({ value }) => value === true || value === 'true' || value === '1')
   @IsBoolean()
   includeDeleted?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  deletedOnly?: boolean;
 
   @IsOptional()
   @Type(() => Number)
@@ -78,10 +86,12 @@ export class FilesController {
     private readonly uploadService: UploadService,
     private readonly signedUrlService: SignedUrlService,
     private readonly servingService: ServingService,
+    private readonly fileDeletionService: FileDeletionService,
+    private readonly variantsService: VariantsService,
   ) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: platformMulterFileLimits() }))
   @HttpCode(HttpStatus.CREATED)
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
@@ -118,7 +128,9 @@ export class FilesController {
 
     const conditions: SQL[] = [eq(schema.files.orgId, orgId)];
 
-    if (!query.includeDeleted) {
+    if (query.deletedOnly) {
+      conditions.push(isNotNull(schema.files.deletedAt));
+    } else if (!query.includeDeleted) {
       conditions.push(isNull(schema.files.deletedAt));
     }
 
@@ -169,18 +181,83 @@ export class FilesController {
       variantType = 'thumbnail';
     }
 
-    const expires = expiresIn ? parseInt(expiresIn, 10) : 3600;
-    const url = await this.signedUrlService.generateSignedUrl(
+    const requested = expiresIn ? parseInt(expiresIn, 10) : undefined;
+    const result = await this.signedUrlService.generateSignedUrl(
       id,
       variantType,
-      Number.isFinite(expires) ? expires : 3600,
+      Number.isFinite(requested) ? requested : undefined,
     );
 
     return {
-      url,
-      expiresIn: Number.isFinite(expires) ? expires : 3600,
+      url: result.url,
+      expiresIn: result.expiresIn,
       fileId: file.id,
       variant: variantType ?? null,
+    };
+  }
+
+  @Get(':id/metadata')
+  async getFileMetadata(
+    @Param('id') id: string,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    await this.findOrgFile(id, orgId);
+
+    const [row] = await this.db
+      .select({
+        id: schema.fileMetadata.id,
+        fileId: schema.fileMetadata.fileId,
+        metadata: schema.fileMetadata.metadata,
+        extractedAt: schema.fileMetadata.extractedAt,
+        updatedAt: schema.fileMetadata.updatedAt,
+      })
+      .from(schema.fileMetadata)
+      .where(eq(schema.fileMetadata.fileId, id))
+      .limit(1);
+
+    if (!row) {
+      return {
+        fileId: id,
+        metadata: null,
+        extractedAt: null,
+        updatedAt: null,
+      };
+    }
+
+    return toJsonSafe(row);
+  }
+
+  @Get(':id/variants')
+  async listVariants(
+    @Param('id') id: string,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    await this.findOrgFile(id, orgId);
+    const variants = await this.variantsService.findByFileId(id);
+    return { items: variants, total: variants.length };
+  }
+
+  @Post(':id/regenerate-processing')
+  @HttpCode(HttpStatus.OK)
+  async regenerateProcessing(
+    @Param('id') id: string,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    await this.findOrgFile(id, orgId);
+    const result = await this.uploadService.regenerateProcessing(id, orgId);
+    return {
+      fileId: id,
+      scheduled: result.scheduled,
+      message:
+        result.scheduled.length > 0
+          ? `Scheduled: ${result.scheduled.join(', ')}`
+          : 'No processing jobs scheduled (disabled by org settings or unsupported type)',
     };
   }
 
@@ -190,6 +267,7 @@ export class FilesController {
     @Param('id') id: string,
     @Query('orgId') queryOrgId?: string,
     @Query('variant') variant?: string,
+    @Query('download') download?: string,
     @Headers('x-org-id') headerOrgId?: string,
     @Req() request?: Request,
     @Res() response?: Response,
@@ -208,6 +286,9 @@ export class FilesController {
         : forwardedFor.split(',')[0]
       : undefined;
 
+    const asDownload =
+      download === '1' || download === 'true' || download === 'attachment';
+
     await this.servingService.streamFile(
       id,
       variantType,
@@ -215,6 +296,7 @@ export class FilesController {
       response,
       ipAddress,
       request?.headers['user-agent'],
+      asDownload,
     );
   }
 
@@ -238,11 +320,12 @@ export class FilesController {
     const orgId = requireOrgId(queryOrgId, headerOrgId);
     await this.findOrgFile(id, orgId, true);
 
-    await this.db
-      .delete(schema.files)
-      .where(and(eq(schema.files.id, id), eq(schema.files.orgId, orgId)));
+    // force=true: remove object + variants from storage even if still referenced
+    await this.fileDeletionService.hardDelete(id, true);
 
-    return emptySuccess({ message: 'File permanently deleted' });
+    return emptySuccess({
+      message: 'File permanently deleted from database and storage',
+    });
   }
 
   @Delete(':id')
@@ -265,7 +348,10 @@ export class FilesController {
       throw new NotFoundException(`File with id ${id} not found`);
     }
 
-    return emptySuccess({ message: 'File soft-deleted' });
+    return emptySuccess({
+      message:
+        'File soft-deleted (hidden from lists; object remains in storage)',
+    });
   }
 
   private async findOrgFile(id: string, orgId: string, includeDeleted = false) {

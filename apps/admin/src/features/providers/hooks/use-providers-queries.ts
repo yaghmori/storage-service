@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { ProvidersEndpoints, replacePathParams } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { invalidateProviders, providerKeys } from "@/lib/query-keys";
 import type { ProviderType } from "@workspace/validation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -28,7 +28,7 @@ export type UpsertProviderInput = {
 
 export function useProvidersQuery(orgId?: string) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.PROVIDERS.ALL, orgId],
+    queryKey: providerKeys.list(orgId),
     queryFn: async () => {
       const response = await upstream.get(ProvidersEndpoints.List, {
         params: { orgId },
@@ -50,7 +50,7 @@ export function useCreateProviderMutation(orgId?: string) {
       return unwrapApiData<ProviderRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROVIDERS.ALL });
+      invalidateProviders(queryClient);
     },
   });
 }
@@ -70,7 +70,7 @@ export function useUpdateProviderMutation(orgId?: string) {
       return unwrapApiData<ProviderRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROVIDERS.ALL });
+      invalidateProviders(queryClient);
     },
   });
 }
@@ -83,7 +83,7 @@ export function useDeleteProviderMutation(orgId?: string) {
       await upstream.delete(path, { params: { orgId } });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PROVIDERS.ALL });
+      invalidateProviders(queryClient);
     },
   });
 }

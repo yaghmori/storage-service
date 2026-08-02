@@ -109,18 +109,17 @@ export const jsonObjectStringSchema = z
 
 /**
  * Flatten a Zod failure into TanStack Form `{ fields }` shape
- * (eAllyfe Pattern B).
+ * (eAllyfe Pattern B). Nested paths use dot notation (`minio.bucket`).
  */
 export function zodFlatFields(
   error: z.ZodError,
 ): { fields: Record<string, string> } {
-  const issues = error.flatten();
   const fields: Record<string, string> = {};
-  for (const key of Object.keys(issues.fieldErrors)) {
-    const messages = issues.fieldErrors[key as keyof typeof issues.fieldErrors];
-    fields[key] = Array.isArray(messages)
-      ? (messages[0] ?? "Invalid")
-      : String(messages ?? "Invalid");
+  for (const issue of error.issues) {
+    const key = issue.path.length > 0 ? issue.path.join(".") : "_form";
+    if (!fields[key]) {
+      fields[key] = issue.message;
+    }
   }
   return { fields };
 }

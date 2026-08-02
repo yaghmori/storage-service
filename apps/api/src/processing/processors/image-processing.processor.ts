@@ -27,20 +27,19 @@ export class ImageProcessingProcessor extends WorkerHost {
     let jobRecord: Awaited<ReturnType<typeof this.jobsRepository.create>> | null = null;
 
     try {
-      // Find existing job record (created when job was added to queue)
+      // Prefer existing row (created before enqueue). Do not insert duplicates.
       jobRecord = job.id ? await this.jobsRepository.findByBullmqJobId(job.id) : null;
 
-      // If record doesn't exist, create it (backward compatibility)
-      if (!jobRecord) {
+      if (jobRecord && job.id) {
+        await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'processing');
+      } else if (!jobRecord) {
+        // Legacy jobs enqueued before DB-first tracking
         jobRecord = await this.jobsRepository.create({
           fileId,
           jobType: 'image',
           status: 'processing',
           bullmqJobId: job.id,
         });
-      } else if (job.id) {
-        // Update existing record to processing
-        await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'processing');
       }
 
       // Process image

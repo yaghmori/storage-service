@@ -47,24 +47,16 @@ export function createOrgsColumns(): ColumnDef<OrganizationRow>[] {
       ),
     },
     {
-      accessorKey: "frontendBaseUrl",
+      accessorKey: "externalRef",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Frontend URL" />
+        <DataGridColumnHeader column={column} title="External ref" />
       ),
-      meta: { label: "Frontend URL", skeleton: <Skeleton className="h-4 w-40" /> },
+      meta: { label: "External ref", skeleton: <Skeleton className="h-4 w-28" /> },
       cell: ({ row }) => (
-        <span className="line-clamp-1">
-          {row.original.frontendBaseUrl || "—"}
+        <span className="font-mono text-xs">
+          {row.original.externalRef || "—"}
         </span>
       ),
-    },
-    {
-      accessorKey: "supportEmail",
-      header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Support email" />
-      ),
-      meta: { label: "Support email", skeleton: <Skeleton className="h-4 w-36" /> },
-      cell: ({ row }) => row.original.supportEmail ?? "—",
     },
     {
       id: "actions",

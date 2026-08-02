@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { ProcessingJobsRepository } from '../processing/repositories/processing-jobs.repository';
 import {
@@ -12,6 +12,9 @@ export interface ImageProcessingJobData {
   fileId: string;
   orgId?: string;
   options?: {
+    /** Named slots (preferred). */
+    variants?: Array<{ name: 'thumbnail' | 'medium'; maxEdge: number }>;
+    /** Legacy: first → thumbnail, second → medium. */
     sizes?: number[];
     formats?: ('webp' | 'avif')[];
   };
@@ -33,6 +36,8 @@ export interface MetadataExtractionJobData {
 
 @Injectable()
 export class QueuesService {
+  private readonly logger = new Logger(QueuesService.name);
+
   constructor(
     @InjectQueue(IMAGE_PROCESSING_QUEUE)
     private readonly imageProcessingQueue: Queue,
@@ -41,100 +46,160 @@ export class QueuesService {
     @InjectQueue(METADATA_EXTRACTION_QUEUE)
     private readonly metadataExtractionQueue: Queue,
     private readonly jobsRepository: ProcessingJobsRepository,
-  ) {
-    console.log('[QueuesService] Queues initialized with @nestjs/bullmq');
+  ) {}
+
+  /**
+   * Create the DB job row first, then enqueue with `jobId = row.id`.
+   * Prevents the race where the worker starts before the row exists and
+   * inserts a duplicate processing_jobs record.
+   */
+  private async enqueueTrackedJob(input: {
+    queue: Queue;
+    name: string;
+    data: Record<string, unknown>;
+    orgId: string;
+    fileId: string;
+    jobType: 'image' | 'video' | 'metadata';
+    priority: number;
+  }) {
+    const record = await this.jobsRepository.create({
+      orgId: input.orgId,
+      fileId: input.fileId,
+      jobType: input.jobType,
+      status: 'pending',
+      bullmqJobId: undefined,
+    });
+
+    // Use DB row id as BullMQ jobId so the worker can find this row immediately.
+    await this.jobsRepository.setBullmqJobId(record.id, record.id);
+
+    try {
+      const bullmqJob = await input.queue.add(input.name, input.data, {
+        jobId: record.id,
+        priority: input.priority,
+      });
+
+      this.logger.log(
+        `${input.jobType} job ${record.id} queued for file ${input.fileId} (bullmq=${bullmqJob.id})`,
+      );
+      return bullmqJob;
+    } catch (error) {
+      await this.jobsRepository.updateStatus(
+        record.id,
+        'failed',
+        error instanceof Error ? error.message : 'Failed to enqueue job',
+      );
+      throw error;
+    }
   }
 
   async addImageProcessingJob(data: ImageProcessingJobData) {
-    console.log('[QueuesService] Adding image processing job for file:', data.fileId);
-
-    try {
-      const bullmqJob = await this.imageProcessingQueue.add('process-image', data, {
-        priority: 1,
-      });
-      console.log('[QueuesService] Image job added to queue with ID:', bullmqJob.id);
-
-      // Create database record immediately
-      try {
-        await this.jobsRepository.create({
-          orgId: data.orgId!,
-          fileId: data.fileId,
-          jobType: 'image',
-          status: 'pending',
-          bullmqJobId: bullmqJob.id,
-        });
-        console.log('[QueuesService] Database record created for job:', bullmqJob.id);
-      } catch (dbError) {
-        console.error('[QueuesService] Failed to create database record for job:', dbError);
-        // Continue - the job is already in the queue
-      }
-
-      return bullmqJob;
-    } catch (error) {
-      console.error('[QueuesService] Failed to add image processing job:', error);
-      console.error('[QueuesService] Error stack:', error instanceof Error ? error.stack : error);
-      throw error;
+    if (!data.orgId) {
+      throw new Error('orgId is required to enqueue image processing');
     }
+    return this.enqueueTrackedJob({
+      queue: this.imageProcessingQueue,
+      name: 'process-image',
+      data: data as unknown as Record<string, unknown>,
+      orgId: data.orgId,
+      fileId: data.fileId,
+      jobType: 'image',
+      priority: 1,
+    });
   }
 
   async addVideoProcessingJob(data: VideoProcessingJobData) {
-    console.log('[QueuesService] Adding video processing job for file:', data.fileId);
-    try {
-      const bullmqJob = await this.videoProcessingQueue.add('process-video', data, {
-        priority: 1,
-      });
-      console.log('[QueuesService] Video job added to queue with ID:', bullmqJob.id);
-
-      // Create database record immediately
-      try {
-        await this.jobsRepository.create({
-          orgId: data.orgId!,
-          fileId: data.fileId,
-          jobType: 'video',
-          status: 'pending',
-          bullmqJobId: bullmqJob.id,
-        });
-        console.log('[QueuesService] Database record created for job:', bullmqJob.id);
-      } catch (dbError) {
-        console.error('[QueuesService] Failed to create database record for job:', dbError);
-        // Continue - the job is already in the queue
-      }
-
-      return bullmqJob;
-    } catch (error) {
-      console.error('[QueuesService] Failed to add video processing job:', error);
-      console.error('[QueuesService] Error stack:', error instanceof Error ? error.stack : error);
-      throw error;
+    if (!data.orgId) {
+      throw new Error('orgId is required to enqueue video processing');
     }
+    return this.enqueueTrackedJob({
+      queue: this.videoProcessingQueue,
+      name: 'process-video',
+      data: data as unknown as Record<string, unknown>,
+      orgId: data.orgId,
+      fileId: data.fileId,
+      jobType: 'video',
+      priority: 1,
+    });
   }
 
   async addMetadataExtractionJob(data: MetadataExtractionJobData) {
-    console.log('[QueuesService] Adding metadata extraction job for file:', data.fileId);
+    if (!data.orgId) {
+      throw new Error('orgId is required to enqueue metadata extraction');
+    }
+    return this.enqueueTrackedJob({
+      queue: this.metadataExtractionQueue,
+      name: 'extract-metadata',
+      data: data as unknown as Record<string, unknown>,
+      orgId: data.orgId,
+      fileId: data.fileId,
+      jobType: 'metadata',
+      priority: 2,
+    });
+  }
+
+  /**
+   * Re-enqueue an existing DB job row (admin retry). Uses a unique BullMQ jobId
+   * so retries never collide with the original id.
+   */
+  async requeueExistingJob(input: {
+    jobId: string;
+    orgId: string;
+    fileId: string;
+    jobType: 'image' | 'video' | 'metadata';
+    retryAttempt: number;
+  }) {
+    const queue =
+      input.jobType === 'image'
+        ? this.imageProcessingQueue
+        : input.jobType === 'video'
+          ? this.videoProcessingQueue
+          : this.metadataExtractionQueue;
+
+    const name =
+      input.jobType === 'image'
+        ? 'process-image'
+        : input.jobType === 'video'
+          ? 'process-video'
+          : 'extract-metadata';
+
+    const priority = input.jobType === 'metadata' ? 2 : 1;
+    const bullmqJobId = `${input.jobId}-r${input.retryAttempt}`;
+    const data = {
+      fileId: input.fileId,
+      orgId: input.orgId,
+      ...(input.jobType === 'image'
+        ? {
+            options: {
+              variants: [
+                { name: 'thumbnail' as const, maxEdge: 200 },
+                { name: 'medium' as const, maxEdge: 800 },
+              ],
+              formats: ['webp'] as ('webp' | 'avif')[],
+            },
+          }
+        : input.jobType === 'video'
+          ? { options: { previewFrames: 3, thumbnail: true } }
+          : {}),
+    };
+
+    await this.jobsRepository.setBullmqJobId(input.jobId, bullmqJobId);
+
     try {
-      const bullmqJob = await this.metadataExtractionQueue.add('extract-metadata', data, {
-        priority: 2,
+      const bullmqJob = await queue.add(name, data, {
+        jobId: bullmqJobId,
+        priority,
       });
-      console.log('[QueuesService] Metadata job added to queue with ID:', bullmqJob.id);
-
-      // Create database record immediately
-      try {
-        await this.jobsRepository.create({
-          orgId: data.orgId!,
-          fileId: data.fileId,
-          jobType: 'metadata',
-          status: 'pending',
-          bullmqJobId: bullmqJob.id,
-        });
-        console.log('[QueuesService] Database record created for job:', bullmqJob.id);
-      } catch (dbError) {
-        console.error('[QueuesService] Failed to create database record for job:', dbError);
-        // Continue - the job is already in the queue
-      }
-
+      this.logger.log(
+        `Requeued ${input.jobType} job ${input.jobId} as ${bullmqJob.id} (attempt ${input.retryAttempt})`,
+      );
       return bullmqJob;
     } catch (error) {
-      console.error('[QueuesService] Failed to add metadata extraction job:', error);
-      console.error('[QueuesService] Error stack:', error instanceof Error ? error.stack : error);
+      await this.jobsRepository.updateStatus(
+        input.jobId,
+        'failed',
+        error instanceof Error ? error.message : 'Failed to requeue job',
+      );
       throw error;
     }
   }

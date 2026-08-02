@@ -105,20 +105,24 @@ export class FilesMicroserviceController {
   async getSignedUrl(@Payload() data: SignedUrlRequest & { requestId?: string }): Promise<ApiResponse<SignedUrlResponse>> {
     // Validation happens at Gateway - trust the data
     try {
-      const expiresIn = data.expiresIn || 3600;
-      const url = await this.signedUrlService.generateSignedUrl(
+      const requested =
+        typeof data.expiresIn === 'number' && Number.isFinite(data.expiresIn)
+          ? data.expiresIn
+          : undefined;
+      const signed = await this.signedUrlService.generateSignedUrl(
         data.fileId,
         undefined, // variantType - not in SignedUrlRequest schema, can be extended later
-        expiresIn,
+        requested,
       );
 
-      // Calculate expiresAt timestamp
-      const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+      const expiresAt = new Date(
+        Date.now() + signed.expiresIn * 1000,
+      ).toISOString();
 
       const result: SignedUrlResponse = {
-        url,
+        url: signed.url,
         expiresAt,
-        expiresIn,
+        expiresIn: signed.expiresIn,
       };
 
       return success(result, { requestId: data.requestId });

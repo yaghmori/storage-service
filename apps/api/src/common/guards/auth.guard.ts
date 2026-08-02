@@ -92,9 +92,10 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    const apiKey =
+    const apiKeyRaw =
       (request.headers['x-api-key'] as string | undefined) ||
       (authHeader.startsWith('ApiKey ') ? authHeader.slice(7) : undefined);
+    const apiKey = apiKeyRaw?.trim();
 
     if (apiKey) {
       const staticKeys = staticApiKeys();
@@ -136,11 +137,18 @@ export function resolveBoundOrgId(
 ): string | undefined {
   const headerRaw = request.headers?.['x-org-id'];
   const headerOrgId = Array.isArray(headerRaw) ? headerRaw[0] : headerRaw;
-  const keyOrgId = request.orgId;
-  const requested = bodyOrgId || headerOrgId || undefined;
+  const keyOrgId = request.orgId?.trim() || undefined;
+  const requested = (bodyOrgId || headerOrgId || undefined)?.trim() || undefined;
 
   if (keyOrgId && requested && requested !== keyOrgId) {
     throw new ForbiddenException('orgId does not match the API key organization');
   }
   return keyOrgId || requested;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function looksLikeUuid(value: string): boolean {
+  return UUID_RE.test(value.trim());
 }

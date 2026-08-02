@@ -52,6 +52,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     debounceMs = DEBOUNCE_MS,
     throttleMs = THROTTLE_MS,
     enableAdvancedFilter = false,
+    enableRowSelection = true,
     ...tableProps
   } = props;
 
@@ -117,7 +118,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       ...tableProps.defaultColumn,
       enableColumnFilter: false,
     },
-    enableRowSelection: true,
+    enableRowSelection,
     onRowSelectionChange: setRowSelection,
     onPaginationChange,
     onSortingChange,

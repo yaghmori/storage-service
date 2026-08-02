@@ -1,8 +1,8 @@
 "use client";
 
 import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
-import { TypeToConfirmDialog } from "@/components/type-to-confirm-dialog";
 import { useActiveOrg } from "@/provider/org-provider";
+import { useOrgRetentionQuery } from "@/features/orgs/hooks/use-orgs-queries";
 import {
   Button,
   DataGrid,
@@ -11,47 +11,79 @@ import {
   DataGridTable,
   DataGridTableContainer,
   DataTableToolbar,
-  ResponsiveSheet,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   TableEmptyState,
   TableError,
 } from "@workspace/ui/components";
 import { useDataTable } from "@workspace/ui/hooks/use-data-table";
-import { FileIcon, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { FileIcon, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { createFilesColumns } from "../columns/files-columns";
 import {
+  createFilesColumns,
+  type FilesVisibility,
+} from "../columns/files-columns";
+import {
+  useBulkDeleteFilesMutation,
   useDeleteFileMutation,
   useFilesQuery,
-  useUploadFileMutation,
+  useHardDeleteFileMutation,
   type FileRow,
 } from "../hooks/use-files-queries";
+import { FileBulkDeleteDialog } from "./file-bulk-delete-dialog";
+import { FileDeleteDialog } from "./file-delete-dialog";
 import { FileDetailSheet } from "./file-detail-sheet";
-import { FileUploadForm } from "./file-upload-form";
+import { FileUploadDialog } from "./file-upload-dialog";
+
+type DetailTab = "overview" | "details" | "metadata" | "jobs";
 
 export function FilesListView() {
   const { activeOrg } = useActiveOrg();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [viewing, setViewing] = useState<FileRow | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [deleting, setDeleting] = useState<FileRow | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [visibility, setVisibility] = useState<FilesVisibility>("active");
 
-  const deleteMutation = useDeleteFileMutation(activeOrg?.id);
-  const uploadMutation = useUploadFileMutation(activeOrg?.id);
+  const retentionQuery = useOrgRetentionQuery(activeOrg?.id);
+  const retentionDays = retentionQuery.data?.softDeleteRetentionDays ?? 30;
+
+  const softDeleteMutation = useDeleteFileMutation(activeOrg?.id);
+  const hardDeleteMutation = useHardDeleteFileMutation(activeOrg?.id);
+  const bulkDeleteMutation = useBulkDeleteFilesMutation(activeOrg?.id);
+  const deletePending =
+    softDeleteMutation.isPending || hardDeleteMutation.isPending;
 
   const columns = useMemo(
     () =>
       createFilesColumns(
         activeOrg?.id,
-        (row) => setViewing(row),
+        (row) => {
+          setDetailTab("overview");
+          setViewing(row);
+        },
         (row) => setDeleting(row),
+        (row) => {
+          setDetailTab("jobs");
+          setViewing(row);
+        },
+        { visibility, retentionDays },
       ),
-    [activeOrg?.id],
+    [activeOrg?.id, visibility, retentionDays],
   );
 
   const { table } = useDataTable({
     columns,
     data: [] as FileRow[],
     pageCount: 0,
+    getRowId: (row) => row.id,
+    enableRowSelection: (row) =>
+      visibility === "deleted" ? true : !row.original.deletedAt,
     initialState: {
       pagination: { pageIndex: 0, pageSize: 20 },
       sorting: [{ id: "createdAt", desc: true }],
@@ -69,13 +101,34 @@ export function FilesListView() {
     limit: pagination.pageSize,
     search: searchTerm.trim() || undefined,
     orgId: activeOrg?.id,
+    includeDeleted: visibility === "all" ? true : undefined,
+    deletedOnly: visibility === "deleted" ? true : undefined,
   });
 
   table.setOptions((prev) => ({
     ...prev,
     data: data?.items ?? [],
     pageCount: data?.totalPages ?? 0,
+    columns,
   }));
+
+  useEffect(() => {
+    table.resetRowSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- table is stable
+  }, [
+    pagination.pageIndex,
+    pagination.pageSize,
+    searchTerm,
+    activeOrg?.id,
+    visibility,
+  ]);
+
+  const rowSelection = table.getState().rowSelection;
+  const selectedRows = table.getFilteredSelectedRowModel().rows;
+  const selectedCount = Object.keys(rowSelection).length;
+  const selectedFiles = selectedRows.map((row) => row.original);
+  const showBulkDelete = selectedCount > 1;
+  const deletingAlreadySoftDeleted = !!deleting?.deletedAt;
 
   return (
     <div className="space-y-6">
@@ -83,6 +136,7 @@ export function FilesListView() {
         <h1 className="text-2xl font-semibold">Files</h1>
         <p className="text-sm text-muted-foreground">
           Browse and upload stored objects for this organization.
+          Soft-deleted files are purged after {retentionDays} days.
         </p>
       </div>
 
@@ -101,23 +155,58 @@ export function FilesListView() {
         }
         emptyMessage={
           <TableEmptyState
-            title="No files"
-            description="Upload a file to get started."
+            title={
+              visibility === "deleted" ? "No soft-deleted files" : "No files"
+            }
+            description={
+              visibility === "deleted"
+                ? "Soft-deleted files will appear here until they are purged."
+                : "Upload a file to get started."
+            }
             icon={FileIcon}
             action={
-              <Button size="sm" onClick={() => setUploadOpen(true)}>
-                <Upload className="size-4" />
-                Upload file
-              </Button>
+              visibility === "active" ? (
+                <Button size="sm" onClick={() => setUploadOpen(true)}>
+                  <Upload className="size-4" />
+                  Upload files
+                </Button>
+              ) : undefined
             }
           />
         }
       >
         <DataGridContainer className="flex flex-col overflow-auto">
           <DataTableToolbar table={table}>
+            <Select
+              value={visibility}
+              onValueChange={(value) => {
+                if (value == null) return;
+                setVisibility(value as FilesVisibility);
+                table.setPageIndex(0);
+              }}
+            >
+              <SelectTrigger className="h-8 w-40" size="sm">
+                <SelectValue placeholder="Visibility" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="deleted">Soft-deleted</SelectItem>
+                <SelectItem value="all">All files</SelectItem>
+              </SelectContent>
+            </Select>
+            {showBulkDelete && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="size-4" />
+                Delete ({selectedCount})
+              </Button>
+            )}
             <Button size="sm" onClick={() => setUploadOpen(true)}>
               <Upload className="size-4" />
-              Upload file
+              Upload files
             </Button>
           </DataTableToolbar>
           <DataGridTableContainer>
@@ -127,73 +216,89 @@ export function FilesListView() {
         </DataGridContainer>
       </DataGrid>
 
-      <ResponsiveSheet
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        side="right"
-        className="w-full sm:max-w-xl"
-      >
-        <ResponsiveSheet.Header>
-          <ResponsiveSheet.Title>Upload file</ResponsiveSheet.Title>
-          <ResponsiveSheet.Description>
-            Store a file in this organization&apos;s storage provider.
-          </ResponsiveSheet.Description>
-        </ResponsiveSheet.Header>
-        {uploadOpen && (
-          <FileUploadForm
-            key="upload-file"
-            formId="upload-file-form"
-            isSubmitting={uploadMutation.isPending}
-            onCancel={() => setUploadOpen(false)}
-            onSubmit={(payload) =>
-              uploadMutation.mutate(payload, {
-                onSuccess: (result) => {
-                  toast.success(
-                    result.isDuplicate
-                      ? result.message || "Duplicate — using existing file"
-                      : "File uploaded",
-                  );
-                  setUploadOpen(false);
-                },
-                onError: (err) =>
-                  toast.error(extractApiErrorMessage(err, "Upload failed")),
-              })
-            }
-          />
-        )}
-      </ResponsiveSheet>
+      <FileUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
 
       <FileDetailSheet
         fileId={viewing?.id ?? null}
         open={!!viewing}
-        onOpenChange={(open) => !open && setViewing(null)}
+        initialTab={detailTab}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewing(null);
+            setDetailTab("overview");
+          }
+        }}
       />
 
-      <TypeToConfirmDialog
+      <FileDeleteDialog
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title="Soft-delete file?"
-        description={
-          <>
-            Mark{" "}
-            <span className="font-medium text-foreground">
-              {deleting?.originalFileName}
-            </span>{" "}
-            as deleted. The object can still be hard-deleted later.
-          </>
-        }
-        confirmPhrase={deleting?.originalFileName ?? ""}
-        isPending={deleteMutation.isPending}
-        onConfirm={() => {
+        fileName={deleting?.originalFileName ?? ""}
+        isPending={deletePending}
+        forcePermanent={deletingAlreadySoftDeleted}
+        onConfirm={({ deleteFromStorage }) => {
           if (!deleting) return;
-          deleteMutation.mutate(deleting.id, {
+          const permanent =
+            deletingAlreadySoftDeleted || deleteFromStorage;
+          const mutation = permanent
+            ? hardDeleteMutation
+            : softDeleteMutation;
+          mutation.mutate(deleting.id, {
             onSuccess: () => {
-              toast.success("File soft-deleted");
+              toast.success(
+                permanent
+                  ? "File permanently deleted from storage"
+                  : "File soft-deleted",
+              );
               setDeleting(null);
             },
             onError: (err) =>
               toast.error(extractApiErrorMessage(err, "Delete failed")),
           });
+        }}
+      />
+
+      <FileBulkDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        files={selectedFiles.map((file) => ({
+          id: file.id,
+          originalFileName: file.originalFileName,
+        }))}
+        isPending={bulkDeleteMutation.isPending}
+        forcePermanent={visibility === "deleted"}
+        onConfirm={({ deleteFromStorage }) => {
+          const ids = selectedFiles.map((file) => file.id);
+          const permanent =
+            visibility === "deleted" || deleteFromStorage;
+          bulkDeleteMutation.mutate(
+            { ids, deleteFromStorage: permanent },
+            {
+              onSuccess: (result) => {
+                table.resetRowSelection();
+                setBulkDeleteOpen(false);
+                if (result.failed.length === 0) {
+                  toast.success(
+                    permanent
+                      ? `${result.succeeded.length} files permanently deleted`
+                      : `${result.succeeded.length} files soft-deleted`,
+                  );
+                  return;
+                }
+                if (result.succeeded.length === 0) {
+                  toast.error(
+                    `Failed to delete ${result.failed.length} files`,
+                  );
+                  return;
+                }
+                toast.warning(
+                  `Deleted ${result.succeeded.length}, failed ${result.failed.length}`,
+                );
+              },
+              onError: (err) =>
+                toast.error(extractApiErrorMessage(err, "Bulk delete failed")),
+            },
+          );
         }}
       />
     </div>

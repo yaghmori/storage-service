@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { OrgsEndpoints, replacePathParams } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { invalidateOrgs, orgKeys } from "@/lib/query-keys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface OrganizationRow {
@@ -22,6 +22,8 @@ export interface OrganizationRow {
   termsUrl: string | null;
   appBaseUrl: string | null;
   metadata: Record<string, unknown> | null;
+  usedBytes?: number;
+  objectCount?: number;
 }
 
 export type UpsertOrganizationInput = {
@@ -44,7 +46,7 @@ export type UpsertOrganizationInput = {
 
 export function useOrganizationsQuery() {
   return useQuery({
-    queryKey: QUERY_KEYS.ORGS.ALL,
+    queryKey: orgKeys.all,
     queryFn: async () => {
       const response = await upstream.get(OrgsEndpoints.List);
       const items = unwrapApiData<OrganizationRow[]>(response.data);
@@ -73,7 +75,7 @@ export function useCreateOrganizationMutation() {
       return unwrapApiData<OrganizationRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORGS.ALL });
+      invalidateOrgs(queryClient);
     },
   });
 }
@@ -93,7 +95,7 @@ export function useUpdateOrganizationMutation() {
       return unwrapApiData<OrganizationRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORGS.ALL });
+      invalidateOrgs(queryClient);
     },
   });
 }
@@ -106,7 +108,170 @@ export function useDeleteOrganizationMutation() {
       await upstream.delete(path);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORGS.ALL });
+      invalidateOrgs(queryClient);
+    },
+  });
+}
+
+export interface OrgProcessingSettings {
+  enableImageProcessing: boolean;
+  enableVideoProcessing: boolean;
+  enableMetadataExtraction: boolean;
+  imageVariants: {
+    thumbnail: { enabled: boolean; maxEdge: number };
+    medium: { enabled: boolean; maxEdge: number };
+  };
+  /** Derived from enabled imageVariants (legacy). */
+  imageSizes: number[];
+  imageFormats: Array<"webp" | "avif">;
+  videoThumbnail: boolean;
+  videoPreviewFrames: number;
+  defaults?: OrgProcessingSettings;
+}
+
+export function useOrgProcessingSettingsQuery(orgId?: string) {
+  return useQuery({
+    queryKey: orgKeys.processingSettings(orgId),
+    queryFn: async () => {
+      const path = replacePathParams(OrgsEndpoints.ProcessingSettings, orgId!);
+      const response = await upstream.get(path);
+      return unwrapApiData<OrgProcessingSettings>(response.data);
+    },
+    enabled: !!orgId,
+  });
+}
+
+export function useUpdateOrgProcessingSettingsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: Partial<OrgProcessingSettings>) => {
+      const path = replacePathParams(OrgsEndpoints.ProcessingSettings, orgId!);
+      const response = await upstream.put(path, input);
+      return unwrapApiData<OrgProcessingSettings>(response.data);
+    },
+    onSuccess: () => {
+      invalidateOrgs(queryClient, {
+        orgId,
+        processingSettings: true,
+      });
+    },
+  });
+}
+
+export interface OrgLimitsSettings {
+  maxFileSizeBytes: number | null;
+  allowedMimeTypes: string[] | null;
+  storageQuotaBytes: number | null;
+  maxObjectCount: number | null;
+  defaults?: {
+    maxFileSizeBytes: number;
+    allowedMimeTypes: string[];
+  };
+  effective?: {
+    maxFileSizeBytes: number;
+    allowedMimeTypes: string[];
+    storageQuotaBytes: number | null;
+    maxObjectCount: number | null;
+  };
+}
+
+export type OrgUsageBreakdownCategory =
+  | "documents"
+  | "images"
+  | "videos"
+  | "audio"
+  | "other";
+
+export interface OrgUsageBreakdownSegment {
+  category: OrgUsageBreakdownCategory;
+  label: string;
+  bytes: number;
+  count: number;
+}
+
+export interface OrgUsageSnapshot {
+  usedBytes: number;
+  objectCount: number;
+  storageQuotaBytes: number | null;
+  maxObjectCount: number | null;
+  maxFileSizeBytes: number;
+  softDeleteRetentionDays: number;
+  breakdown: OrgUsageBreakdownSegment[];
+}
+
+export interface OrgRetentionSettings {
+  softDeleteRetentionDays: number;
+  defaults?: OrgRetentionSettings;
+}
+
+export function useOrgUsageQuery(orgId?: string) {
+  return useQuery({
+    queryKey: orgKeys.usage(orgId),
+    queryFn: async () => {
+      const path = replacePathParams(OrgsEndpoints.Usage, orgId!);
+      const response = await upstream.get(path);
+      return unwrapApiData<OrgUsageSnapshot>(response.data);
+    },
+    enabled: !!orgId,
+  });
+}
+
+export function useOrgLimitsQuery(orgId?: string) {
+  return useQuery({
+    queryKey: orgKeys.limits(orgId),
+    queryFn: async () => {
+      const path = replacePathParams(OrgsEndpoints.Limits, orgId!);
+      const response = await upstream.get(path);
+      return unwrapApiData<OrgLimitsSettings>(response.data);
+    },
+    enabled: !!orgId,
+  });
+}
+
+export function useUpdateOrgLimitsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: Partial<OrgLimitsSettings>) => {
+      const path = replacePathParams(OrgsEndpoints.Limits, orgId!);
+      const response = await upstream.put(path, input);
+      return unwrapApiData<OrgLimitsSettings>(response.data);
+    },
+    onSuccess: () => {
+      invalidateOrgs(queryClient, {
+        orgId,
+        limits: true,
+        usage: true,
+      });
+    },
+  });
+}
+
+export function useOrgRetentionQuery(orgId?: string) {
+  return useQuery({
+    queryKey: orgKeys.retention(orgId),
+    queryFn: async () => {
+      const path = replacePathParams(OrgsEndpoints.Retention, orgId!);
+      const response = await upstream.get(path);
+      return unwrapApiData<OrgRetentionSettings>(response.data);
+    },
+    enabled: !!orgId,
+  });
+}
+
+export function useUpdateOrgRetentionMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: Partial<OrgRetentionSettings>) => {
+      const path = replacePathParams(OrgsEndpoints.Retention, orgId!);
+      const response = await upstream.put(path, input);
+      return unwrapApiData<OrgRetentionSettings>(response.data);
+    },
+    onSuccess: () => {
+      invalidateOrgs(queryClient, {
+        orgId,
+        retention: true,
+        usage: true,
+      });
     },
   });
 }

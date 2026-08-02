@@ -43,6 +43,15 @@ export class ProcessingJobsRepository {
     return result[0];
   }
 
+  async setBullmqJobId(id: string, bullmqJobId: string) {
+    const result = await this.db
+      .update(schema.processingJobs)
+      .set({ bullmqJobId })
+      .where(eq(schema.processingJobs.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
   async updateStatus(
     id: string,
     status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled',

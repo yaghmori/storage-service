@@ -3,7 +3,7 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { JobsEndpoints, replacePathParams } from "@/lib/constants/endpoints";
-import { QUERY_KEYS } from "@/lib/constants/query-keys";
+import { invalidateJobs, jobKeys } from "@/lib/query-keys";
 import type { JobStatus, JobType } from "@workspace/validation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -24,6 +24,8 @@ export interface JobRow {
   fileName?: string | null;
   mimeType?: string | null;
   fileSize?: number | string | null;
+  orgName?: string | null;
+  orgSlug?: string | null;
 }
 
 export interface JobFileGroup {
@@ -57,7 +59,7 @@ export function groupJobsByFile(jobs: JobRow[]): JobFileGroup[] {
     if (!existing) {
       map.set(job.fileId, {
         fileId: job.fileId,
-        fileName: job.fileName || job.fileId.slice(0, 8),
+        fileName: job.fileName || job.fileId,
         mimeType: job.mimeType ?? null,
         fileSize: job.fileSize ?? null,
         jobs: [job],
@@ -93,12 +95,28 @@ export function useJobsQuery(params?: {
   limit?: number;
   status?: JobStatus | string;
   jobType?: JobType | string;
+  fileId?: string;
+  search?: string;
   orgId?: string;
+  enabled?: boolean;
 }) {
+  const { enabled: enabledParam, ...queryParams } = params ?? {};
   return useQuery({
-    queryKey: [...QUERY_KEYS.JOBS.ALL, params ?? {}],
+    queryKey: jobKeys.list(queryParams as Record<string, unknown>),
     queryFn: async () => {
-      const response = await upstream.get(JobsEndpoints.List, { params });
+      const response = await upstream.get(JobsEndpoints.List, {
+        params: {
+          orgId: queryParams.orgId,
+          page: queryParams.page,
+          limit: queryParams.limit,
+          ...(queryParams.status ? { status: queryParams.status } : {}),
+          ...(queryParams.jobType ? { jobType: queryParams.jobType } : {}),
+          ...(queryParams.fileId ? { fileId: queryParams.fileId } : {}),
+          ...(queryParams.search?.trim()
+            ? { search: queryParams.search.trim() }
+            : {}),
+        },
+      });
       const payload = unwrapApiData<JobsListResponse>(response.data);
       const totalPages = Math.ceil(payload.total / payload.limit) || 0;
       return {
@@ -112,7 +130,7 @@ export function useJobsQuery(params?: {
     },
     staleTime: 0,
     refetchOnWindowFocus: true,
-    enabled: !!params?.orgId,
+    enabled: (enabledParam ?? true) && !!queryParams.orgId,
     refetchInterval: (query) => {
       const items = query.state.data?.items ?? [];
       const inFlight = items.some(
@@ -125,7 +143,7 @@ export function useJobsQuery(params?: {
 
 export function useJobDetailQuery(id?: string, orgId?: string) {
   return useQuery({
-    queryKey: [...QUERY_KEYS.JOBS.ALL, orgId, "detail", id],
+    queryKey: jobKeys.detail(orgId, id),
     queryFn: async () => {
       const path = replacePathParams(JobsEndpoints.Detail, id!);
       const response = await upstream.get(path, { params: { orgId } });
@@ -144,7 +162,21 @@ export function useCancelJobMutation(orgId?: string) {
       return unwrapApiData<JobRow>(response.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.JOBS.ALL });
+      invalidateJobs(queryClient);
+    },
+  });
+}
+
+export function useRetryJobMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const path = replacePathParams(JobsEndpoints.Retry, id);
+      const response = await upstream.post(path, {}, { params: { orgId } });
+      return unwrapApiData<JobRow>(response.data);
+    },
+    onSuccess: () => {
+      invalidateJobs(queryClient);
     },
   });
 }

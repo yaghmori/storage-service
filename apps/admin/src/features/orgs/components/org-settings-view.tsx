@@ -7,7 +7,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useUpdateOrganizationMutation } from "../hooks/use-orgs-queries";
 import { OrgDangerZone } from "./org-danger-zone";
+import { OrgLimitsSettingsForm } from "./org-limits-settings-form";
 import { OrganizationForm } from "./organization-form";
+import { OrgProcessingSettingsForm } from "./org-processing-settings-form";
+import { OrgRetentionSettingsForm } from "./org-retention-settings-form";
 
 export function OrgSettingsView() {
   const router = useRouter();
@@ -41,7 +44,7 @@ export function OrgSettingsView() {
       <div>
         <h1 className="text-2xl font-semibold">Organization settings</h1>
         <p className="text-sm text-muted-foreground">
-          Branding and isolation for{" "}
+          Identity, quotas, processing, and retention for{" "}
           <span className="font-mono font-medium text-foreground">
             {activeOrg.slug}
           </span>
@@ -52,7 +55,7 @@ export function OrgSettingsView() {
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">General</h2>
         <p className="text-sm text-muted-foreground">
-          Name, slug, and optional branding for this organization.
+          Name, slug, and optional external mapping for this organization.
         </p>
         <div className="rounded-xl border bg-card p-4 md:p-6">
           <OrganizationForm
@@ -79,6 +82,38 @@ export function OrgSettingsView() {
               );
             }}
           />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold">Limits &amp; quota</h2>
+        <p className="text-sm text-muted-foreground">
+          Enforce max file size, MIME allowlist, storage quota, and object
+          count. Uploads that exceed these limits are rejected.
+        </p>
+        <div className="rounded-xl border bg-card p-4 md:p-6">
+          <OrgLimitsSettingsForm orgId={activeOrg.id} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold">Processing</h2>
+        <p className="text-sm text-muted-foreground">
+          Control which jobs and image variant sizes run on upload. Regenerate
+          on a file uses these current settings.
+        </p>
+        <div className="rounded-xl border bg-card p-4 md:p-6">
+          <OrgProcessingSettingsForm orgId={activeOrg.id} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold">Retention</h2>
+        <p className="text-sm text-muted-foreground">
+          How long soft-deleted files are kept before permanent purge.
+        </p>
+        <div className="rounded-xl border bg-card p-4 md:p-6">
+          <OrgRetentionSettingsForm orgId={activeOrg.id} />
         </div>
       </div>
 

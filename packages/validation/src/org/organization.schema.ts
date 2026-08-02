@@ -1,10 +1,5 @@
 import { z } from "zod";
-import {
-  optionalEmailSchema,
-  optionalHexColorSchema,
-  optionalUrlSchema,
-  orgSlugSchema,
-} from "../common/validators";
+import { orgSlugSchema } from "../common/validators";
 
 export const organizationFormSchema = z.object({
   name: z
@@ -13,14 +8,6 @@ export const organizationFormSchema = z.object({
     .max(255, "Name must not exceed 255 characters")
     .trim(),
   slug: orgSlugSchema,
-  supportEmail: optionalEmailSchema,
-  logoUrl: optionalUrlSchema,
-  appBaseUrl: optionalUrlSchema,
-  customDomain: z.string().trim(),
-  primaryColor: optionalHexColorSchema,
-  secondaryColor: optionalHexColorSchema,
-  privacyUrl: optionalUrlSchema,
-  termsUrl: optionalUrlSchema,
   externalRef: z.string().trim().max(255, "External ref is too long"),
 });
 
@@ -38,3 +25,22 @@ export const organizationOnboardingSchema = z.object({
 export type OrganizationOnboardingInput = z.infer<
   typeof organizationOnboardingSchema
 >;
+
+export const orgLimitsFormSchema = z.object({
+  maxFileSizeBytes: z
+    .union([z.number().int().positive(), z.null()])
+    .optional(),
+  allowedMimeTypesText: z.string().optional(),
+  storageQuotaBytes: z
+    .union([z.number().int().positive(), z.null()])
+    .optional(),
+  maxObjectCount: z.union([z.number().int().positive(), z.null()]).optional(),
+});
+
+export type OrgLimitsFormInput = z.infer<typeof orgLimitsFormSchema>;
+
+export const orgRetentionFormSchema = z.object({
+  softDeleteRetentionDays: z.number().int().min(1).max(3650),
+});
+
+export type OrgRetentionFormInput = z.infer<typeof orgRetentionFormSchema>;

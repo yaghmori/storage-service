@@ -41,8 +41,20 @@ export class StorageHttpClient {
     return this.request('DELETE', fillPath(HTTP_PATHS.DELETE_FILE, { id }));
   }
 
-  async getSignedUrl(id: string): Promise<unknown> {
-    return this.request('GET', fillPath(HTTP_PATHS.SIGNED_URL, { id }));
+  async getSignedUrl(
+    id: string,
+    options?: { expiresIn?: number; variant?: 'thumbnail' | 'medium' },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (options?.expiresIn != null) {
+      params.set('expiresIn', String(options.expiresIn));
+    }
+    if (options?.variant) {
+      params.set('variant', options.variant);
+    }
+    const query = params.toString();
+    const path = fillPath(HTTP_PATHS.SIGNED_URL, { id });
+    return this.request('GET', query ? `${path}?${query}` : path);
   }
 
   async health(): Promise<unknown> {

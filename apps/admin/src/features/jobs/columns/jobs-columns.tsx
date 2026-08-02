@@ -10,10 +10,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Progress,
   Skeleton,
 } from "@workspace/ui/components";
 import { JobStatusLabels, JobTypeLabels } from "@workspace/validation";
-import { Ban, MoreHorizontal } from "lucide-react";
+import { Ban, Eye, MoreHorizontal, RefreshCw } from "lucide-react";
 import type { JobRow } from "../hooks/use-jobs-queries";
 
 function statusBadgeClass(status: string): string {
@@ -32,14 +33,32 @@ function statusBadgeClass(status: string): string {
 }
 
 export function createJobsColumns(
+  onView?: (row: JobRow) => void,
   onCancel?: (row: JobRow) => void,
+  onRetry?: (row: JobRow) => void,
 ): ColumnDef<JobRow>[] {
   return [
+    {
+      id: "search",
+      accessorFn: () => "",
+      header: "Search",
+      cell: () => null,
+      enableColumnFilter: true,
+      enableSorting: false,
+      enableHiding: false,
+      filterFn: () => true,
+      meta: {
+        variant: "text",
+        label: "Search",
+        placeholder: "Search by file name or UUID…",
+      },
+    },
     {
       accessorKey: "jobType",
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Type" />
       ),
+      enableColumnFilter: true,
       meta: {
         variant: "select",
         label: "Type",
@@ -61,6 +80,7 @@ export function createJobsColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Status" />
       ),
+      enableColumnFilter: true,
       meta: {
         variant: "select",
         label: "Status",
@@ -81,15 +101,20 @@ export function createJobsColumns(
       ),
     },
     {
-      accessorKey: "fileId",
+      accessorKey: "fileName",
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="File" />
       ),
-      meta: { label: "File", skeleton: <Skeleton className="h-4 w-28" /> },
+      meta: { label: "File", skeleton: <Skeleton className="h-4 w-36" /> },
       cell: ({ row }) => (
-        <span className="font-mono text-xs">
-          {row.original.fileId.slice(0, 8)}…
-        </span>
+        <div className="min-w-0 max-w-[240px]">
+          <p className="truncate font-medium">
+            {row.original.fileName ?? "—"}
+          </p>
+          <p className="truncate font-mono text-[11px] text-muted-foreground">
+            {row.original.fileId}
+          </p>
+        </div>
       ),
     },
     {
@@ -97,11 +122,30 @@ export function createJobsColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Progress" />
       ),
-      meta: { label: "Progress", skeleton: <Skeleton className="h-4 w-12" /> },
+      meta: { label: "Progress", skeleton: <Skeleton className="h-4 w-20" /> },
+      cell: ({ row }) => {
+        const progress = row.original.progress;
+        if (progress == null) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="w-24 space-y-1">
+            <Progress value={Math.max(0, Math.min(100, Number(progress)))} />
+            <p className="text-[11px] tabular-nums text-muted-foreground">
+              {progress}%
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "retryCount",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Retries" />
+      ),
+      meta: { label: "Retries", skeleton: <Skeleton className="h-4 w-10" /> },
       cell: ({ row }) => (
-        <span className="tabular-nums">
-          {row.original.progress == null ? "—" : `${row.original.progress}%`}
-        </span>
+        <span className="tabular-nums">{row.original.retryCount}</span>
       ),
     },
     {
@@ -122,7 +166,9 @@ export function createJobsColumns(
         const canCancel =
           row.original.status === "pending" ||
           row.original.status === "processing";
-        if (!canCancel) return null;
+        const canRetry =
+          row.original.status === "failed" ||
+          row.original.status === "cancelled";
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -131,10 +177,22 @@ export function createJobsColumns(
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onCancel?.(row.original)}>
-                <Ban className="mr-2 h-4 w-4" />
-                Cancel job
+              <DropdownMenuItem onClick={() => onView?.(row.original)}>
+                <Eye className="mr-2 h-4 w-4" />
+                View details
               </DropdownMenuItem>
+              {canRetry ? (
+                <DropdownMenuItem onClick={() => onRetry?.(row.original)}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry job
+                </DropdownMenuItem>
+              ) : null}
+              {canCancel ? (
+                <DropdownMenuItem onClick={() => onCancel?.(row.original)}>
+                  <Ban className="mr-2 h-4 w-4" />
+                  Cancel job
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         );
