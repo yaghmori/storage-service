@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "g:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj": {}
+    "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj": {}
   },
   "projects": {
-    "g:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj": {
+    "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj": {
       "version": "0.2.0",
       "restore": {
-        "projectUniqueName": "g:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
+        "projectUniqueName": "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
         "projectName": "Yaghmori.StorageService",
-        "projectPath": "g:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
+        "projectPath": "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
         "packagesPath": "C:\\Users\\yaghmori\\.nuget\\packages\\",
-        "outputPath": "g:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\obj\\",
+        "outputPath": "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

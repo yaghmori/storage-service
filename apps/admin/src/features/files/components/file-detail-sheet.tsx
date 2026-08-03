@@ -1753,10 +1753,7 @@ export function FileDetailSheet({
 
   useEffect(() => {
     if (!open) return;
-    // Legacy "variants" tab now lives on overview Delivery section.
-    setTab(
-      (initialTab as string) === "variants" ? "overview" : initialTab,
-    );
+    setTab(initialTab);
     setWantSigned(false);
   }, [open, initialTab, fileId]);
 

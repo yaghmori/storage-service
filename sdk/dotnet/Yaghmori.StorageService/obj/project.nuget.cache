@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "paYhQObBy48=",
+  "dgSpecHash": "xQO+SXiFxJg=",
   "success": true,
-  "projectFilePath": "g:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
+  "projectFilePath": "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\yaghmori\\.nuget\\packages\\confluent.kafka\\2.6.1\\confluent.kafka.2.6.1.nupkg.sha512",
     "C:\\Users\\yaghmori\\.nuget\\packages\\librdkafka.redist\\2.6.1\\librdkafka.redist.2.6.1.nupkg.sha512",

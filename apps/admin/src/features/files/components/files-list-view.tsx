@@ -43,7 +43,6 @@ import { FileUploadDialog } from "./file-upload-dialog";
 type DetailTab =
   | "overview"
   | "details"
-  | "variants"
   | "duplicates"
   | "processors"
   | "metadata"
