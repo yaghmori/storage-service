@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>Yaghmori.StorageService</id>
+    <version>0.2.0</version>
+    <authors>yaghmori</authors>
+    <license type="expression">MIT</license>
+    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>
+    <readme>README.md</readme>
+    <description>Client SDK for storage-service — upload, signed URLs, processor results, TCP/Kafka</description>
+    <repository type="git" url="https://github.com/yaghmori/storage-service" commit="78431bc7a891d774324876b0220d42f4b2000583" />
+    <dependencies>
+      <group targetFramework="net8.0">
+        <dependency id="Confluent.Kafka" version="2.6.1" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.DependencyInjection.Abstractions" version="8.0.2" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="g:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\bin\Release\net8.0\Yaghmori.StorageService.dll" target="lib\net8.0\Yaghmori.StorageService.dll" />
+    <file src="g:\codespace\storage-service\sdk\dotnet\Yaghmori.StorageService\README.md" target="\README.md" />
+  </files>
+</package>

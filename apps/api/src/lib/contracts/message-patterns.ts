@@ -6,6 +6,10 @@ export const MESSAGE_PATTERNS = {
     DELETE_FILE: 'storage.delete_file',
     BATCH_OPERATIONS: 'storage.batch_operations',
     GET_SIGNED_URL: 'storage.get_signed_url',
+    LIST_PROCESSOR_RESULTS: 'storage.list_processor_results',
+    GET_PROCESSOR_RESULT: 'storage.get_processor_result',
+    GET_FILE_METADATA: 'storage.get_file_metadata',
+    LIST_VARIANTS: 'storage.list_variants',
     /** Legacy Allyfe alias — prefer HTTP upload + GET_SIGNED_URL */
     UPLOAD_FILE: 'uploadFile',
     GET_ASSET_URL: 'getAssetUrl',

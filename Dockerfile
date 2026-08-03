@@ -29,11 +29,14 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
 
 WORKDIR /app/api
 COPY apps/api/package.json ./
-RUN pnpm install --prod --ignore-scripts
+# tsup bundles @workspace/validation — drop workspace protocol for standalone prod install
+RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
+ && pnpm install --prod --ignore-scripts \
+ && pnpm rebuild sharp || true
 
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache netcat-openbsd tini ffmpeg \
+RUN apk add --no-cache netcat-openbsd tini ffmpeg poppler-utils tesseract-ocr libheif \
  && addgroup -g 1001 -S nodejs \
  && adduser -S nestjs -u 1001
 

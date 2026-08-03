@@ -18,23 +18,28 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { DEFAULT_AI_VISION_SETTINGS } from '@workspace/validation';
 import { emptySuccess } from '../../lib/contracts';
 import { Public } from '../../common/decorators/public.decorator';
 import { OrganizationService } from '../../organizations/organization.service';
 import { OrgLimitsService } from '../../organizations/services/org-limits.service';
 import { OrgRetentionService } from '../../organizations/services/org-retention.service';
 import { OrgUsageService } from '../../organizations/services/org-usage.service';
-import { ProcessingSettingsService } from '../../processing/services/processing-settings.service';
+import { OrgProcessorsService } from '../../processing/services/org-processors.service';
+import { PLATFORM_PROCESSING_DEFAULTS } from '../../processing/types/processing-settings';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
 
 export class CreateOrganizationDto {
@@ -224,6 +229,98 @@ export class UpdateProcessingSettingsDto {
   @Min(0)
   @Max(30)
   videoPreviewFrames?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enableAiProcessing?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableAiCaption?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableAiTags?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableAiNsfw?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  nsfwThreshold?: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  aiBackendId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsString()
+  @MaxLength(255)
+  aiVisionModel?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  documentOcrBackendId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsString()
+  @MaxLength(255)
+  documentOcrVisionModel?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  enableImageNormalize?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableDedupePhash?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(64)
+  phashThresholdBits?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enableIntegrityVerify?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableDocumentPreview?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableDocumentText?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableDocumentOcr?: boolean;
+
+  @IsOptional()
+  @IsIn(['openai_compatible', 'tesseract'])
+  documentOcrEngine?: 'openai_compatible' | 'tesseract';
+
+  @IsOptional()
+  @IsBoolean()
+  enableNotifyWebhook?: boolean;
+
+  @IsOptional()
+  @IsString()
+  notifyWebhookUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  notifyWebhookSecret?: string;
 }
 
 export class UpdateOrgLimitsDto {
@@ -270,7 +367,7 @@ export class UpdateOrgRetentionDto {
 export class OrganizationsController {
   constructor(
     private readonly organizations: OrganizationService,
-    private readonly processingSettings: ProcessingSettingsService,
+    private readonly orgProcessors: OrgProcessorsService,
     private readonly limitsService: OrgLimitsService,
     private readonly retentionService: OrgRetentionService,
     private readonly usageService: OrgUsageService,
@@ -302,10 +399,20 @@ export class OrganizationsController {
 
   @Get(':id/processing-settings')
   async getProcessingSettings(@Param('id') id: string) {
-    const settings = await this.processingSettings.getForOrg(id);
+    const rows = await this.orgProcessors.ensureDefaults(id);
+    const settings = this.orgProcessors.toLegacyProcessingSettings(rows);
     return {
       ...settings,
-      defaults: this.processingSettings.getPlatformDefaults(),
+      defaults: {
+        ...PLATFORM_PROCESSING_DEFAULTS,
+        enableAiProcessing: false,
+        enableAiCaption: DEFAULT_AI_VISION_SETTINGS.enableCaption,
+        enableAiTags: DEFAULT_AI_VISION_SETTINGS.enableTags,
+        enableAiNsfw: DEFAULT_AI_VISION_SETTINGS.enableNsfw,
+        nsfwThreshold: DEFAULT_AI_VISION_SETTINGS.nsfwThreshold,
+        aiBackendId: null,
+        documentOcrBackendId: null,
+      },
     };
   }
 
@@ -314,7 +421,9 @@ export class OrganizationsController {
     @Param('id') id: string,
     @Body() body: UpdateProcessingSettingsDto,
   ) {
-    return this.processingSettings.updateForOrg(id, body);
+    return this.orgProcessors.updateFromLegacySettings(id, {
+      ...body,
+    });
   }
 
   @Get(':id/limits')
@@ -360,7 +469,9 @@ export class OrganizationsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() body: CreateOrganizationDto) {
-    return this.organizations.create(body);
+    const organization = await this.organizations.create(body);
+    await this.orgProcessors.ensureDefaults(organization.id);
+    return organization;
   }
 
   @Put(':id')

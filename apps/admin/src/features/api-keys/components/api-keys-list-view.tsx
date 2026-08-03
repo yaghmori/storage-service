@@ -31,7 +31,11 @@ import {
   type ApiKeyRow,
 } from "../hooks/use-api-keys-queries";
 
-export function ApiKeysListView() {
+export function ApiKeysListView({
+  hideHeading = false,
+}: {
+  hideHeading?: boolean;
+} = {}) {
   const { activeOrg } = useActiveOrg();
   const [createOpen, setCreateOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -101,16 +105,18 @@ export function ApiKeysListView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">API Keys</h1>
-        <p className="text-sm text-muted-foreground">
-          Service credentials for{" "}
-          <span className="font-mono font-medium text-foreground">
-            {activeOrg?.slug ?? "…"}
-          </span>
-          .
-        </p>
-      </div>
+      {!hideHeading ? (
+        <div>
+          <h1 className="text-2xl font-semibold">API Keys</h1>
+          <p className="text-sm text-muted-foreground">
+            Service credentials for{" "}
+            <span className="font-mono font-medium text-foreground">
+              {activeOrg?.slug ?? "…"}
+            </span>
+            .
+          </p>
+        </div>
+      ) : null}
 
       {createdKey && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/50 dark:bg-amber-950/40">
@@ -164,7 +170,7 @@ export function ApiKeysListView() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         side="right"
-        className="w-full sm:max-w-md"
+        className="w-full sm:max-w-2xl lg:max-w-3xl"
       >
         <ResponsiveSheet.Header>
           <ResponsiveSheet.Title>Create API key</ResponsiveSheet.Title>

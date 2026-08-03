@@ -259,6 +259,15 @@ export class MinIOStorageService {
           stream.on('error', reject);
         });
       },
+      downloadToFile: async (key: string, destPath: string) => {
+        const { createWriteStream } = await import('fs');
+        const { pipeline } = await import('stream/promises');
+        const stream = await client.getObject(config.bucket, key);
+        await pipeline(stream, createWriteStream(destPath));
+      },
+      openReadStream: async (key: string) => {
+        return client.getObject(config.bucket, key);
+      },
       delete: async (key: string) => {
         await client.removeObject(config.bucket, key);
       },

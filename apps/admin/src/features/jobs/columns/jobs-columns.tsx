@@ -13,7 +13,7 @@ import {
   Progress,
   Skeleton,
 } from "@workspace/ui/components";
-import { JobStatusLabels, JobTypeLabels } from "@workspace/validation";
+import { JobStatusLabels, ProcessorKeyLabels } from "@workspace/validation";
 import { Ban, Eye, MoreHorizontal, RefreshCw } from "lucide-react";
 import type { JobRow } from "../hooks/use-jobs-queries";
 
@@ -54,7 +54,7 @@ export function createJobsColumns(
       },
     },
     {
-      accessorKey: "jobType",
+      accessorKey: "processorKey",
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Type" />
       ),
@@ -62,7 +62,7 @@ export function createJobsColumns(
       meta: {
         variant: "select",
         label: "Type",
-        options: Object.entries(JobTypeLabels).map(([value, label]) => ({
+        options: Object.entries(ProcessorKeyLabels).map(([value, label]) => ({
           value,
           label,
         })),
@@ -70,8 +70,8 @@ export function createJobsColumns(
       },
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {JobTypeLabels[row.original.jobType as keyof typeof JobTypeLabels] ??
-            row.original.jobType}
+          {ProcessorKeyLabels[row.original.processorKey] ??
+            row.original.processorKey}
         </Badge>
       ),
     },
@@ -95,8 +95,9 @@ export function createJobsColumns(
           variant="secondary"
           className={statusBadgeClass(String(row.original.status))}
         >
-          {JobStatusLabels[row.original.status as keyof typeof JobStatusLabels] ??
-            row.original.status}
+          {JobStatusLabels[
+            row.original.status as keyof typeof JobStatusLabels
+          ] ?? row.original.status}
         </Badge>
       ),
     },
@@ -108,9 +109,7 @@ export function createJobsColumns(
       meta: { label: "File", skeleton: <Skeleton className="h-4 w-36" /> },
       cell: ({ row }) => (
         <div className="min-w-0 max-w-[240px]">
-          <p className="truncate font-medium">
-            {row.original.fileName ?? "—"}
-          </p>
+          <p className="truncate font-medium">{row.original.fileName ?? "—"}</p>
           <p className="truncate font-mono text-[11px] text-muted-foreground">
             {row.original.fileId}
           </p>

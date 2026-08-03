@@ -13,9 +13,9 @@ export class StorageConfig {
 
   get maxFileSize(): number {
     return parseInt(
-      this.configService.get<string>('MAX_FILE_SIZE') || '104857600',
+      this.configService.get<string>('MAX_FILE_SIZE') || '524288000',
       10,
-    ); // 100MB default
+    ); // 500MB default (safe with stream-to-disk video / integrity I/O)
   }
 
   get allowedMimeTypes(): string[] {

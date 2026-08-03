@@ -1,4 +1,11 @@
 export const IMAGE_PROCESSING_QUEUE = 'image-processing';
+export const IMAGE_NORMALIZE_QUEUE = 'image-normalize';
 export const VIDEO_PROCESSING_QUEUE = 'video-processing';
 export const METADATA_EXTRACTION_QUEUE = 'metadata-extraction';
-
+export const AI_VISION_QUEUE = 'ai-vision';
+export const DEDUPE_PHASH_QUEUE = 'dedupe-phash';
+export const INTEGRITY_VERIFY_QUEUE = 'integrity-verify';
+export const DOCUMENT_PREVIEW_QUEUE = 'document-preview';
+export const DOCUMENT_TEXT_QUEUE = 'document-text';
+export const DOCUMENT_OCR_QUEUE = 'document-ocr';
+export const NOTIFY_WEBHOOK_QUEUE = 'notify-webhook';

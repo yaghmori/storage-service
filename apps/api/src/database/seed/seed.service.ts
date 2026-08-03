@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { OrgProcessorsService } from '../../processing/services/org-processors.service';
 import * as schema from '../drizzle/schema';
 
 type StorageProviderType = 'local' | 'minio' | 's3';
@@ -13,11 +14,13 @@ export class SeedService {
   constructor(
     @Inject('DRIZZLE_DB')
     private readonly db: NodePgDatabase<typeof schema>,
+    private readonly orgProcessors: OrgProcessorsService,
   ) {}
 
   async seed(): Promise<void> {
     this.logger.log('Seeding database...');
     const org = await this.ensureDefaultOrg();
+    await this.orgProcessors.ensureDefaults(org.id);
     await this.seedAdminUser();
     await this.seedStorageProviders(org.id);
     if (process.env.AUTH_DEFAULT_ORG_ID !== org.id) {

@@ -39,8 +39,8 @@ services:
 
   storage-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/api/Dockerfile
     ports:
       - "${PORT:-6100}:${PORT:-6100}"
       - "${TCP_PORT:-6001}:${TCP_PORT:-6001}"

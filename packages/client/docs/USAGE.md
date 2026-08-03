@@ -52,10 +52,32 @@ const storage = createStorageHttpClient({
 ```ts
 await storage.upload(formData);
 await storage.getFile(id);
-await storage.getSignedUrl(id);
+await storage.getSignedUrl(id, { variant: 'thumbnail' });
 await storage.deleteFile(id);
 await storage.health();
+
+// Processing insights (API key + org binding)
+const results = await storage.getProcessorResults(id);
+const ocr = await storage.getProcessorResult(id, 'document.ocr');
+const meta = await storage.getMetadata(id);
+const variants = await storage.getVariants(id);
+const text = await storage.getExtractedText(id); // document.ocr → document.text
+const ready = await storage.waitForExtractedText(id, { attempts: 8, intervalMs: 2500 });
 ```
+
+Processor results are produced asynchronously after upload. Prefer
+`waitForExtractedText` after upload, or poll `getProcessorResult` until `status`
+is `completed` / `skipped` / `failed`. Domain extraction (lab JSON, ultrasound
+EDD) stays in the app — use storage for raw OCR/text/captions only.
+
+### Consumers
+
+| App | Package | Notes |
+|-----|---------|--------|
+| eallyfe (`apps/api`) | `@yaghmori/storage-service` | HTTP insights via `StorageService.getExtractedText` / `waitForExtractedText` |
+| EAllyfe-Legacy | `Yaghmori.StorageService` | `AiOcrService` prefers storage OCR when `FilePath` is `storage://{guid}` |
+
+Publish: merge SDK changes to `main` → **Storage CD (main)** publishes npm `0.2.x` + NuGet. Then point eallyfe at `^0.2.0` and legacy at `PackageReference Version="0.2.*"`.
 
 ## Nest TCP
 

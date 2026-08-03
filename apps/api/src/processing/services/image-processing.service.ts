@@ -74,7 +74,16 @@ export class ImageProcessingService {
   async processImage(fileId: string, options: ProcessImageOptions = {}) {
     const file = await this.filesService.findById(fileId);
     const provider = await this.filesService.getFileProvider(fileId);
-    const fileBuffer = await provider.download(file.key);
+    let fileBuffer: Buffer;
+    try {
+      const existingVariants = await this.variantsService.findByFileId(fileId);
+      const normalized = existingVariants.find((v) => v.name === 'normalized');
+      fileBuffer = normalized
+        ? await provider.download(normalized.key)
+        : await provider.download(file.key);
+    } catch {
+      fileBuffer = await provider.download(file.key);
+    }
 
     const slots = this.resolveSlots(options);
     const formats = options.formats?.length
@@ -155,15 +164,10 @@ export class ImageProcessingService {
       }
     }
 
-    // Update main file record with dimensions and processing status
+    // Update main file record with dimensions; rollup owns processing_status.
     await this.filesService.updateFile(fileId, {
       width: originalWidth,
       height: originalHeight,
-      aspectRatio: originalWidth && originalHeight
-        ? `${originalWidth}:${originalHeight}`
-        : undefined,
-      isProcessed: true,
-      processingStatus: 'completed',
     });
 
     return variants;

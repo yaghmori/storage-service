@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { ConfigService as AppConfigService } from './config.service';
 import { DatabaseConfig } from './database.config';
+import { ProcessorConfig } from './processor.config';
 import { RedisConfig } from './redis.config';
 import { StorageConfig } from './storage.config';
 
@@ -15,8 +16,15 @@ import { StorageConfig } from './storage.config';
     DatabaseConfig,
     RedisConfig,
     StorageConfig,
+    ProcessorConfig,
   ],
-  exports: [AppConfigService, DatabaseConfig, RedisConfig, StorageConfig],
+  exports: [
+    AppConfigService,
+    DatabaseConfig,
+    RedisConfig,
+    StorageConfig,
+    ProcessorConfig,
+  ],
 })
 export class ConfigModule {}
 

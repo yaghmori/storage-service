@@ -29,6 +29,41 @@
       "when": 1767738312224,
       "tag": "0003_org_usage_quota",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1767738312225,
+      "tag": "0004_pluggable_processing",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1767738312226,
+      "tag": "0005_job_logs_output",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785700800000,
+      "tag": "0006_processors_roadmap",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785704400000,
+      "tag": "0007_near_dupe_related_file",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785708000000,
+      "tag": "0008_drop_files_checksum",
+      "breakpoints": true
     }
   ]
 }

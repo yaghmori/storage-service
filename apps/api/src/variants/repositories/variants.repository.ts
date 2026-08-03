@@ -3,7 +3,18 @@ import { and, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/drizzle/schema';
 
-export type VariantType = 'thumbnail' | 'webp' | 'avif' | 'medium' | 'large' | 'xlarge' | 'preview-frame' | 'thumbnail-video' | 'preview-video';
+export type VariantType =
+  | 'thumbnail'
+  | 'normalized'
+  | 'document-preview'
+  | 'webp'
+  | 'avif'
+  | 'medium'
+  | 'large'
+  | 'xlarge'
+  | 'preview-frame'
+  | 'thumbnail-video'
+  | 'preview-video';
 
 @Injectable()
 export class VariantsRepository {

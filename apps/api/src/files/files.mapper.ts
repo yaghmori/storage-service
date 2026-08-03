@@ -22,6 +22,8 @@ function mapProcessingStatusToFileStatus(
     case 'processing':
       return 'processing';
     case 'completed':
+    case 'partial':
+    case 'skipped':
       return 'ready';
     case 'failed':
       return 'failed';

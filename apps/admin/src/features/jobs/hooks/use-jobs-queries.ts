@@ -3,18 +3,26 @@
 import upstream from "@/lib/api/upstream-client";
 import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { JobsEndpoints, replacePathParams } from "@/lib/constants/endpoints";
-import { invalidateJobs, jobKeys } from "@/lib/query-keys";
-import type { JobStatus, JobType } from "@workspace/validation";
+import { fileKeys, invalidateJobs, jobKeys } from "@/lib/query-keys";
+import type { JobStatus, ProcessorKey } from "@workspace/validation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+export interface JobLogEntry {
+  ts: string;
+  level: "info" | "warn" | "error" | "debug";
+  message: string;
+}
 
 export interface JobRow {
   id: string;
   orgId: string;
   fileId: string;
-  jobType: JobType | string;
+  processorKey: ProcessorKey | string;
   status: JobStatus | string;
   bullmqJobId: string | null;
   errorMessage: string | null;
+  logs?: JobLogEntry[] | null;
+  output?: Record<string, unknown> | null;
   retryCount: number;
   progress: number | null;
   priority: number | null;
@@ -94,7 +102,7 @@ export function useJobsQuery(params?: {
   page?: number;
   limit?: number;
   status?: JobStatus | string;
-  jobType?: JobType | string;
+  processorKey?: ProcessorKey | string;
   fileId?: string;
   search?: string;
   orgId?: string;
@@ -110,7 +118,9 @@ export function useJobsQuery(params?: {
           page: queryParams.page,
           limit: queryParams.limit,
           ...(queryParams.status ? { status: queryParams.status } : {}),
-          ...(queryParams.jobType ? { jobType: queryParams.jobType } : {}),
+          ...(queryParams.processorKey
+            ? { processorKey: queryParams.processorKey }
+            : {}),
           ...(queryParams.fileId ? { fileId: queryParams.fileId } : {}),
           ...(queryParams.search?.trim()
             ? { search: queryParams.search.trim() }
@@ -150,6 +160,10 @@ export function useJobDetailQuery(id?: string, orgId?: string) {
       return unwrapApiData<JobRow>(response.data);
     },
     enabled: !!id && !!orgId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "processing" ? 2000 : false;
+    },
   });
 }
 
@@ -175,8 +189,50 @@ export function useRetryJobMutation(orgId?: string) {
       const response = await upstream.post(path, {}, { params: { orgId } });
       return unwrapApiData<JobRow>(response.data);
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      // Patch every cached jobs list so file detail updates immediately.
+      queryClient.setQueriesData(
+        { queryKey: jobKeys.all },
+        (old: unknown) => {
+          if (!old || typeof old !== "object") return old;
+          const data = old as {
+            items?: JobRow[];
+            groups?: unknown;
+            total?: number;
+            totalPages?: number;
+            page?: number;
+            limit?: number;
+          };
+          if (!Array.isArray(data.items)) return old;
+          const items = data.items.map((job) =>
+            job.id === updated.id
+              ? {
+                  ...job,
+                  ...updated,
+                  status: updated.status ?? "pending",
+                  errorMessage: null,
+                  logs: updated.logs ?? [],
+                  output: updated.output ?? null,
+                }
+              : job,
+          );
+          return {
+            ...data,
+            items,
+            groups: groupJobsByFile(items),
+          };
+        },
+      );
+      queryClient.setQueryData(jobKeys.detail(orgId, updated.id), updated);
       invalidateJobs(queryClient);
+      if (orgId && updated.fileId) {
+        queryClient.invalidateQueries({
+          queryKey: fileKeys.processorResults(orgId, updated.fileId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: fileKeys.detail(orgId, updated.fileId),
+        });
+      }
     },
   });
 }

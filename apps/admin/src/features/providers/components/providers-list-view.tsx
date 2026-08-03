@@ -30,7 +30,11 @@ import {
 } from "../hooks/use-providers-queries";
 import { ProviderForm } from "./provider-form";
 
-export function ProvidersListView() {
+export function ProvidersListView({
+  hideHeading = false,
+}: {
+  hideHeading?: boolean;
+} = {}) {
   const { activeOrg } = useActiveOrg();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ProviderRow | null>(null);
@@ -78,12 +82,14 @@ export function ProvidersListView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Providers</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure storage backends (local, MinIO, S3).
-        </p>
-      </div>
+      {!hideHeading ? (
+        <div>
+          <h1 className="text-2xl font-semibold">Providers</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure storage backends (local, MinIO, S3).
+          </p>
+        </div>
+      ) : null}
 
       <DataGrid
         table={table}
@@ -123,7 +129,7 @@ export function ProvidersListView() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         side="right"
-        className="w-full sm:max-w-xl"
+        className="w-full sm:max-w-2xl lg:max-w-3xl"
       >
         <ResponsiveSheet.Header>
           <ResponsiveSheet.Title>Add provider</ResponsiveSheet.Title>
@@ -156,7 +162,7 @@ export function ProvidersListView() {
         open={!!editing}
         onOpenChange={(open) => !open && setEditing(null)}
         side="right"
-        className="w-full sm:max-w-xl"
+        className="w-full sm:max-w-2xl lg:max-w-3xl"
       >
         <ResponsiveSheet.Header>
           <ResponsiveSheet.Title>Edit provider</ResponsiveSheet.Title>

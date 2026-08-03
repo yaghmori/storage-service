@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components";
-import { Monitor, Palette, UserRound } from "lucide-react";
+import { Globe, Monitor, Palette, UserRound } from "lucide-react";
 import Link from "next/link";
 import { AccountSettingsShell } from "./account-settings-shell";
 
@@ -20,8 +20,14 @@ const CARDS = [
     icon: UserRound,
   },
   {
+    title: "Preferences",
+    description: "Choose the timezone used for dates in this admin console.",
+    href: PAGE_ROUTES.ACCOUNT_PREFERENCES,
+    icon: Globe,
+  },
+  {
     title: "Appearance",
-    description: "Choose light, dark, or system theme for the admin console.",
+    description: "Choose color theme and light or dark mode.",
     href: PAGE_ROUTES.ACCOUNT_APPEARANCE,
     icon: Palette,
   },
@@ -33,7 +39,7 @@ export function AccountSettingsHub() {
       title="Account settings"
       description="Preferences for your signed-in admin account."
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {CARDS.map((card) => (
           <Link key={card.href} href={card.href} className="group">
             <Card className="h-full transition-colors group-hover:bg-muted/40">

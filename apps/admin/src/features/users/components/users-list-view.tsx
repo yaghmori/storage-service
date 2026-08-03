@@ -108,7 +108,7 @@ export function UsersListView() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         side="right"
-        className="w-full sm:max-w-md"
+        className="w-full sm:max-w-2xl lg:max-w-3xl"
       >
         <ResponsiveSheet.Header>
           <ResponsiveSheet.Title>Create admin user</ResponsiveSheet.Title>
@@ -149,7 +149,7 @@ export function UsersListView() {
         open={!!editing}
         onOpenChange={(open) => !open && setEditing(null)}
         side="right"
-        className="w-full sm:max-w-md"
+        className="w-full sm:max-w-2xl lg:max-w-3xl"
       >
         <ResponsiveSheet.Header>
           <ResponsiveSheet.Title>Edit admin user</ResponsiveSheet.Title>

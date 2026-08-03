@@ -15,7 +15,10 @@ export class ValidationPipe implements PipeTransform<unknown> {
       return value;
     }
 
-    const object = plainToInstance(metatype, value);
+    // Validate a class-transformer copy, but return the original plain payload.
+    // Returning class instances can drop/alter nested objects (e.g. imageVariants
+    // slots) so controllers see empty shells and persistence silently keeps defaults.
+    const object = plainToInstance(metatype, value as object);
     const errors = await validate(object);
 
     if (errors.length > 0) {
@@ -25,7 +28,7 @@ export class ValidationPipe implements PipeTransform<unknown> {
       throw new BadRequestException(messages.join('; '));
     }
 
-    return object;
+    return value;
   }
 
   private toValidate(metatype: new (...args: unknown[]) => unknown): boolean {

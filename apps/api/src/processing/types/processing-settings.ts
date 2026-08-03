@@ -17,6 +17,18 @@ export type OrgProcessingSettings = {
   enableImageProcessing: boolean;
   enableVideoProcessing: boolean;
   enableMetadataExtraction: boolean;
+  enableAiProcessing: boolean;
+  enableAiCaption: boolean;
+  enableAiTags: boolean;
+  enableAiNsfw: boolean;
+  nsfwThreshold: number;
+  aiBackendId: string | null;
+  /** Vision model for ai.vision (processor-level; backend defaultModels are fallback only). */
+  aiVisionModel: string | null;
+  /** OpenAI-compatible backend for document.ocr (independent of AI Vision). */
+  documentOcrBackendId: string | null;
+  /** Vision model for document.ocr. */
+  documentOcrVisionModel: string | null;
   /** Named slots — primary config for thumbnail / medium. */
   imageVariants: ImageVariantsConfig;
   /**
@@ -27,6 +39,17 @@ export type OrgProcessingSettings = {
   imageFormats: ImageFormat[];
   videoThumbnail: boolean;
   videoPreviewFrames: number;
+  enableImageNormalize: boolean;
+  enableDedupePhash: boolean;
+  phashThresholdBits: number;
+  enableIntegrityVerify: boolean;
+  enableDocumentPreview: boolean;
+  enableDocumentText: boolean;
+  enableDocumentOcr: boolean;
+  documentOcrEngine: 'openai_compatible' | 'tesseract';
+  enableNotifyWebhook: boolean;
+  notifyWebhookUrl: string;
+  notifyWebhookSecret: string;
 };
 
 /** Optional per-upload overrides (partial). */
@@ -45,6 +68,15 @@ export const PLATFORM_PROCESSING_DEFAULTS: OrgProcessingSettings = {
   enableImageProcessing: true,
   enableVideoProcessing: true,
   enableMetadataExtraction: true,
+  enableAiProcessing: false,
+  enableAiCaption: true,
+  enableAiTags: true,
+  enableAiNsfw: true,
+  nsfwThreshold: 0.7,
+  aiBackendId: null,
+  aiVisionModel: null,
+  documentOcrBackendId: null,
+  documentOcrVisionModel: null,
   imageVariants: {
     thumbnail: { enabled: true, maxEdge: 200 },
     medium: { enabled: true, maxEdge: 800 },
@@ -53,6 +85,17 @@ export const PLATFORM_PROCESSING_DEFAULTS: OrgProcessingSettings = {
   imageFormats: ['webp'],
   videoThumbnail: true,
   videoPreviewFrames: 3,
+  enableImageNormalize: true,
+  enableDedupePhash: false,
+  phashThresholdBits: 10,
+  enableIntegrityVerify: false,
+  enableDocumentPreview: true,
+  enableDocumentText: true,
+  enableDocumentOcr: false,
+  documentOcrEngine: 'openai_compatible',
+  enableNotifyWebhook: false,
+  notifyWebhookUrl: '',
+  notifyWebhookSecret: '',
 };
 
 const METADATA_KEY = 'processing';
@@ -229,6 +272,56 @@ export function mergeProcessingSettings(
         base.enableMetadataExtraction,
       );
     }
+    if (layer.enableAiProcessing !== undefined) {
+      base.enableAiProcessing = asBool(
+        layer.enableAiProcessing,
+        base.enableAiProcessing,
+      );
+    }
+    if (layer.enableAiCaption !== undefined) {
+      base.enableAiCaption = asBool(layer.enableAiCaption, base.enableAiCaption);
+    }
+    if (layer.enableAiTags !== undefined) {
+      base.enableAiTags = asBool(layer.enableAiTags, base.enableAiTags);
+    }
+    if (layer.enableAiNsfw !== undefined) {
+      base.enableAiNsfw = asBool(layer.enableAiNsfw, base.enableAiNsfw);
+    }
+    if (layer.nsfwThreshold !== undefined) {
+      const n =
+        typeof layer.nsfwThreshold === 'number'
+          ? layer.nsfwThreshold
+          : Number(layer.nsfwThreshold);
+      if (Number.isFinite(n)) {
+        base.nsfwThreshold = Math.min(1, Math.max(0, n));
+      }
+    }
+    if (layer.aiBackendId !== undefined) {
+      base.aiBackendId =
+        typeof layer.aiBackendId === 'string' && layer.aiBackendId.trim()
+          ? layer.aiBackendId.trim()
+          : null;
+    }
+    if (layer.aiVisionModel !== undefined) {
+      base.aiVisionModel =
+        typeof layer.aiVisionModel === 'string' && layer.aiVisionModel.trim()
+          ? layer.aiVisionModel.trim()
+          : null;
+    }
+    if (layer.documentOcrBackendId !== undefined) {
+      base.documentOcrBackendId =
+        typeof layer.documentOcrBackendId === 'string' &&
+        layer.documentOcrBackendId.trim()
+          ? layer.documentOcrBackendId.trim()
+          : null;
+    }
+    if (layer.documentOcrVisionModel !== undefined) {
+      base.documentOcrVisionModel =
+        typeof layer.documentOcrVisionModel === 'string' &&
+        layer.documentOcrVisionModel.trim()
+          ? layer.documentOcrVisionModel.trim()
+          : null;
+    }
 
     if (layer.imageVariants !== undefined) {
       base.imageVariants = {
@@ -258,6 +351,75 @@ export function mergeProcessingSettings(
         layer.videoPreviewFrames,
         base.videoPreviewFrames,
       );
+    }
+    if (layer.enableImageNormalize !== undefined) {
+      base.enableImageNormalize = asBool(
+        layer.enableImageNormalize,
+        base.enableImageNormalize,
+      );
+    }
+    if (layer.enableDedupePhash !== undefined) {
+      base.enableDedupePhash = asBool(
+        layer.enableDedupePhash,
+        base.enableDedupePhash,
+      );
+    }
+    if (layer.phashThresholdBits !== undefined) {
+      const n =
+        typeof layer.phashThresholdBits === 'number'
+          ? layer.phashThresholdBits
+          : Number(layer.phashThresholdBits);
+      if (Number.isFinite(n)) {
+        base.phashThresholdBits = Math.min(64, Math.max(0, Math.floor(n)));
+      }
+    }
+    if (layer.enableIntegrityVerify !== undefined) {
+      base.enableIntegrityVerify = asBool(
+        layer.enableIntegrityVerify,
+        base.enableIntegrityVerify,
+      );
+    }
+    if (layer.enableDocumentPreview !== undefined) {
+      base.enableDocumentPreview = asBool(
+        layer.enableDocumentPreview,
+        base.enableDocumentPreview,
+      );
+    }
+    if (layer.enableDocumentText !== undefined) {
+      base.enableDocumentText = asBool(
+        layer.enableDocumentText,
+        base.enableDocumentText,
+      );
+    }
+    if (layer.enableDocumentOcr !== undefined) {
+      base.enableDocumentOcr = asBool(
+        layer.enableDocumentOcr,
+        base.enableDocumentOcr,
+      );
+    }
+    if (layer.documentOcrEngine !== undefined) {
+      base.documentOcrEngine =
+        layer.documentOcrEngine === 'tesseract'
+          ? 'tesseract'
+          : 'openai_compatible';
+    }
+    if (layer.enableNotifyWebhook !== undefined) {
+      base.enableNotifyWebhook = asBool(
+        layer.enableNotifyWebhook,
+        base.enableNotifyWebhook,
+      );
+    }
+    if (layer.notifyWebhookUrl !== undefined) {
+      base.notifyWebhookUrl =
+        typeof layer.notifyWebhookUrl === 'string'
+          ? layer.notifyWebhookUrl
+          : base.notifyWebhookUrl;
+    }
+    if (layer.notifyWebhookSecret !== undefined) {
+      base.notifyWebhookSecret =
+        typeof layer.notifyWebhookSecret === 'string'
+          ? layer.notifyWebhookSecret
+          : base.notifyWebhookSecret;
     }
   }
 

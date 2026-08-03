@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigModule as AppConfigModule } from '../../config/config.module';
+import { OrgProcessorsService } from '../../processing/services/org-processors.service';
 import { DatabaseModule } from '../database.module';
 import { SeedService } from './seed.service';
 
@@ -13,7 +14,7 @@ import { SeedService } from './seed.service';
     AppConfigModule,
     DatabaseModule,
   ],
-  providers: [SeedService],
+  providers: [SeedService, OrgProcessorsService],
   exports: [SeedService],
 })
 export class SeedModule {}

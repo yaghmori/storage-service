@@ -9,6 +9,7 @@ import { EventPublisherService } from './event-publisher.service';
 import { IdempotencyService, IIdempotencyService, NoOpIdempotencyService } from './idempotency.service';
 import { KafkaClientFactory } from './kafka-client-factory';
 import { KafkaTopicInitializerService } from './kafka-topic-initializer.service';
+import { StorageLifecycleEventsService } from './storage-lifecycle-events.service';
 
 export interface KafkaModuleOptions {
   /** Optional Redis instance for idempotency service */
@@ -92,9 +93,17 @@ export class KafkaModule {
           inject: [KafkaClientFactory],
         },
         EventPublisherService,
+        StorageLifecycleEventsService,
         KafkaTopicInitializerService,
       ],
-      exports: [KafkaClientFactory, EventPublisherService, IdempotencyService, DLQService, KafkaTopicInitializerService],
+      exports: [
+        KafkaClientFactory,
+        EventPublisherService,
+        StorageLifecycleEventsService,
+        IdempotencyService,
+        DLQService,
+        KafkaTopicInitializerService,
+      ],
     };
   }
 
@@ -146,9 +155,17 @@ export class KafkaModule {
           inject: [KafkaClientFactory],
         },
         EventPublisherService,
+        StorageLifecycleEventsService,
         KafkaTopicInitializerService,
       ],
-      exports: [KafkaClientFactory, EventPublisherService, IdempotencyService, DLQService, KafkaTopicInitializerService],
+      exports: [
+        KafkaClientFactory,
+        EventPublisherService,
+        StorageLifecycleEventsService,
+        IdempotencyService,
+        DLQService,
+        KafkaTopicInitializerService,
+      ],
     };
   }
 }

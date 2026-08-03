@@ -1,9 +1,11 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
+import { ProcessorKey } from '@workspace/validation';
 import { Job } from 'bullmq';
 import { METADATA_EXTRACTION_QUEUE } from '../../queues/queue-names';
 import { MetadataExtractionJobData } from '../../queues/queues.service';
 import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
+import { FileProcessingRollupService } from '../services/file-processing-rollup.service';
 import { MetadataExtractionService } from '../services/metadata-extraction.service';
 
 @Processor(METADATA_EXTRACTION_QUEUE, { concurrency: 3 })
@@ -13,67 +15,73 @@ export class MetadataExtractionProcessor extends WorkerHost {
   constructor(
     private readonly metadataExtractionService: MetadataExtractionService,
     private readonly jobsRepository: ProcessingJobsRepository,
+    private readonly rollup: FileProcessingRollupService,
   ) {
     super();
   }
 
   async process(job: Job<MetadataExtractionJobData>) {
-    const jobId = job.id || `temp-${Date.now()}`;
-    this.logger.log(`Extracting metadata for job ${jobId}, file ${job.data.fileId}`);
+    const fileId =
+      typeof job.data.fileId === 'number'
+        ? String(job.data.fileId)
+        : job.data.fileId;
+    const orgId = job.data.orgId;
+    this.logger.log(`Extracting metadata for job ${job.id}, file ${fileId}`);
 
-    // Convert fileId to string if it's a number
-    const fileId = typeof job.data.fileId === 'number' ? String(job.data.fileId) : job.data.fileId;
-
-    let jobRecord: Awaited<ReturnType<typeof this.jobsRepository.create>> | null = null;
+    let jobRecord = job.id
+      ? await this.jobsRepository.findByBullmqJobId(job.id)
+      : null;
 
     try {
-      // Prefer existing row (created before enqueue). Do not insert duplicates.
-      jobRecord = job.id ? await this.jobsRepository.findByBullmqJobId(job.id) : null;
-
       if (jobRecord && job.id) {
         await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'processing');
+        await this.jobsRepository.appendLog(
+          jobRecord.id,
+          'info',
+          `Worker picked up metadata.exif (attempt ${job.attemptsMade + 1})`,
+        );
       } else if (!jobRecord) {
-        // Legacy jobs enqueued before DB-first tracking
         jobRecord = await this.jobsRepository.create({
           fileId,
-          jobType: 'metadata',
+          orgId,
+          processorKey: ProcessorKey.METADATA_EXIF,
           status: 'processing',
           bullmqJobId: job.id,
         });
       }
 
-      // Extract metadata
+      if (!orgId) {
+        throw new Error('orgId is required for metadata extraction');
+      }
+
       const metadata = await this.metadataExtractionService.extractMetadata(
         fileId,
+        orgId,
+        jobRecord?.id,
       );
 
-      // Update job status to completed
+      if (jobRecord) {
+        await this.jobsRepository.appendLog(
+          jobRecord.id,
+          'info',
+          'Metadata extraction completed',
+        );
+      }
+
       if (job.id) {
         await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'completed');
       } else if (jobRecord) {
         await this.jobsRepository.updateStatus(jobRecord.id, 'completed');
       }
 
-      this.logger.log(`Metadata extraction completed for file ${fileId}`);
-
+      await this.rollup.refresh(fileId, orgId);
       return { success: true, metadata };
     } catch (error) {
       this.logger.error(
         `Metadata extraction failed for file ${fileId}: ${(error as Error).message}`,
         (error as Error).stack,
       );
-
-      // Update job status to failed
       if (job.id) {
-        let failedJobRecord = await this.jobsRepository.findByBullmqJobId(job.id);
-        if (!failedJobRecord) {
-          failedJobRecord = await this.jobsRepository.create({
-            fileId,
-            jobType: 'metadata',
-            status: 'failed',
-            bullmqJobId: job.id,
-          });
-        }
         await this.jobsRepository.updateStatusByBullmqJobId(
           job.id,
           'failed',
@@ -86,7 +94,14 @@ export class MetadataExtractionProcessor extends WorkerHost {
           (error as Error).message,
         );
       }
-
+      if (jobRecord) {
+        await this.jobsRepository.appendLog(
+          jobRecord.id,
+          'error',
+          (error as Error).message,
+        );
+      }
+      if (orgId) await this.rollup.refresh(fileId, orgId);
       throw error;
     }
   }

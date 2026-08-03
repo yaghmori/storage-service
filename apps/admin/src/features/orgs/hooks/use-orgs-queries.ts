@@ -117,6 +117,15 @@ export interface OrgProcessingSettings {
   enableImageProcessing: boolean;
   enableVideoProcessing: boolean;
   enableMetadataExtraction: boolean;
+  enableAiProcessing: boolean;
+  enableAiCaption: boolean;
+  enableAiTags: boolean;
+  enableAiNsfw: boolean;
+  nsfwThreshold: number;
+  aiBackendId: string | null;
+  aiVisionModel?: string | null;
+  documentOcrBackendId?: string | null;
+  documentOcrVisionModel?: string | null;
   imageVariants: {
     thumbnail: { enabled: boolean; maxEdge: number };
     medium: { enabled: boolean; maxEdge: number };
@@ -126,6 +135,17 @@ export interface OrgProcessingSettings {
   imageFormats: Array<"webp" | "avif">;
   videoThumbnail: boolean;
   videoPreviewFrames: number;
+  enableImageNormalize?: boolean;
+  enableDedupePhash?: boolean;
+  phashThresholdBits?: number;
+  enableIntegrityVerify?: boolean;
+  enableDocumentPreview?: boolean;
+  enableDocumentText?: boolean;
+  enableDocumentOcr?: boolean;
+  documentOcrEngine?: "openai_compatible" | "tesseract";
+  enableNotifyWebhook?: boolean;
+  notifyWebhookUrl?: string;
+  notifyWebhookSecret?: string;
   defaults?: OrgProcessingSettings;
 }
 
@@ -176,11 +196,7 @@ export interface OrgLimitsSettings {
 }
 
 export type OrgUsageBreakdownCategory =
-  | "documents"
-  | "images"
-  | "videos"
-  | "audio"
-  | "other";
+  "documents" | "images" | "videos" | "audio" | "other";
 
 export interface OrgUsageBreakdownSegment {
   category: OrgUsageBreakdownCategory;

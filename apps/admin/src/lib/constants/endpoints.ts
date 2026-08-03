@@ -16,11 +16,17 @@ export const FilesEndpoints = {
   Detail: "admin/api/files/{0}",
   Delete: "admin/api/files/{0}",
   HardDelete: "admin/api/files/{0}/hard",
+  Restore: "admin/api/files/{0}/restore",
   SignedUrl: "admin/api/files/{0}/signed-url",
   Content: "admin/api/files/{0}/content",
   Metadata: "admin/api/files/{0}/metadata",
+  ProcessorResults: "admin/api/files/{0}/processor-results",
   Variants: "admin/api/files/{0}/variants",
   RegenerateProcessing: "admin/api/files/{0}/regenerate-processing",
+  Verify: "admin/api/files/{0}/verify",
+  Duplicates: "admin/api/files/{0}/duplicates",
+  ConfirmDuplicate: "admin/api/files/{0}/duplicates/{1}/confirm",
+  DismissDuplicate: "admin/api/files/{0}/duplicates/{1}/dismiss",
 } as const;
 
 /** Browser-friendly content URL via BFF (session cookie → admin JWT). */
@@ -56,6 +62,15 @@ export const ProvidersEndpoints = {
   Update: "admin/api/providers/{0}",
   Delete: "admin/api/providers/{0}",
   Test: "admin/api/providers/{0}/test",
+} as const;
+
+export const ProcessorBackendsEndpoints = {
+  List: "admin/api/orgs/{0}/processor-backends",
+  Detail: "admin/api/orgs/{0}/processor-backends/{1}",
+  Models: "admin/api/orgs/{0}/processor-backends/{1}/models",
+  Create: "admin/api/orgs/{0}/processor-backends",
+  Update: "admin/api/orgs/{0}/processor-backends/{1}",
+  Delete: "admin/api/orgs/{0}/processor-backends/{1}",
 } as const;
 
 export const ApiKeysEndpoints = {

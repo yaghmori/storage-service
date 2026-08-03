@@ -6,8 +6,9 @@
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "esModuleInterop": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

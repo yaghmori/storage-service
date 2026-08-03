@@ -253,7 +253,7 @@
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "restore": {
       "projectUniqueName": "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
       "projectName": "Yaghmori.StorageService",

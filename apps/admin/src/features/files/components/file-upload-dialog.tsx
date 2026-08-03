@@ -79,6 +79,8 @@ export function FileUploadDialog({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
 
+  const hasFiles = items.length > 0;
+
   const selectedProviderLabel = useMemo(() => {
     if (providerId === DEFAULT_PROVIDER_VALUE) return "Default provider";
     const match = providers.find((p) => p.id === providerId);
@@ -122,7 +124,6 @@ export function FileUploadDialog({
     return Math.round(sum / items.length);
   }, [items]);
 
-  const queuedCount = items.filter((i) => i.status === "queued").length;
   const doneCount = items.filter((i) => i.status === "done").length;
   const errorCount = items.filter((i) => i.status === "error").length;
 
@@ -145,7 +146,9 @@ export function FileUploadDialog({
   };
 
   const startUpload = async () => {
-    const pending = items.filter((i) => i.status === "queued" || i.status === "error");
+    const pending = items.filter(
+      (i) => i.status === "queued" || i.status === "error",
+    );
     if (pending.length === 0) {
       toast.error("Add at least one file");
       return;
@@ -208,219 +211,234 @@ export function FileUploadDialog({
     <ResponsiveDialog
       open={open}
       onOpenChange={handleOpenChange}
-      size="xl"
+      size={hasFiles ? "3xl" : "md"}
+      className={cn(
+        "transition-[max-width] duration-200",
+        hasFiles ? "sm:max-w-5xl" : "sm:max-w-md",
+      )}
       canClose={!isUploading}
       allowOutsideClick={!isUploading}
     >
       <ResponsiveDialog.Header>
         <ResponsiveDialog.Title>Upload files</ResponsiveDialog.Title>
         <ResponsiveDialog.Description>
-          Add one or more files. Progress is shown per file for large uploads.
+          {hasFiles
+            ? `${items.length} file${items.length === 1 ? "" : "s"} selected. Progress is shown per file.`
+            : "Choose a provider, then add one or more files."}
         </ResponsiveDialog.Description>
       </ResponsiveDialog.Header>
 
-      <ResponsiveDialog.Content className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="upload-provider">Storage provider</Label>
-          <Select
-            value={providerId}
-            onValueChange={(value) => {
-              if (value) setProviderId(value);
-            }}
-            disabled={isUploading}
-          >
-            <SelectTrigger id="upload-provider" className="w-full">
-              <SelectValue placeholder="Default provider">
-                {selectedProviderLabel}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={DEFAULT_PROVIDER_VALUE}>
-                Default provider
-              </SelectItem>
-              {providers.map((p) => (
-                <SelectItem key={p.id} value={p.id} label={providerLabel(p)}>
-                  {providerLabel(p)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Leave as default to use the organization&apos;s default provider.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="upload-storage-key">Storage key (optional)</Label>
-          <Input
-            id="upload-storage-key"
-            value={storageKey}
-            onChange={(e) => setStorageKey(e.target.value)}
-            placeholder="path/to/object.bin"
-            disabled={isUploading}
-          />
-          <p className="text-xs text-muted-foreground">
-            Single file: exact object key. Multiple files: used as a folder
-            prefix. Leave blank to auto-generate.
-          </p>
-        </div>
-
+      <ResponsiveDialog.Content className="min-h-0">
         <div
-          role="button"
-          tabIndex={0}
-          onClick={() => {
-            if (!isUploading) inputRef.current?.click();
-          }}
-          onKeyDown={(e) => {
-            if (isUploading) return;
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              inputRef.current?.click();
-            }
-          }}
-          onDragEnter={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!isUploading) setIsDragActive(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!isUploading) setIsDragActive(true);
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsDragActive(false);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsDragActive(false);
-            if (isUploading) return;
-            addFiles(Array.from(e.dataTransfer.files ?? []));
-          }}
           className={cn(
-            "flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition-colors",
-            isDragActive
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/30 hover:border-primary/50",
-            isUploading && "pointer-events-none opacity-60",
+            "grid gap-6",
+            hasFiles && "md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]",
           )}
         >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className="hidden"
-            disabled={isUploading}
-            onChange={(e) => {
-              addFiles(Array.from(e.target.files ?? []));
-              e.target.value = "";
-            }}
-          />
-          <Upload className="mb-2 size-8 text-muted-foreground" />
-          <p className="text-sm font-medium">
-            {isDragActive ? "Drop files here" : "Drag & drop files, or click to browse"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Multiple files supported
-          </p>
-        </div>
-
-        {items.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <p className="text-muted-foreground">
-                {items.length} file{items.length === 1 ? "" : "s"}
-                {doneCount || errorCount
-                  ? ` · ${doneCount} done · ${errorCount} failed`
-                  : queuedCount
-                    ? ` · ${queuedCount} ready`
-                    : null}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="upload-provider">Storage provider</Label>
+              <Select
+                value={providerId}
+                onValueChange={(value) => {
+                  if (value) setProviderId(value);
+                }}
+                disabled={isUploading}
+              >
+                <SelectTrigger id="upload-provider" className="w-full">
+                  <SelectValue placeholder="Default provider">
+                    {selectedProviderLabel}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_PROVIDER_VALUE}>
+                    Default provider
+                  </SelectItem>
+                  {providers.map((p) => (
+                    <SelectItem key={p.id} value={p.id} label={providerLabel(p)}>
+                      {providerLabel(p)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Leave as default to use the organization&apos;s default provider.
               </p>
-              {isUploading || doneCount > 0 ? (
-                <span className="tabular-nums text-muted-foreground">
-                  {overallProgress}%
-                </span>
-              ) : null}
             </div>
-            {(isUploading || doneCount > 0) && (
-              <Progress value={overallProgress} />
-            )}
 
-            <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className="rounded-md border bg-muted/20 px-3 py-2.5"
-                >
-                  <div className="flex items-start gap-3">
-                    <FileIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {item.file.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatFileSize(item.file.size)}
-                            {item.file.type ? ` · ${item.file.type}` : ""}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          {item.status === "uploading" ? (
-                            <Loader2 className="size-4 animate-spin text-blue-600" />
-                          ) : null}
-                          {item.status === "done" ? (
-                            <CheckCircle2 className="size-4 text-emerald-600" />
-                          ) : null}
-                          {item.status === "error" ? (
-                            <XCircle className="size-4 text-destructive" />
-                          ) : null}
-                          {!isUploading && item.status !== "done" ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-7"
-                              onClick={() => removeItem(item.id)}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
+            <div className="space-y-2">
+              <Label htmlFor="upload-storage-key">Storage key (optional)</Label>
+              <Input
+                id="upload-storage-key"
+                value={storageKey}
+                onChange={(e) => setStorageKey(e.target.value)}
+                placeholder="path/to/object.bin"
+                disabled={isUploading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Single file: exact object key. Multiple files: used as a folder
+                prefix. Leave blank to auto-generate.
+              </p>
+            </div>
 
-                      {(item.status === "uploading" ||
-                        item.status === "done") && (
-                        <Progress value={item.progress} />
-                      )}
-
-                      {item.status === "error" && item.error ? (
-                        <p className="wrap-break-word text-xs text-destructive">
-                          {item.error}
-                        </p>
-                      ) : null}
-
-                      {item.status === "done" && item.result?.isDuplicate ? (
-                        <p className="text-xs text-muted-foreground">
-                          Duplicate — linked to existing file
-                        </p>
-                      ) : null}
-
-                      {item.status === "done" && item.result?.id ? (
-                        <p className="break-all font-mono text-[11px] text-muted-foreground">
-                          {item.result.id}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (!isUploading) inputRef.current?.click();
+              }}
+              onKeyDown={(e) => {
+                if (isUploading) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  inputRef.current?.click();
+                }
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isUploading) setIsDragActive(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isUploading) setIsDragActive(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragActive(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragActive(false);
+                if (isUploading) return;
+                addFiles(Array.from(e.dataTransfer.files ?? []));
+              }}
+              className={cn(
+                "flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 text-center transition-colors",
+                hasFiles ? "min-h-36 py-8" : "min-h-44 py-10",
+                isDragActive
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/30 hover:border-primary/50",
+                isUploading && "pointer-events-none opacity-60",
+              )}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                multiple
+                className="hidden"
+                disabled={isUploading}
+                onChange={(e) => {
+                  addFiles(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+              <Upload className="mb-2 size-8 text-muted-foreground" />
+              <p className="text-sm font-medium">
+                {isDragActive
+                  ? "Drop files here"
+                  : hasFiles
+                    ? "Add more files"
+                    : "Drag & drop files, or click to browse"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Multiple files supported
+              </p>
+            </div>
           </div>
-        ) : null}
+
+          {hasFiles ? (
+            <div className="min-h-0 space-y-3">
+              <p className="text-sm font-medium">
+                Selected files
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  ({items.length}
+                  {doneCount || errorCount
+                    ? ` · ${doneCount} done · ${errorCount} failed`
+                    : ""}
+                  )
+                </span>
+              </p>
+
+              <ul className="max-h-112 space-y-2 overflow-y-auto pr-1">
+                {items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="rounded-md border bg-muted/20 px-3 py-2.5"
+                  >
+                    <div className="flex items-start gap-3">
+                      <FileIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {item.file.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(item.file.size)}
+                              {item.file.type ? ` · ${item.file.type}` : ""}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {item.status === "uploading" ? (
+                              <span className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+                                <Loader2 className="size-3.5 animate-spin text-blue-600" />
+                                {item.progress}%
+                              </span>
+                            ) : null}
+                            {item.status === "done" ? (
+                              <CheckCircle2 className="size-4 text-emerald-600" />
+                            ) : null}
+                            {item.status === "error" ? (
+                              <XCircle className="size-4 text-destructive" />
+                            ) : null}
+                            {!isUploading && item.status !== "done" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-7"
+                                onClick={() => removeItem(item.id)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {(item.status === "uploading" ||
+                          item.status === "done") && (
+                          <Progress value={item.progress} />
+                        )}
+
+                        {item.status === "error" && item.error ? (
+                          <p className="wrap-break-word text-xs text-destructive">
+                            {item.error}
+                          </p>
+                        ) : null}
+
+                        {item.status === "done" && item.result?.isDuplicate ? (
+                          <p className="text-xs text-muted-foreground">
+                            Duplicate — linked to existing file
+                          </p>
+                        ) : null}
+
+                        {item.status === "done" && item.result?.id ? (
+                          <p className="break-all font-mono text-[11px] text-muted-foreground">
+                            {item.result.id}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       </ResponsiveDialog.Content>
 
       <ResponsiveDialog.Footer>
@@ -435,17 +453,17 @@ export function FileUploadDialog({
         <Button
           type="button"
           onClick={() => void startUpload()}
-          disabled={isUploading || items.length === 0}
+          disabled={isUploading || !hasFiles}
         >
           {isUploading ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              Uploading…
+              Uploading… {overallProgress}%
             </>
           ) : (
             <>
               <Upload className="size-4" />
-              Upload {items.length > 0 ? `(${items.length})` : ""}
+              Upload {hasFiles ? `(${items.length})` : ""}
             </>
           )}
         </Button>

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventsModule } from '../events/events.module';
 import { FilesModule } from '../files/files.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
 import { ProcessingModule } from '../processing/processing.module';
@@ -17,6 +18,7 @@ import { UploadService } from './services/upload.service';
     ProcessingModule,
     ServingModule,
     OrganizationsModule,
+    EventsModule,
   ],
   controllers: [UploadController, LegacyStorageMicroserviceController],
   providers: [UploadService],

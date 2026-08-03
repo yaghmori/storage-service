@@ -20,6 +20,10 @@
     "DELETE_FILE": "storage.delete_file",
     "BATCH_OPERATIONS": "storage.batch_operations",
     "GET_SIGNED_URL": "storage.get_signed_url",
+    "LIST_PROCESSOR_RESULTS": "storage.list_processor_results",
+    "GET_PROCESSOR_RESULT": "storage.get_processor_result",
+    "GET_FILE_METADATA": "storage.get_file_metadata",
+    "LIST_VARIANTS": "storage.list_variants",
     "UPLOAD_FILE": "uploadFile",
     "GET_ASSET_URL": "getAssetUrl",
     "DELETE_ASSET": "deleteAsset",
@@ -31,6 +35,10 @@
     "DELETE_FILE": "/files/{id}",
     "DOWNLOAD": "/files/{id}/download",
     "SIGNED_URL": "/files/{id}/signed-url",
+    "METADATA": "/files/{id}/metadata",
+    "PROCESSOR_RESULTS": "/files/{id}/processor-results",
+    "PROCESSOR_RESULT": "/files/{id}/processor-results/{processorKey}",
+    "VARIANTS": "/files/{id}/variants",
     "HEALTH": "/health"
   },
   "topics": {

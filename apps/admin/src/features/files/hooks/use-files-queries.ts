@@ -5,6 +5,7 @@ import { unwrapApiData } from "@/lib/api/unwrap-api-data";
 import { FilesEndpoints, replacePathParams } from "@/lib/constants/endpoints";
 import { fileKeys, invalidateFiles } from "@/lib/query-keys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ProcessorKey } from "@workspace/validation";
 
 export interface FileRow {
   id: string;
@@ -18,10 +19,8 @@ export interface FileRow {
   mimeType: string;
   size: number | string;
   fileHash: string;
-  checksum: string | null;
   width: number | null;
   height: number | null;
-  aspectRatio: string | null;
   duration: number | null;
   bitrate: number | null;
   frameRate: number | null;
@@ -41,16 +40,9 @@ export interface FileRow {
   referenceCount: number | null;
   isOrphaned: boolean | null;
   orphanedAt: string | null;
-  isProcessed: boolean | null;
   processingStatus: string | null;
   processingError: string | null;
   processingAttempts: number | null;
-  aiGeneratedTags: string | null;
-  aiDescription: string | null;
-  objectDetection: string | null;
-  faceDetection: string | null;
-  nsfwScore: number | null;
-  isNsfw: boolean | null;
   visibility: string | null;
   downloadPassword: string | null;
   uploadedBy: string | null;
@@ -69,10 +61,30 @@ interface FilesListResponse {
   limit: number;
 }
 
+export type FilesFileTypeFilter =
+  | "images"
+  | "videos"
+  | "audio"
+  | "documents"
+  | "other";
+
+export type FilesProcessingStatusFilter =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "partial"
+  | "skipped";
+
 export function useFilesQuery(params?: {
   page?: number;
   limit?: number;
   search?: string;
+  fileType?: FilesFileTypeFilter;
+  processingStatus?: FilesProcessingStatusFilter;
+  minSize?: number;
+  maxSize?: number;
   includeDeleted?: boolean;
   deletedOnly?: boolean;
   orgId?: string;
@@ -82,13 +94,16 @@ export function useFilesQuery(params?: {
     queryFn: async () => {
       const response = await upstream.get(FilesEndpoints.List, { params });
       const payload = unwrapApiData<FilesListResponse>(response.data);
-      const totalPages = Math.ceil(payload.total / payload.limit) || 0;
+      const limit = Number(payload.limit) || params?.limit || 20;
+      const page = Number(payload.page) || params?.page || 1;
+      const total = Number(payload.total) || 0;
+      const totalPages = Math.ceil(total / limit) || 0;
       return {
         items: payload.items,
-        total: payload.total,
+        total,
         totalPages,
-        page: payload.page,
-        limit: payload.limit,
+        page,
+        limit,
       };
     },
     staleTime: 0,
@@ -164,7 +179,9 @@ export function useUploadFileMutation(orgId?: string) {
           if (!input.onProgress) return;
           if (!event.total || event.total <= 0) {
             // Indeterminate until total is known — keep a soft lower bound.
-            input.onProgress(Math.min(95, Math.round(event.loaded > 0 ? 10 : 0)));
+            input.onProgress(
+              Math.min(95, Math.round(event.loaded > 0 ? 10 : 0)),
+            );
             return;
           }
           const percent = Math.round((event.loaded / event.total) * 100);
@@ -190,6 +207,20 @@ export function useHardDeleteFileMutation(orgId?: string) {
     },
     onSuccess: () => {
       invalidateFiles(queryClient);
+    },
+  });
+}
+
+export function useRestoreFileMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const path = replacePathParams(FilesEndpoints.Restore, id);
+      const response = await upstream.post(path, {}, { params: { orgId } });
+      return unwrapApiData<FileRow>(response.data);
+    },
+    onSuccess: (_data, id) => {
+      invalidateFiles(queryClient, { orgId, fileId: id });
     },
   });
 }
@@ -242,12 +273,22 @@ export function useBulkDeleteFilesMutation(orgId?: string) {
   });
 }
 
-export function useFileSignedUrlQuery(id?: string, orgId?: string, enabled = false) {
+export function useFileSignedUrlQuery(
+  id?: string,
+  orgId?: string,
+  enabled = false,
+  variant?: string | null,
+) {
   return useQuery({
-    queryKey: fileKeys.signedUrl(orgId, id),
+    queryKey: fileKeys.signedUrl(orgId, id, variant),
     queryFn: async () => {
       const path = replacePathParams(FilesEndpoints.SignedUrl, id!);
-      const response = await upstream.get(path, { params: { orgId } });
+      const response = await upstream.get(path, {
+        params: {
+          orgId,
+          ...(variant ? { variant } : {}),
+        },
+      });
       return unwrapApiData<{
         url: string;
         expiresIn?: number;
@@ -266,6 +307,40 @@ export interface FileMetadataPayload {
   metadata: Record<string, unknown> | null;
   extractedAt: string | null;
   updatedAt: string | null;
+}
+
+export interface FileProcessorResult {
+  id?: string;
+  fileId?: string;
+  processorKey: ProcessorKey | string;
+  status: string;
+  data: Record<string, unknown> | null;
+  model: string | null;
+  error: string | null;
+  processedAt: string | null;
+  backendId?: string | null;
+  backendKind?: string | null;
+  schemaVersion?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export function useFileProcessorResultsQuery(
+  id?: string,
+  orgId?: string,
+  enabled = false,
+) {
+  return useQuery({
+    queryKey: fileKeys.processorResults(orgId, id),
+    queryFn: async () => {
+      const path = replacePathParams(FilesEndpoints.ProcessorResults, id!);
+      const response = await upstream.get(path, { params: { orgId } });
+      return unwrapApiData<{ items: FileProcessorResult[]; total: number }>(
+        response.data,
+      );
+    },
+    enabled: enabled && !!id && !!orgId,
+  });
 }
 
 export function useFileMetadataQuery(
@@ -316,17 +391,131 @@ export function useFileVariantsQuery(
 export function useRegenerateProcessingMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const path = replacePathParams(FilesEndpoints.RegenerateProcessing, id);
-      const response = await upstream.post(path, null, { params: { orgId } });
+    mutationFn: async (input: {
+      id: string;
+      scope?: "variants" | "video" | "all";
+    }) => {
+      const path = replacePathParams(
+        FilesEndpoints.RegenerateProcessing,
+        input.id,
+      );
+      const response = await upstream.post(
+        path,
+        {},
+        {
+          params: {
+            orgId,
+            ...(input.scope && input.scope !== "all"
+              ? { scope: input.scope }
+              : {}),
+          },
+        },
+      );
       return unwrapApiData<{
         fileId: string;
         scheduled: string[];
         message: string;
       }>(response.data);
     },
+    onSuccess: (_data, input) => {
+      invalidateFiles(queryClient, { orgId, fileId: input.id });
+    },
+  });
+}
+
+export function useVerifyFileMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const path = replacePathParams(FilesEndpoints.Verify, id);
+      const response = await upstream.post(path, {}, { params: { orgId } });
+      return unwrapApiData<{
+        fileId: string;
+        processorKey: string;
+        jobId: string;
+        message: string;
+      }>(response.data);
+    },
     onSuccess: (_data, id) => {
       invalidateFiles(queryClient, { orgId, fileId: id });
+    },
+  });
+}
+
+export interface FileDuplicateRow {
+  id: string;
+  orgId: string;
+  originalFileId: string;
+  duplicateFileId: string | null;
+  relatedFileId: string | null;
+  relatedFileName: string | null;
+  relatedMimeType: string | null;
+  relatedSize: number | null;
+  relatedWidth: number | null;
+  relatedHeight: number | null;
+  relatedCreatedAt: string | null;
+  relatedDeletedAt: string | null;
+  relatedFileHash: string | null;
+  relatedProcessingStatus: string | null;
+  relatedStorageKey: string | null;
+  detectionMethod: string;
+  similarityScore: number | null;
+  isConfirmed: boolean | null;
+  confirmedBy: string | null;
+  confirmedAt: string | null;
+  detectedAt: string;
+}
+
+export function useFileDuplicatesQuery(
+  id?: string,
+  orgId?: string,
+  enabled = false,
+) {
+  return useQuery({
+    queryKey: fileKeys.duplicates(orgId, id),
+    queryFn: async () => {
+      const path = replacePathParams(FilesEndpoints.Duplicates, id!);
+      const response = await upstream.get(path, { params: { orgId } });
+      return unwrapApiData<{ items: FileDuplicateRow[]; total: number }>(
+        response.data,
+      );
+    },
+    enabled: enabled && !!id && !!orgId,
+  });
+}
+
+export function useConfirmDuplicateMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { fileId: string; duplicateId: string }) => {
+      const path = replacePathParams(
+        FilesEndpoints.ConfirmDuplicate,
+        input.fileId,
+        input.duplicateId,
+      );
+      const response = await upstream.post(path, {}, { params: { orgId } });
+      return unwrapApiData(response.data);
+    },
+    onSuccess: (_data, input) => {
+      invalidateFiles(queryClient, { orgId, fileId: input.fileId });
+    },
+  });
+}
+
+export function useDismissDuplicateMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { fileId: string; duplicateId: string }) => {
+      const path = replacePathParams(
+        FilesEndpoints.DismissDuplicate,
+        input.fileId,
+        input.duplicateId,
+      );
+      const response = await upstream.post(path, {}, { params: { orgId } });
+      return unwrapApiData(response.data);
+    },
+    onSuccess: (_data, input) => {
+      invalidateFiles(queryClient, { orgId, fileId: input.fileId });
     },
   });
 }

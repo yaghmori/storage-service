@@ -17,6 +17,7 @@ import { DashboardController } from './controllers/dashboard.controller';
 import { FilesController } from './controllers/files.controller';
 import { JobsController } from './controllers/jobs.controller';
 import { OrganizationsController } from './controllers/organizations.controller';
+import { ProcessorBackendsController } from './controllers/processor-backends.controller';
 import { ProvidersController } from './controllers/providers.controller';
 import { AdminApiKeyService } from './services/admin-api-key.service';
 
@@ -42,6 +43,7 @@ import { AdminApiKeyService } from './services/admin-api-key.service';
     AnalyticsController,
     ApiKeysController,
     OrganizationsController,
+    ProcessorBackendsController,
     AdminUsersController,
   ],
   providers: [AdminApiKeyService],

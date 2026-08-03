@@ -5,7 +5,7 @@
   },
   "projects": {
     "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj": {
-      "version": "0.1.0",
+      "version": "0.2.0",
       "restore": {
         "projectUniqueName": "G:\\codespace\\storage-service\\sdk\\dotnet\\Yaghmori.StorageService\\Yaghmori.StorageService.csproj",
         "projectName": "Yaghmori.StorageService",
