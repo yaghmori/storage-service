@@ -1,0 +1,14 @@
+# Storage Admin UI patterns
+
+## Lists
+Use DataGrid stack from `@workspace/ui`: `DataGrid`, `DataGridContainer`, `DataGridTable`, `DataGridTableContainer`, `DataGridPagination`, `DataGridColumnHeader`, `useDataTable`, `DataTableToolbar`.
+
+## Forms
+Create/edit forms MUST use `ResponsiveSheet` (not Dialog). Destructive actions use AlertDialog / ConfirmDialog.
+
+## Auth
+- Admin cookie: `storage_admin_session` (iron-session). Never store API keys in the browser.
+- Core HTTP and SDK use `x-api-key` only. Admin uses JWT via BFF `/api/upstream`.
+
+## Features layout
+`features/<domain>/{hooks,columns,components}` — thin route pages under `app/(admin)/(main)/`.

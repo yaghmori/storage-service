@@ -1,0 +1,35 @@
+# Development image — hot-reload via nodemon + tsx (source mounted in compose)
+FROM node:20-alpine AS base
+
+RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
+ && npm install -g nodemon \
+ && apk add --no-cache ffmpeg
+
+WORKDIR /app
+
+FROM base AS dependencies
+
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install
+
+FROM base AS development
+
+COPY package.json pnpm-lock.yaml* ./
+COPY --from=dependencies /app/node_modules ./node_modules
+
+COPY tsconfig.json tsconfig.app.json tsconfig.typecheck.json ./
+COPY drizzle.config.ts nodemon.json tsup.config.ts ./
+
+# Seed copy only — compose mounts overwrite ./src and nodemon.json at runtime
+COPY src ./src
+
+ENV NODE_ENV=development
+ENV HOST=0.0.0.0
+ENV PORT=6000
+ENV TCP_PORT=6001
+ENV CHOKIDAR_USEPOLLING=true
+ENV CHOKIDAR_INTERVAL=1000
+
+EXPOSE 6000 6001 6300
+
+CMD ["nodemon", "--config", "nodemon.json"]

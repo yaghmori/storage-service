@@ -5,8 +5,8 @@
   "dockerImage": "ghcr.io/yaghmori/storage-service",
   "description": "Client SDK for the standalone storage-service (TCP, Kafka, HTTP)",
   "ports": {
-    "tcp": 4002,
-    "http": 4000
+    "tcp": 6001,
+    "http": 6100
   },
   "injectionToken": "STORAGE_SERVICE",
   "env": {

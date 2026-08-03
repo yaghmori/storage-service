@@ -1,0 +1,72 @@
+# API-only local development (hot-reload).
+# Joins docker-services network `internal` (postgres, redis, minio).
+#
+#   pnpm docker:dev        → up -d --build (detached, hot-reload)
+#   pnpm docker:dev:logs   → follow API logs
+#   pnpm docker:dev:down
+#
+# This compose does NOT run the admin UI. Start admin on the host:
+#   pnpm dev   → http://localhost:6200 → API http://localhost:6100
+#
+# Published ports: HTTP 6100, Nest TCP 6001, debug 6300.
+# (HTTP 6000 is blocked by Node fetch / undici — do not use it.)
+
+name: storage-service-dev
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: storage-service-api-dev
+    ports:
+      - "6100:6100"
+      - "6001:6001"
+      - "6300:6300"
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "6100"
+      TCP_HOST: 0.0.0.0
+      TCP_PORT: "6001"
+      DEBUG_PORT: "6300"
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/storage_service}
+      REDIS_HOST: ${DOCKER_REDIS_HOST:-redis}
+      REDIS_PORT: ${DOCKER_REDIS_PORT:-6379}
+      KAFKA_BROKERS: ${DOCKER_KAFKA_BROKERS:-}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
+      JWT_ISSUER: ${JWT_ISSUER:-storage-service}
+      ADMIN_JWT_EXPIRES_IN: ${ADMIN_JWT_EXPIRES_IN:-365d}
+      AUTH_API_KEYS: ${AUTH_API_KEYS:-dev-local-key}
+      AUTH_DEFAULT_ORG_ID: ${AUTH_DEFAULT_ORG_ID:-97150c02-e312-45e9-bf7e-1aa5ca26450d}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      UPLOAD_PATH: ${UPLOAD_PATH:-/tmp/storage-uploads}
+      MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${DOCKER_MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-storage}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+    volumes:
+      - ./src:/app/src
+      - ./nodemon.json:/app/nodemon.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./tsconfig.app.json:/app/tsconfig.app.json:ro
+      - ./drizzle.config.ts:/app/drizzle.config.ts:ro
+      - storage-uploads:/tmp/storage-uploads
+    networks:
+      - internal
+    restart: unless-stopped
+
+volumes:
+  storage-uploads:
+
+networks:
+  internal:
+    external: true
+    name: internal

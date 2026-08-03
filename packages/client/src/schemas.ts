@@ -13,6 +13,8 @@ export const getSignedUrlRequestSchema = z.object({
   id: uuidSchema.optional(),
   key: nonEmptyStringSchema.optional(),
   expiresInSeconds: z.number().int().positive().optional(),
+  /** Prefer named variants: `thumbnail` (~200) or `medium` (~800). Omit for original. */
+  variant: z.enum(['thumbnail', 'medium']).optional(),
 });
 export type GetSignedUrlRequest = z.infer<typeof getSignedUrlRequestSchema>;
 

@@ -1,0 +1,386 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@source "../**/*.{ts,tsx}";
+@source "../../../providers/src/**/*.{ts,tsx}";
+@source "../../../auth/src/**/*.{ts,tsx}";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+
+  /* Core Allyfe Brand Colors */
+  --allyfe-teal: #00b5df;
+  --allyfe-aqua: #00b5df;
+  --allyfe-purple: #753bbd;
+  --allyfe-light-violet: #bf8bff;
+  --allyfe-navy: #343535;
+  --allyfe-cyan: #00b5df;
+  --allyfe-gray-dark: #343535;
+  --allyfe-gray-medium: #cdcdcd;
+  --allyfe-white: #ffffff;
+
+  /* App Theme Base */
+  --background: var(--allyfe-white);
+  --foreground: var(--allyfe-gray-dark);
+
+  --primary: var(--allyfe-teal);
+  --primary-foreground: var(--allyfe-white);
+
+  --secondary: var(--allyfe-purple);
+  --secondary-foreground: var(--allyfe-white);
+
+  --accent:  oklch(0.97 0 0);
+  --accent-foreground: var(--allyfe-gray-dark);
+
+  --card: var(--allyfe-white);
+  --card-foreground: var(--allyfe-gray-dark);
+
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: var(--allyfe-teal);
+
+  --muted:  oklch(0.97 0 0);
+  --muted-foreground:  oklch(0.556 0 0);
+
+  --radius: 0.625rem;
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --popover: var(--allyfe-white);
+  --chart-1: var(--allyfe-teal);
+  --chart-2: var(--allyfe-purple);
+  --chart-3: var(--allyfe-light-violet);
+  --chart-4: var(--allyfe-gray-medium);
+  --chart-5: var(--allyfe-gray-dark);
+  --radius: 0.625rem;
+  --sidebar: var(--allyfe-white);
+  --sidebar-foreground: var(--allyfe-gray-dark);
+  --sidebar-primary: var(--allyfe-gray-dark);
+  --sidebar-primary-foreground: var(--allyfe-white);
+  --sidebar-accent:  oklch(0.97 0 0);
+  --sidebar-accent-foreground: var(--allyfe-gray-dark);
+  --sidebar-border: var(--allyfe-gray-medium);
+  --sidebar-ring: var(--allyfe-gray-medium);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-900);
+  --info: var(--color-violet-500);
+  --info-foreground: var(--color-violet-900);
+  --warning: var(--color-yellow-500);
+  --warning-foreground: var(--color-yellow-900);
+  --invert: var(--color-zinc-900);
+  --invert-foreground: var(--color-zinc-50);
+}
+
+.dark {
+  --background: var(--allyfe-gray-dark);
+  --foreground: var(--allyfe-white);
+
+  --primary: var(--allyfe-teal);
+  --primary-foreground: var(--allyfe-gray-dark);
+
+  --secondary: var(--allyfe-purple);
+  --secondary-foreground: var(--allyfe-white);
+
+  --accent-foreground: var(--allyfe-white);
+
+  --card: var(--allyfe-gray-dark);
+  --card-foreground: var(--allyfe-white);
+
+  --border: var(--allyfe-gray-medium);
+  --input: var(--allyfe-gray-medium);
+  --ring: var(--allyfe-teal);
+
+  --popover: var(--allyfe-gray-dark);
+
+  --muted:  oklch(0.269 0 0);
+  --muted-foreground:  oklch(0.708 0 0);
+  --accent:  oklch(0.269 0 0);
+
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+
+  --chart-1: var(--allyfe-teal);
+  --chart-2: var(--allyfe-purple);
+  --chart-3: var(--allyfe-light-violet);
+  --chart-4: var(--allyfe-gray-medium);
+  --chart-5: var(--allyfe-white);
+  --sidebar: var(--allyfe-gray-dark);
+  --sidebar-foreground: var(--allyfe-white);
+  --sidebar-primary: var(--allyfe-purple);
+  --sidebar-primary-foreground: var(--allyfe-white);
+  --sidebar-accent:  oklch(0.269 0 0);
+  --sidebar-accent-foreground: var(--allyfe-white);
+  --sidebar-border: var(--allyfe-gray-medium);
+  --sidebar-ring: var(--allyfe-gray-medium);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-600);
+  --info: var(--color-violet-500);
+  --info-foreground: var(--color-violet-600);
+  --warning: var(--color-yellow-500);
+  --warning-foreground: var(--color-yellow-600);
+  --invert: var(--color-zinc-700);
+  --invert-foreground: var(--color-zinc-50);
+}
+
+@theme inline {
+  --breakpoint-xs: 400px;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(calc(-100% - var(--gap)));
+    }
+  }
+
+  @keyframes marquee-vertical {
+    from {
+      transform: translateY(0);
+    }
+
+    to {
+      transform: translateY(calc(-100% - var(--gap)));
+    }
+  }
+
+  --animate-aurora: aurora 8s ease-in-out infinite alternate;
+
+  --color-invert-foreground: var(--invert-foreground);
+
+  --color-invert: var(--invert);
+
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-warning: var(--warning);
+
+  --color-info-foreground: var(--info-foreground);
+
+  --color-info: var(--info);
+
+  --color-success-foreground: var(--success-foreground);
+
+  --color-success: var(--success);
+
+  @keyframes aurora {
+    0% {
+      background-position: 0% 50%;
+      transform: rotate(-5deg) scale(0.9);
+    }
+
+    25% {
+      background-position: 50% 100%;
+      transform: rotate(5deg) scale(1.1);
+    }
+
+    50% {
+      background-position: 100% 50%;
+      transform: rotate(-3deg) scale(0.95);
+    }
+
+    75% {
+      background-position: 50% 0%;
+      transform: rotate(3deg) scale(1.05);
+    }
+
+    100% {
+      background-position: 0% 50%;
+      transform: rotate(-5deg) scale(0.9);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    /* Prevent layout shift when scrollbar is hidden by dialogs/dropdowns */
+    /* This reserves space for the scrollbar even when it's not visible */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+}
+
+@layer utilities {
+  .rainbow-banner-gradient-1 {
+    mask-image:
+      linear-gradient(to bottom, white, transparent),
+      radial-gradient(circle at top center, white, transparent);
+    mask-composite: intersect;
+    animation: moving-banner 16s linear infinite reverse;
+    --start: rgba(0, 87, 255, 0.5);
+    --mid: rgba(255, 0, 166, 0.77);
+    --end: rgba(255, 77, 0, 0.4);
+    --via: rgba(164, 255, 68, 0.4);
+    background-image: repeating-linear-gradient(60deg,
+        var(--end),
+        var(--start) 2%,
+        var(--start) 5%,
+        transparent 8%,
+        transparent 14%,
+        var(--via) 18%,
+        var(--via) 22%,
+        var(--mid) 28%,
+        var(--mid) 30%,
+        var(--via) 34%,
+        var(--via) 36%,
+        transparent,
+        var(--end) calc(50% - 12px));
+    background-size: 200% 100%;
+    mix-blend-mode: difference;
+  }
+
+  .rainbow-banner-gradient-2 {
+    mask-image:
+      linear-gradient(to bottom, white, transparent),
+      radial-gradient(circle at top center, white, transparent);
+    mask-composite: intersect;
+    animation: moving-banner 20s linear infinite;
+    --start: rgba(255, 120, 120, 0.5);
+    --mid: rgba(36, 188, 255, 0.4);
+    --end: rgba(64, 0, 255, 0.51);
+    --via: rgba(255, 89, 0, 0.56);
+    background-image: repeating-linear-gradient(45deg,
+        var(--end),
+        var(--start) 4%,
+        var(--start) 8%,
+        transparent 9%,
+        transparent 14%,
+        var(--mid) 16%,
+        var(--mid) 20%,
+        transparent,
+        var(--via) 36%,
+        var(--via) 40%,
+        transparent 42%,
+        var(--end) 46%,
+        var(--end) calc(50% - 16.8px));
+    background-size: 200% 100%;
+    mix-blend-mode: color-dodge;
+  }
+
+  @keyframes moving-banner {
+    from {
+      background-position: 0 0;
+    }
+
+    to {
+      background-position: 200% 0;
+    }
+  }
+
+  .cpu-architecture {
+    offset-anchor: 10px 0px;
+    animation-name: cpu-animation-path;
+    animation-iteration-count: infinite;
+    animation-timing-function: cubic-bezier(0.75, -0.01, 0, 0.99);
+  }
+
+  .cpu-line-1 {
+    offset-path: path("M 10 20 h 79.5 q 5 0 5 5 v 30");
+    animation-duration: 5s;
+    animation-delay: 1s;
+  }
+
+  .cpu-line-2 {
+    offset-path: path("M 180 10 h -69.7 q -5 0 -5 5 v 40");
+    animation-delay: 6s;
+    animation-duration: 2s;
+  }
+
+  .cpu-line-3 {
+    offset-path: path("M 130 20 v 21.8 q 0 5 -5 5 h -25");
+    animation-delay: 4s;
+    animation-duration: 6s;
+  }
+
+  .cpu-line-4 {
+    offset-path: path("M 170 80 v -21.8 q 0 -5 -5 -5 h -65");
+    animation-delay: 3s;
+    animation-duration: 3s;
+  }
+
+  .cpu-line-5 {
+    offset-path: path("M 135 65 h 15 q 5 0 5 5 v 10 q 0 5 -5 5 h -39.8 q -5 0 -5 -5 v -35");
+    animation-delay: 9s;
+    animation-duration: 4s;
+  }
+
+  .cpu-line-6 {
+    offset-path: path("M 94.8 95 v -46");
+    animation-delay: 3s;
+    animation-duration: 7s;
+  }
+
+  .cpu-line-7 {
+    offset-path: path("M 88 88 v -15 q 0 -5 -5 -5 h -10 q -5 0 -5 -5 v -5 q 0 -5 5 -5 h 28");
+    animation-delay: 4s;
+    animation-duration: 4s;
+  }
+
+  .cpu-line-8 {
+    offset-path: path("M 30 30 h 25 q 5 0 5 5 v 6.5 q 0 5 5 5 h 35");
+    animation-delay: 3s;
+    animation-duration: 3s;
+  }
+
+  @keyframes cpu-animation-path {
+    0% {
+      offset-distance: 0%;
+    }
+
+    100% {
+      offset-distance: 100%;
+    }
+  }
+}
+

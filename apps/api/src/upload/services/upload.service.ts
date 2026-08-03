@@ -1,0 +1,380 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
+import { extname, basename } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { FileDuplicationService } from '../../files/services/file-duplication.service';
+import { FilesChecksumService } from '../../files/services/files-checksum.service';
+import { FilesService } from '../../files/services/files.service';
+import { OrganizationService } from '../../organizations/organization.service';
+import { OrgLimitsService } from '../../organizations/services/org-limits.service';
+import { OrgUsageService } from '../../organizations/services/org-usage.service';
+import { ProcessingSettingsService } from '../../processing/services/processing-settings.service';
+import type { ProcessingSettingsOverride } from '../../processing/types/processing-settings';
+import { enabledImageVariantSlots } from '../../processing/types/processing-settings';
+import { QueuesService } from '../../queues/queues.service';
+import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
+
+@Injectable()
+export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
+
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly checksumService: FilesChecksumService,
+    private readonly storageFactory: StorageFactoryService,
+    private readonly queuesService: QueuesService,
+    private readonly fileDuplicationService: FileDuplicationService,
+    private readonly processingSettings: ProcessingSettingsService,
+    private readonly organizations: OrganizationService,
+    private readonly limitsService: OrgLimitsService,
+    private readonly usageService: OrgUsageService,
+  ) {}
+
+  async uploadFile(
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+    orgId: string,
+    storageProviderId?: string,
+    userId?: string,
+    storageKeyOverride?: string,
+    processingOverride?: ProcessingSettingsOverride | null,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    if (!orgId) {
+      throw new BadRequestException('orgId is required');
+    }
+
+    const org = await this.organizations.getById(orgId);
+    if (!org) {
+      throw new BadRequestException(`Unknown organization: ${orgId}`);
+    }
+    if (org.status !== 'active') {
+      throw new ForbiddenException(
+        `Organization is ${org.status}; uploads are disabled`,
+      );
+    }
+
+    const buffer = file.buffer;
+    const size = buffer.length;
+    const mime = (file.mimetype || 'application/octet-stream').toLowerCase();
+
+    await this.assertWithinLimits(orgId, size, mime, {
+      usedBytes: Number(org.usedBytes ?? 0n),
+      objectCount: org.objectCount ?? 0,
+    });
+
+    const sha256Hash = await this.checksumService.calculateSHA256(buffer);
+
+    const existingFiles = await this.filesService.findByHash(sha256Hash, orgId);
+    if (existingFiles.length > 0) {
+      const originalFile = existingFiles.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      )[0];
+
+      this.logger.log(`Duplicate file detected: ${originalFile.id}, skipping upload and storage`);
+
+      const updatedFile = await this.filesService.incrementReferenceCount(originalFile.id);
+
+      this.logger.log(
+        `Duplicate upload detected. Incremented reference count for original file ${originalFile.id}. New count: ${updatedFile?.referenceCount || originalFile.referenceCount + 1}`,
+      );
+
+      await this.fileDuplicationService.markAsDuplicate(
+        originalFile.id,
+        orgId,
+        'sha256',
+        undefined,
+        userId,
+      );
+
+      this.logger.log(`Recorded duplicate upload event for file ${originalFile.id}`);
+
+      const fileToReturn = updatedFile || originalFile;
+      return {
+        id: fileToReturn.id,
+        originalFileName: fileToReturn.originalFilename,
+        mimeType: fileToReturn.mimeType,
+        size: Number(fileToReturn.size),
+        isDuplicate: true,
+        originalFileId: originalFile.id,
+        message: `File already exists in the system. Using existing file (ID: ${originalFile.id}). Reference count increased to ${fileToReturn.referenceCount}.`,
+        uploadedToStorage: false,
+        createdAt: fileToReturn.createdAt,
+      };
+    }
+
+    const providerConfig = await this.storageFactory.getProviderConfig(storageProviderId, orgId);
+    if (!providerConfig) {
+      throw new BadRequestException('No storage provider available');
+    }
+    if (providerConfig.orgId && providerConfig.orgId !== orgId) {
+      throw new BadRequestException('Storage provider does not belong to this organization');
+    }
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+
+    const extension = extname(file.originalname);
+    const uuid = uuidv4();
+    const key =
+      this.resolveStorageKey(storageKeyOverride) ??
+      `${year}/${month}/${day}/${uuid}${extension}`;
+    const fileName = storageKeyOverride ? basename(key) : `${uuid}${extension}`;
+
+    const provider = await this.storageFactory.getProvider(providerConfig.id);
+
+    try {
+      await provider.upload(key, buffer, file.mimetype);
+    } catch (error) {
+      throw new BadRequestException(
+        `Failed to upload to storage provider (${providerConfig.type}): ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+
+    const config = providerConfig.config as { bucket?: string };
+    let fileRecord;
+    try {
+      fileRecord = await this.filesService.createFile({
+        orgId,
+        storageProviderId: providerConfig.id,
+        storageKey: key,
+        storageBucket: config.bucket,
+        fileName,
+        originalFileName: file.originalname,
+        fileExtension: extension.replace('.', ''),
+        mimeType: file.mimetype,
+        size: BigInt(buffer.length),
+        fileHash: sha256Hash,
+        checksum: sha256Hash,
+      });
+      await this.usageService.increment(orgId, buffer.length);
+    } catch (error) {
+      try {
+        await provider.delete(key);
+      } catch (deleteError) {
+        this.logger.error('Failed to clean up uploaded file:', deleteError);
+      }
+      throw error;
+    }
+
+    if (!fileRecord?.id) {
+      throw new BadRequestException('File record not found');
+    }
+
+    void this.scheduleProcessingJobs(
+      fileRecord.id,
+      file.mimetype,
+      orgId,
+      file.originalname,
+      processingOverride,
+    );
+
+    return {
+      id: fileRecord.id,
+      originalFileName: fileRecord.originalFilename,
+      mimeType: fileRecord.mimeType,
+      size: Number(fileRecord.size),
+      isDuplicate: false,
+      message: 'File uploaded successfully.',
+      uploadedToStorage: true,
+      storageKey: key,
+      createdAt: fileRecord.createdAt,
+    };
+  }
+
+  private async assertWithinLimits(
+    orgId: string,
+    size: number,
+    mime: string,
+    usage: { usedBytes: number; objectCount: number },
+  ): Promise<void> {
+    const limits = await this.limitsService.resolve(orgId);
+
+    if (size > limits.maxFileSizeBytes) {
+      throw new PayloadTooLargeException({
+        code: 'FILE_TOO_LARGE',
+        message: `File size ${size} exceeds max ${limits.maxFileSizeBytes} bytes`,
+        maxFileSizeBytes: limits.maxFileSizeBytes,
+      });
+    }
+
+    if (
+      limits.allowedMimeTypes.length > 0 &&
+      !limits.allowedMimeTypes.includes(mime)
+    ) {
+      throw new UnsupportedMediaTypeException({
+        code: 'MIME_NOT_ALLOWED',
+        message: `MIME type "${mime}" is not allowed`,
+        allowedMimeTypes: limits.allowedMimeTypes,
+      });
+    }
+
+    if (
+      limits.maxObjectCount != null &&
+      usage.objectCount >= limits.maxObjectCount
+    ) {
+      throw new HttpException(
+        {
+          code: 'OBJECT_QUOTA_EXCEEDED',
+          message: `Organization object count limit (${limits.maxObjectCount}) reached`,
+          maxObjectCount: limits.maxObjectCount,
+          objectCount: usage.objectCount,
+        },
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
+    }
+
+    if (
+      limits.storageQuotaBytes != null &&
+      usage.usedBytes + size > limits.storageQuotaBytes
+    ) {
+      throw new HttpException(
+        {
+          code: 'STORAGE_QUOTA_EXCEEDED',
+          message: `Upload would exceed storage quota (${limits.storageQuotaBytes} bytes)`,
+          storageQuotaBytes: limits.storageQuotaBytes,
+          usedBytes: usage.usedBytes,
+          fileSize: size,
+        },
+        HttpStatus.INSUFFICIENT_STORAGE,
+      );
+    }
+  }
+
+  /**
+   * Re-enqueue processing using current org settings (or an explicit override).
+   * Used by admin regenerate; does not snapshot settings from original upload.
+   */
+  async regenerateProcessing(
+    fileId: string,
+    orgId: string,
+    processingOverride?: ProcessingSettingsOverride | null,
+  ): Promise<{ scheduled: string[] }> {
+    const file = await this.filesService.findById(fileId, orgId);
+    return this.scheduleProcessingJobs(
+      file.id,
+      file.mimeType,
+      orgId,
+      file.originalFilename ?? undefined,
+      processingOverride,
+    );
+  }
+
+  /**
+   * Allow service-to-service uploads (e.g. build artifacts) to use stable keys.
+   * Keys must be relative object paths without traversal segments.
+   */
+  private resolveStorageKey(storageKeyOverride?: string): string | undefined {
+    if (!storageKeyOverride?.trim()) {
+      return undefined;
+    }
+
+    const normalized = storageKeyOverride.trim().replace(/^\/+/, '');
+    if (!normalized || normalized.includes('..') || normalized.includes('\\')) {
+      throw new BadRequestException('Invalid storage key');
+    }
+
+    if (!/^[a-zA-Z0-9_./-]+$/.test(normalized)) {
+      throw new BadRequestException('Invalid storage key characters');
+    }
+
+    return normalized;
+  }
+
+  /**
+   * Schedule processing jobs from resolved org settings.
+   * Resolution: per-upload override → org settings → platform defaults.
+   *
+   * Canonical image variants: first size → `thumbnail`, second → `medium` (WebP by default).
+   */
+  private async scheduleProcessingJobs(
+    fileId: string,
+    mimetype: string,
+    orgId: string,
+    originalFileName?: string,
+    processingOverride?: ProcessingSettingsOverride | null,
+  ): Promise<{ scheduled: string[] }> {
+    const scheduled: string[] = [];
+    try {
+      const settings = await this.processingSettings.resolve(
+        orgId,
+        processingOverride,
+      );
+
+      if (
+        settings.enableImageProcessing &&
+        this.shouldQueueImageVariants(mimetype, originalFileName)
+      ) {
+        const variants = enabledImageVariantSlots(settings);
+        if (variants.length > 0) {
+          await this.queuesService.addImageProcessingJob({
+            fileId,
+            orgId,
+            options: {
+              variants,
+              formats: settings.imageFormats,
+            },
+          });
+          scheduled.push('image');
+          this.logger.log(`Image processing job scheduled for file ${fileId}`);
+        }
+      }
+
+      if (settings.enableVideoProcessing && mimetype.startsWith('video/')) {
+        await this.queuesService.addVideoProcessingJob({
+          fileId,
+          orgId,
+          options: {
+            previewFrames: settings.videoPreviewFrames,
+            thumbnail: settings.videoThumbnail,
+          },
+        });
+        scheduled.push('video');
+        this.logger.log(`Video processing job scheduled for file ${fileId}`);
+      }
+
+      if (settings.enableMetadataExtraction) {
+        await this.queuesService.addMetadataExtractionJob({ fileId, orgId });
+        scheduled.push('metadata');
+        this.logger.log(`Metadata extraction job scheduled for file ${fileId}`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to schedule processing jobs for file ${fileId}:`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+    return { scheduled };
+  }
+
+  /** Sharp-friendly rasters only — skip PSD and other non-raster "image/*" types. */
+  private shouldQueueImageVariants(
+    mimetype: string,
+    originalFileName?: string,
+  ): boolean {
+    const name = (originalFileName || '').toLowerCase();
+    if (name.endsWith('.psd') || name.endsWith('.psb')) {
+      return false;
+    }
+    if (
+      mimetype === 'image/vnd.adobe.photoshop' ||
+      mimetype === 'image/x-photoshop' ||
+      mimetype === 'image/psd' ||
+      mimetype === 'image/photoshop'
+    ) {
+      return false;
+    }
+    return mimetype.startsWith('image/');
+  }
+}

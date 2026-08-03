@@ -1,0 +1,127 @@
+"use client";
+
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
+
+import { Button } from "@workspace/ui/components/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
+import { cn } from "@workspace/ui/lib/utils";
+import { useDataGrid } from "./data-grid";
+
+interface DataGridPaginationProps extends React.ComponentProps<"div"> {
+  pageSizeOptions?: number[];
+}
+
+function DataGridPagination({
+  pageSizeOptions = [10, 20, 30, 40, 50],
+  className,
+  ...props
+}: DataGridPaginationProps) {
+  const { table, recordCount } = useDataGrid();
+  const hasSelectColumn = table
+    .getAllLeafColumns()
+    .some((column) => column.id === "select" || column.id === "selection");
+
+  return (
+    <div
+      data-slot="data-grid-pagination"
+      className={cn(
+        "flex w-full flex-col-reverse items-center justify-between gap-4 overflow-auto p-1 sm:flex-row sm:gap-8",
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex flex-1 items-center gap-4 whitespace-nowrap text-muted-foreground text-sm">
+        <span className="font-semibold text-foreground">
+          Total records: {recordCount}
+        </span>
+        {hasSelectColumn && (
+          <span>
+            {table.getFilteredSelectedRowModel().rows.length} of{" "}
+            {table.getFilteredRowModel().rows.length} row(s) selected.
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col-reverse items-center gap-4 sm:flex-row sm:gap-6 lg:gap-8">
+        <div className="flex items-center space-x-2">
+          <p className="whitespace-nowrap font-medium text-sm">Rows per page</p>
+          <Select
+            value={`${table.getState().pagination.pageSize}`}
+            onValueChange={(value: string) => {
+              table.setPageSize(Number(value));
+            }}
+          >
+            <SelectTrigger className="h-8 bg-background w-[4.5rem] [&[data-size]]:h-8">
+              <SelectValue placeholder={table.getState().pagination.pageSize} />
+            </SelectTrigger>
+            <SelectContent side="top">
+              {pageSizeOptions.map((pageSize) => (
+                <SelectItem key={pageSize} value={`${pageSize}`}>
+                  {pageSize}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center justify-center font-medium text-sm">
+          Page {table.getState().pagination.pageIndex + 1} of{" "}
+          {table.getPageCount()}
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            aria-label="Go to first page"
+            variant="outline"
+            size="icon"
+            className="hidden size-8 lg:flex"
+            onClick={() => table.setPageIndex(0)}
+            disabled={!table.getCanPreviousPage()}
+          >
+            <ChevronsLeft />
+          </Button>
+          <Button
+            aria-label="Go to previous page"
+            variant="outline"
+            size="icon"
+            className="size-8"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            <ChevronLeft />
+          </Button>
+          <Button
+            aria-label="Go to next page"
+            variant="outline"
+            size="icon"
+            className="size-8"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+          >
+            <ChevronRight />
+          </Button>
+          <Button
+            aria-label="Go to last page"
+            variant="outline"
+            size="icon"
+            className="hidden size-8 lg:flex"
+            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+            disabled={!table.getCanNextPage()}
+          >
+            <ChevronsRight />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export { DataGridPagination, type DataGridPaginationProps };

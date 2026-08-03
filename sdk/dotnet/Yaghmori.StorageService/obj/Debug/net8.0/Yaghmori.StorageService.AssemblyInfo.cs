@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Client SDK for storage-service — HTTP + NestJS TCP + Kafka constants")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+c06178a9f9abef05062880e88e92b8dbdcd3f7ef")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+aaaa54551467e5e5c0e5d2decc3c8f07a05f62d5")]
 [assembly: System.Reflection.AssemblyProductAttribute("Yaghmori.StorageService")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Yaghmori.StorageService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.1.0.0")]

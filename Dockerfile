@@ -1,9 +1,9 @@
-# Standalone production image for @platform/storage-service
-# TCP default: 4002 (platform assets — not deployment artifacts)
+# Combined production image: Nest API + Next.js admin
+# Defaults: HTTP PORT=6000 | TCP_PORT=6001 | ADMIN_PORT=6200
+#
+# Build from repo root:
+#   docker build -t storage-service .
 
-# ============================================================================
-# Stage 1: Install + build
-# ============================================================================
 FROM node:20-alpine AS build
 
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
@@ -11,47 +11,60 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install && pnpm rebuild sharp || true
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY scripts ./scripts
 
-COPY tsconfig.json tsconfig.app.json tsup.config.ts drizzle.config.ts nodemon.json ./
-COPY src ./src
+RUN pnpm install --frozen-lockfile || pnpm install
 
-RUN pnpm run build
+RUN pnpm --filter @workspace/validation build \
+ && pnpm --filter @yaghmori/storage-service-server build \
+ && pnpm --filter admin build
 
-# ============================================================================
-# Stage 2: Production runtime
-# ============================================================================
-FROM node:20-alpine AS production
+FROM node:20-alpine AS api-deps
 
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
- && apk add --no-cache netcat-openbsd
+ && apk add --no-cache python3 make g++ ffmpeg
 
-ENV HOST=0.0.0.0
-ENV PORT=4000
-ENV TCP_PORT=4002
-ENV NODE_ENV=production
+WORKDIR /app/api
+COPY apps/api/package.json ./
+RUN pnpm install --prod --ignore-scripts
+
+FROM node:20-alpine AS production
+
+RUN apk add --no-cache netcat-openbsd tini ffmpeg \
+ && addgroup -g 1001 -S nodejs \
+ && adduser -S nestjs -u 1001
+
+ENV HOST=0.0.0.0 \
+    PORT=6000 \
+    TCP_HOST=0.0.0.0 \
+    TCP_PORT=6001 \
+    ADMIN_PORT=6200 \
+    NODE_ENV=production \
+    HOSTNAME=0.0.0.0
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --prod --ignore-scripts \
- && pnpm rebuild sharp || true
+COPY --from=api-deps --chown=nestjs:nodejs /app/api/node_modules /app/api/node_modules
+COPY --from=api-deps --chown=nestjs:nodejs /app/api/package.json /app/api/package.json
+COPY --from=build --chown=nestjs:nodejs /app/apps/api/dist /app/api/dist
+COPY --from=build --chown=nestjs:nodejs /app/apps/api/drizzle.config.ts /app/api/drizzle.config.ts
+COPY --from=build --chown=nestjs:nodejs /app/apps/api/src/database/drizzle /app/api/src/database/drizzle
 
-COPY --from=build /app/dist ./dist
-COPY drizzle.config.ts ./
-COPY src/database/drizzle ./src/database/drizzle
+COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/standalone /app/web
+COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/static /app/web/apps/admin/.next/static
 
-RUN addgroup -g 1001 -S nodejs \
- && adduser -S nestjs -u 1001 \
- && mkdir -p /app/uploads \
- && chown -R nestjs:nodejs /app
+COPY --from=build --chown=nestjs:nodejs /app/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
+ && chmod +x /app/docker-entrypoint.sh
 
 USER nestjs
 
-EXPOSE 4000 4002
+EXPOSE 6000 6001 6200
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD nc -z localhost ${PORT:-4000} || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=50s --retries=3 \
+  CMD nc -z localhost $${PORT:-6000} || exit 1
 
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]

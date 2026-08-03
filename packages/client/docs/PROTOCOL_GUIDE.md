@@ -13,7 +13,7 @@ Full integration guide for **storage-service** over **HTTP**, **NestJS TCP**, an
 cd packages/client && pnpm run codegen
 ```
 
-Default suggestions: TCP **4002**, HTTP **4000** (override freely).
+Default suggestions: TCP **6001**, HTTP **6100** (override freely; avoid **6000** — blocked by Node fetch).
 
 ---
 
@@ -49,13 +49,18 @@ Priority: constructor options → env → contract defaults.
 
 Identical header contract to email-service:
 
-- `x-api-key: <key>` (preferred for API keys)
-- `Authorization: Bearer <jwt>`
+- `x-api-key: <key>` (preferred for API keys) — keys are **org-bound** in the DB
+- `Authorization: Bearer <jwt>` (service JWT may include `orgId`)
 - `Authorization: ApiKey <key>`
+- Optional `x-org-id` — must match the API key’s organization when both are set
 
-Service: `AUTH_API_KEYS`, `JWT_SECRET`, or `AUTH_DISABLED=true` on trusted meshes only. `GET /health` may be `@Public()`.
+Service: DB `api_keys`, `AUTH_API_KEYS` (+ `AUTH_DEFAULT_ORG_ID`), `JWT_SECRET`, or `AUTH_DISABLED=true` on trusted meshes only. `GET /health` may be `@Public()`.
 
-Never expose TCP publicly. Never put API keys in `Authorization: Bearer`.
+Admin UI uses a separate JWT surface under `/admin/api/*` (not the SDK).
+
+Never expose TCP publicly. Never put API keys in `Authorization: Bearer`. Never put admin JWTs in the SDK.
+
+Duplicate file detection (SHA-256) is **per organization**.
 
 ---
 
@@ -148,7 +153,7 @@ services.AddStorageServiceClient();
 await using var tcp = new StorageServiceTcpClient(new StorageServiceOptions
 {
     Host = "storage-service",
-    TcpPort = 4002,
+    TcpPort = 6001,
 });
 var info = await tcp.GetFileInfoAsync<JsonElement>(new { id = fileId });
 

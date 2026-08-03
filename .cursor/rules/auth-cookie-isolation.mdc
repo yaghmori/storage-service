@@ -1,0 +1,7 @@
+# Auth cookie isolation
+
+Admin session cookie MUST be named `storage_admin_session` and sealed with `AUTH_SECRET`.
+
+Do not reuse eAllyfe cookie names (`eallyfe_admin_session`, etc.).
+
+Core API keys (`x-api-key`) are never written to browser cookies; only the admin BFF injects Bearer admin JWT.

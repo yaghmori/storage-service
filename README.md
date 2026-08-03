@@ -1,64 +1,83 @@
-# @platform/storage-service
+# @yaghmori/storage-service
 
 ![stability-stable](https://img.shields.io/badge/stability-stable-green.svg)
 
-Object storage for **platform assets** — avatars, documents, images, and similar user/content files. Upload, metadata, signed URLs, and optional image processing. Local / MinIO / S3 providers.
+Object storage microservice + Next.js admin — multi-tenant orgs, Local / MinIO / S3 providers, BullMQ processing, optional Kafka, TCP/HTTP APIs, npm + .NET SDKs.
 
-> **Not for deployment artifacts.** Build outputs, release tarballs, and deploy packages are out of V1 scope.
+> **Not for deployment artifacts.** Build outputs and release packages are out of scope.
 
-## Integrate in 10 minutes
+## Monorepo layout
+
+```text
+apps/api          NestJS storage-service server (@yaghmori/storage-service-server)
+apps/admin        Next.js admin UI (JWT, port 6200)
+packages/client   npm SDK @yaghmori/storage-service (API key auth only)
+packages/ui       @workspace/ui
+packages/validation
+packages/config-typescript
+packages/config-eslint
+```
+
+## Auth split
+
+| Surface | Auth |
+| ------- | ---- |
+| **Admin UI** `/admin/api/*` | Admin JWT (login → iron-session BFF, cookie `storage_admin_session`) |
+| **Core HTTP** `/api/*` + SDK | Org-bound API key (`x-api-key`) + optional static `AUTH_API_KEYS` |
+| **TCP / Kafka** | Network trust (unchanged) |
+
+## Local development (recommended)
+
+**API in Docker**, **admin on the host**:
 
 ```bash
 pnpm install
 
-docker compose up -d postgres redis minio
+# 1) API only — joins docker-services network `internal`
+pnpm docker:dev
+# HTTP http://localhost:6100  |  TCP :6001
 
-cp .env.example .env
-# DATABASE_URL, REDIS_*, MINIO_* or local UPLOAD_PATH
-
-pnpm db:push
+# 2) Migrate + seed (against the same DB)
+pnpm db:migrate
 pnpm db:seed
 
-pnpm start:dev
-# HTTP :4000  |  TCP :4002
+# 3) Admin UI
+pnpm dev
+# http://localhost:6200  →  proxies to STORAGE_API_URL (default http://localhost:6100/api)
+# Login: admin@example.com / admin (or ADMIN_EMAIL / ADMIN_PASSWORD)
 ```
 
-Primary integration: **HTTP multipart upload** (`POST /upload`) + signed URL (`GET` serving routes / TCP `storage.get_signed_url`).
+Set `AUTH_DEFAULT_ORG_ID` to the seeded default org UUID so static `AUTH_API_KEYS` bind correctly.
 
-## TCP patterns
-
-Canonical (from `@yaghmori/messaging-contracts`):
-
-- `storage.get_file_info`
-- `storage.delete_file`
-- `storage.batch_operations`
-- `storage.get_signed_url`
-
-Legacy Allyfe aliases (delegated in-process):
-
-- `uploadFile` — buffer upload via `UploadService`
-- `getAssetUrl` — signed URL
-- `deleteAsset` — soft/hard delete
-
-Prefer HTTP upload when calling from languages that already speak multipart.
+| Script | What runs |
+| ------ | --------- |
+| `pnpm docker:dev` | Nest API in Docker (`storage-service-api-dev`) |
+| `pnpm dev` | Next admin only |
+| `pnpm dev:api` | Nest API on host |
+| `pnpm dev:all` | Turbo: host API + admin |
 
 ## Ports
 
-| Protocol | Default |
-|----------|---------|
-| HTTP | `4000` |
-| TCP | `4002` |
+| Surface | Default (compose / admin) | SDK contract default |
+| ------- | ------------------------- | -------------------- |
+| HTTP | 6100 | 6100 |
+| TCP | 6001 | 6001 |
+| Admin | 6200 | — |
 
-## Contracts
+> **Note:** Do not use HTTP port **6000** — Node’s `fetch` (undici) blocks it as an X11 port (`bad port`).
 
-Depends on [`@yaghmori/messaging-contracts`](https://www.npmjs.com/package/@yaghmori/messaging-contracts) (`^0.1.0` from npm).
+## Admin features
 
-## Docker
+Tenant (`/{orgSlug}/…`): Dashboard, Files, Jobs, Analytics, Providers, Tokens, Settings.  
+Platform (`/~/…`): Organizations, Admin users, Account.
+
+## SDK
 
 ```bash
-docker compose build
-docker compose up
+cd packages/client && pnpm run codegen
 ```
+
+Docs: `packages/client/docs/{PROTOCOL_GUIDE,USAGE,BEST_PRACTICES}.md`
 
 ## License
 

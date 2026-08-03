@@ -9,8 +9,8 @@ public static class StorageService
 
     public static class Ports
     {
-        public const int Tcp = 4002;
-        public const int Http = 4000;
+        public const int Tcp = 6001;
+        public const int Http = 6100;
     }
 
     public static class Env

@@ -1,0 +1,11 @@
+{
+  "watch": ["src"],
+  "ext": "ts,json",
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist"],
+  "exec": "node -r reflect-metadata -r ts-node/register/transpile-only src/main.ts",
+  "delay": 500,
+  "verbose": true,
+  "legacyWatch": true,
+  "polling": true,
+  "interval": 1000
+}

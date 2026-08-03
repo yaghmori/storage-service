@@ -10,6 +10,8 @@ import { HTTP_PATHS } from './generated';
 export type StorageHttpClientOptions = ServiceEndpoint & {
   auth?: ClientAuth | string;
   apiKey?: string;
+  /** Optional org UUID; must match the API key's organization when set */
+  orgId?: string;
   headers?: Record<string, string>;
   fetch?: typeof fetch;
 };
@@ -26,6 +28,7 @@ export class StorageHttpClient {
     this.headers = {
       accept: 'application/json',
       ...buildAuthHeaders(auth, 'STORAGE_SERVICE_API_KEY'),
+      ...(options.orgId ? { 'x-org-id': options.orgId } : {}),
       ...options.headers,
     };
   }
@@ -38,8 +41,20 @@ export class StorageHttpClient {
     return this.request('DELETE', fillPath(HTTP_PATHS.DELETE_FILE, { id }));
   }
 
-  async getSignedUrl(id: string): Promise<unknown> {
-    return this.request('GET', fillPath(HTTP_PATHS.SIGNED_URL, { id }));
+  async getSignedUrl(
+    id: string,
+    options?: { expiresIn?: number; variant?: 'thumbnail' | 'medium' },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (options?.expiresIn != null) {
+      params.set('expiresIn', String(options.expiresIn));
+    }
+    if (options?.variant) {
+      params.set('variant', options.variant);
+    }
+    const query = params.toString();
+    const path = fillPath(HTTP_PATHS.SIGNED_URL, { id });
+    return this.request('GET', query ? `${path}?${query}` : path);
   }
 
   async health(): Promise<unknown> {
