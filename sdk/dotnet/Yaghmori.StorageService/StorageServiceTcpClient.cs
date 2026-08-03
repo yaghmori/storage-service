@@ -25,6 +25,18 @@ public sealed class StorageServiceTcpClient : IAsyncDisposable
     public Task<T?> DeleteFileAsync<T>(object request, CancellationToken cancellationToken = default)
         => _tcp.SendAsync<T>(StorageService.Patterns.DeleteFile, request, cancellationToken);
 
+    public Task<T?> ListProcessorResultsAsync<T>(object request, CancellationToken cancellationToken = default)
+        => _tcp.SendAsync<T>(StorageService.Patterns.ListProcessorResults, request, cancellationToken);
+
+    public Task<T?> GetProcessorResultAsync<T>(object request, CancellationToken cancellationToken = default)
+        => _tcp.SendAsync<T>(StorageService.Patterns.GetProcessorResult, request, cancellationToken);
+
+    public Task<T?> GetFileMetadataAsync<T>(object request, CancellationToken cancellationToken = default)
+        => _tcp.SendAsync<T>(StorageService.Patterns.GetFileMetadata, request, cancellationToken);
+
+    public Task<T?> ListVariantsAsync<T>(object request, CancellationToken cancellationToken = default)
+        => _tcp.SendAsync<T>(StorageService.Patterns.ListVariants, request, cancellationToken);
+
     public Task<T?> SendAsync<T>(string pattern, object? data, CancellationToken cancellationToken = default)
         => _tcp.SendAsync<T>(pattern, data, cancellationToken);
 

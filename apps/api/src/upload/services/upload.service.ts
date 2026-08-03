@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Injectable,
   Logger,
+  Optional,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
@@ -13,13 +14,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { FileDuplicationService } from '../../files/services/file-duplication.service';
 import { FilesChecksumService } from '../../files/services/files-checksum.service';
 import { FilesService } from '../../files/services/files.service';
+import { StorageLifecycleEventsService } from '../../lib/platform-kafka';
 import { OrganizationService } from '../../organizations/organization.service';
 import { OrgLimitsService } from '../../organizations/services/org-limits.service';
 import { OrgUsageService } from '../../organizations/services/org-usage.service';
-import { ProcessingSettingsService } from '../../processing/services/processing-settings.service';
-import type { ProcessingSettingsOverride } from '../../processing/types/processing-settings';
-import { enabledImageVariantSlots } from '../../processing/types/processing-settings';
-import { QueuesService } from '../../queues/queues.service';
+import { ProcessorSchedulerService } from '../../processing/services/processor-scheduler.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 
 @Injectable()
@@ -30,12 +29,13 @@ export class UploadService {
     private readonly filesService: FilesService,
     private readonly checksumService: FilesChecksumService,
     private readonly storageFactory: StorageFactoryService,
-    private readonly queuesService: QueuesService,
     private readonly fileDuplicationService: FileDuplicationService,
-    private readonly processingSettings: ProcessingSettingsService,
+    private readonly processorScheduler: ProcessorSchedulerService,
     private readonly organizations: OrganizationService,
     private readonly limitsService: OrgLimitsService,
     private readonly usageService: OrgUsageService,
+    @Optional()
+    private readonly lifecycleEvents?: StorageLifecycleEventsService,
   ) {}
 
   async uploadFile(
@@ -44,7 +44,6 @@ export class UploadService {
     storageProviderId?: string,
     userId?: string,
     storageKeyOverride?: string,
-    processingOverride?: ProcessingSettingsOverride | null,
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -99,6 +98,14 @@ export class UploadService {
       this.logger.log(`Recorded duplicate upload event for file ${originalFile.id}`);
 
       const fileToReturn = updatedFile || originalFile;
+      void this.lifecycleEvents?.fileUploaded({
+        fileId: fileToReturn.id,
+        orgId,
+        fileName: fileToReturn.originalFilename,
+        fileSize: Number(fileToReturn.size),
+        mimeType: fileToReturn.mimeType,
+        isDuplicate: true,
+      });
       return {
         id: fileToReturn.id,
         originalFileName: fileToReturn.originalFilename,
@@ -156,7 +163,6 @@ export class UploadService {
         mimeType: file.mimetype,
         size: BigInt(buffer.length),
         fileHash: sha256Hash,
-        checksum: sha256Hash,
       });
       await this.usageService.increment(orgId, buffer.length);
     } catch (error) {
@@ -177,8 +183,16 @@ export class UploadService {
       file.mimetype,
       orgId,
       file.originalname,
-      processingOverride,
     );
+
+    void this.lifecycleEvents?.fileUploaded({
+      fileId: fileRecord.id,
+      orgId,
+      fileName: fileRecord.originalFilename,
+      fileSize: Number(fileRecord.size),
+      mimeType: fileRecord.mimeType,
+      isDuplicate: false,
+    });
 
     return {
       id: fileRecord.id,
@@ -253,13 +267,13 @@ export class UploadService {
   }
 
   /**
-   * Re-enqueue processing using current org settings (or an explicit override).
-   * Used by admin regenerate; does not snapshot settings from original upload.
+   * Re-enqueue processing using current org_processors bindings.
+   * Pass `onlyKeys` to target a subset (e.g. image normalize + variants).
    */
   async regenerateProcessing(
     fileId: string,
     orgId: string,
-    processingOverride?: ProcessingSettingsOverride | null,
+    onlyKeys?: string[],
   ): Promise<{ scheduled: string[] }> {
     const file = await this.filesService.findById(fileId, orgId);
     return this.scheduleProcessingJobs(
@@ -267,7 +281,8 @@ export class UploadService {
       file.mimeType,
       orgId,
       file.originalFilename ?? undefined,
-      processingOverride,
+      onlyKeys,
+      true,
     );
   }
 
@@ -292,89 +307,35 @@ export class UploadService {
     return normalized;
   }
 
-  /**
-   * Schedule processing jobs from resolved org settings.
-   * Resolution: per-upload override → org settings → platform defaults.
-   *
-   * Canonical image variants: first size → `thumbnail`, second → `medium` (WebP by default).
-   */
   private async scheduleProcessingJobs(
     fileId: string,
     mimetype: string,
     orgId: string,
     originalFileName?: string,
-    processingOverride?: ProcessingSettingsOverride | null,
+    onlyKeys?: string[],
+    throwOnError = false,
   ): Promise<{ scheduled: string[] }> {
-    const scheduled: string[] = [];
     try {
-      const settings = await this.processingSettings.resolve(
+      const result = await this.processorScheduler.scheduleForFile({
+        fileId,
         orgId,
-        processingOverride,
-      );
-
-      if (
-        settings.enableImageProcessing &&
-        this.shouldQueueImageVariants(mimetype, originalFileName)
-      ) {
-        const variants = enabledImageVariantSlots(settings);
-        if (variants.length > 0) {
-          await this.queuesService.addImageProcessingJob({
-            fileId,
-            orgId,
-            options: {
-              variants,
-              formats: settings.imageFormats,
-            },
-          });
-          scheduled.push('image');
-          this.logger.log(`Image processing job scheduled for file ${fileId}`);
-        }
+        mimeType: mimetype,
+        originalFileName,
+        onlyKeys,
+      });
+      if (result.scheduled.length > 0) {
+        this.logger.log(
+          `Scheduled processors for file ${fileId}: ${result.scheduled.join(', ')}`,
+        );
       }
-
-      if (settings.enableVideoProcessing && mimetype.startsWith('video/')) {
-        await this.queuesService.addVideoProcessingJob({
-          fileId,
-          orgId,
-          options: {
-            previewFrames: settings.videoPreviewFrames,
-            thumbnail: settings.videoThumbnail,
-          },
-        });
-        scheduled.push('video');
-        this.logger.log(`Video processing job scheduled for file ${fileId}`);
-      }
-
-      if (settings.enableMetadataExtraction) {
-        await this.queuesService.addMetadataExtractionJob({ fileId, orgId });
-        scheduled.push('metadata');
-        this.logger.log(`Metadata extraction job scheduled for file ${fileId}`);
-      }
+      return result;
     } catch (error) {
       this.logger.error(
         `Failed to schedule processing jobs for file ${fileId}:`,
         error instanceof Error ? error.stack : String(error),
       );
+      if (throwOnError) throw error;
+      return { scheduled: [] };
     }
-    return { scheduled };
-  }
-
-  /** Sharp-friendly rasters only — skip PSD and other non-raster "image/*" types. */
-  private shouldQueueImageVariants(
-    mimetype: string,
-    originalFileName?: string,
-  ): boolean {
-    const name = (originalFileName || '').toLowerCase();
-    if (name.endsWith('.psd') || name.endsWith('.psb')) {
-      return false;
-    }
-    if (
-      mimetype === 'image/vnd.adobe.photoshop' ||
-      mimetype === 'image/x-photoshop' ||
-      mimetype === 'image/psd' ||
-      mimetype === 'image/photoshop'
-    ) {
-      return false;
-    }
-    return mimetype.startsWith('image/');
   }
 }

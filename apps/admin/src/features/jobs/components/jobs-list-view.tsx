@@ -104,8 +104,8 @@ export function JobsListView() {
   const statusFilter = firstStringFilter(
     columnFilters.find((f) => f.id === "status")?.value,
   );
-  const jobTypeFilter = firstStringFilter(
-    columnFilters.find((f) => f.id === "jobType")?.value,
+  const processorKeyFilter = firstStringFilter(
+    columnFilters.find((f) => f.id === "processorKey")?.value,
   );
   const searchTerm =
     firstStringFilter(columnFilters.find((f) => f.id === "search")?.value) ??
@@ -127,12 +127,15 @@ export function JobsListView() {
     page: pagination.pageIndex + 1,
     limit: pagination.pageSize,
     status: statusFilter,
-    jobType: jobTypeFilter,
+    processorKey: processorKeyFilter,
     // Always send as `search` — API matches file UUID or filename.
     search: searchTerm || undefined,
     orgId: activeOrg?.id,
   });
 
+  // Must run during render (after useDataTable): useReactTable re-applies
+  // the initial `data: []` every render, so a useEffect update is wiped /
+  // never painted.
   table.setOptions((prev) => ({
     ...prev,
     data: data?.items ?? [],

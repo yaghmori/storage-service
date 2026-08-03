@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { FileResponse } from '../../lib/contracts';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
+import { StorageLifecycleEventsService } from '../../lib/platform-kafka';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 import { toFileResponse } from '../files.mapper';
 import { FilesRepository } from '../repositories/files.repository';
@@ -14,6 +15,8 @@ export class FilesService {
     private readonly repository: FilesRepository,
     private readonly storageFactory: StorageFactoryService,
     private readonly duplicationService: FileDuplicationService,
+    @Optional()
+    private readonly lifecycleEvents?: StorageLifecycleEventsService,
   ) {}
 
   async findById(id: string, orgId?: string): Promise<FileResponse> {
@@ -40,7 +43,6 @@ export class FilesService {
     mimeType: string;
     size: bigint;
     fileHash: string;
-    checksum?: string;
     uploadedBy?: string;
     tags?: string;
   }): Promise<FileResponse> {
@@ -118,11 +120,20 @@ export class FilesService {
           await provider.delete(fileRow.storageKey);
           await this.repository.delete(id);
           this.logger.log(`Hard deleted file ${id} (no more references)`);
-          // For hard delete, return the file before deletion
+          void this.lifecycleEvents?.fileDeleted({
+            fileId: id,
+            orgId: fileRow.orgId,
+            hardDelete: true,
+          });
           return file;
         } else {
           const softDeleted = await this.repository.softDelete(id);
           this.logger.log(`Soft deleted file ${id} (no more references)`);
+          void this.lifecycleEvents?.fileDeleted({
+            fileId: id,
+            orgId: fileRow.orgId,
+            hardDelete: false,
+          });
           return softDeleted ? toFileResponse(softDeleted) : file;
         }
       }
@@ -142,11 +153,20 @@ export class FilesService {
         await provider.delete(fileRow.storageKey);
         await this.repository.delete(id);
         this.logger.log(`Hard deleted file ${id}`);
-        // For hard delete, return the file before deletion
+        void this.lifecycleEvents?.fileDeleted({
+          fileId: id,
+          orgId: fileRow.orgId,
+          hardDelete: true,
+        });
         return file;
       } else {
         const softDeleted = await this.repository.softDelete(id);
         this.logger.log(`Soft deleted file ${id} (reference count: 0)`);
+        void this.lifecycleEvents?.fileDeleted({
+          fileId: id,
+          orgId: fileRow.orgId,
+          hardDelete: false,
+        });
         return softDeleted ? toFileResponse(softDeleted) : file;
       }
     }
@@ -187,9 +207,17 @@ export class FilesService {
   async updateFile(id: string, data: {
     width?: number;
     height?: number;
-    aspectRatio?: string;
-    isProcessed?: boolean;
-    processingStatus?: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+    duration?: number;
+    perceptualHash?: string;
+    processingStatus?:
+      | 'pending'
+      | 'processing'
+      | 'completed'
+      | 'failed'
+      | 'cancelled'
+      | 'partial'
+      | 'skipped';
+    processingError?: string | null;
     [key: string]: unknown;
   }): Promise<FileResponse | null> {
     const updated = await this.repository.update(id, data);

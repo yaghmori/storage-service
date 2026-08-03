@@ -20,14 +20,42 @@ export const PAGE_ROUTES = {
   USERS: "/~/users",
   ACCOUNT: "/~/settings",
   ACCOUNT_PROFILE: "/~/settings/profile",
+  ACCOUNT_PREFERENCES: "/~/settings/preferences",
   ACCOUNT_APPEARANCE: "/~/settings/appearance",
   home: (slug: string) => orgPath(slug),
   files: (slug: string) => orgPath(slug, "files"),
   jobs: (slug: string) => orgPath(slug, "jobs"),
   analytics: (slug: string) => orgPath(slug, "analytics"),
-  providers: (slug: string) => orgPath(slug, "providers"),
-  tokens: (slug: string) => orgPath(slug, "tokens"),
+  /** @deprecated Prefer settingsProviders — kept for bookmarks. */
+  providers: (slug: string) => orgPath(slug, "settings", "providers"),
+  /** @deprecated Prefer settingsProcessorBackends — kept for bookmarks. */
+  processorBackends: (slug: string) =>
+    orgPath(slug, "settings", "processor-backends"),
+  /** @deprecated Prefer settingsTokens — kept for bookmarks. */
+  tokens: (slug: string) => orgPath(slug, "settings", "tokens"),
   settings: (slug: string) => orgPath(slug, "settings"),
+  settingsGeneral: (slug: string) => orgPath(slug, "settings", "general"),
+  settingsLimits: (slug: string) => orgPath(slug, "settings", "limits"),
+  settingsProviders: (slug: string) => orgPath(slug, "settings", "providers"),
+  settingsProcessorBackends: (slug: string) =>
+    orgPath(slug, "settings", "processor-backends"),
+  settingsProcessing: (slug: string) =>
+    orgPath(slug, "settings", "processing"),
+  settingsTokens: (slug: string) => orgPath(slug, "settings", "tokens"),
+  settingsRetention: (slug: string) => orgPath(slug, "settings", "retention"),
+  settingsDanger: (slug: string) => orgPath(slug, "settings", "danger"),
+  settingsSection: (
+    slug: string,
+    section:
+      | "general"
+      | "limits"
+      | "providers"
+      | "processor-backends"
+      | "processing"
+      | "tokens"
+      | "retention"
+      | "danger",
+  ) => orgPath(slug, "settings", section),
 } as const;
 
 export const PUBLIC_ROUTES = [

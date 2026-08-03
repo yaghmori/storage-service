@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from "@workspace/ui/components";
-import { Eye, MoreHorizontal, Trash2, Workflow } from "lucide-react";
+import { Eye, MoreHorizontal, RotateCcw, Trash2, Workflow } from "lucide-react";
 import type { FileRow } from "../hooks/use-files-queries";
 import { FilePreviewThumb } from "../components/file-preview-thumb";
 
@@ -54,8 +54,10 @@ export function createFilesColumns(
   options?: {
     visibility?: FilesVisibility;
     retentionDays?: number;
+    onRestore?: (row: FileRow) => void;
   },
 ): ColumnDef<FileRow>[] {
+  const onRestore = options?.onRestore;
   const visibility = options?.visibility ?? "active";
   const retentionDays = options?.retentionDays ?? 30;
   const showDeletedColumns =
@@ -81,12 +83,13 @@ export function createFilesColumns(
     },
     {
       id: "search",
-      accessorKey: "search",
+      accessorFn: () => "",
       header: "Search",
       cell: () => null,
       enableColumnFilter: true,
       enableSorting: false,
       enableHiding: false,
+      filterFn: () => true,
       meta: {
         variant: "text",
         label: "Search",
@@ -140,6 +143,27 @@ export function createFilesColumns(
       ),
     },
     {
+      id: "fileType",
+      accessorFn: () => "",
+      header: "File type",
+      cell: () => null,
+      enableColumnFilter: true,
+      enableSorting: false,
+      enableHiding: false,
+      filterFn: () => true,
+      meta: {
+        variant: "select",
+        label: "File type",
+        options: [
+          { value: "images", label: "Images" },
+          { value: "videos", label: "Videos" },
+          { value: "documents", label: "Documents" },
+          { value: "audio", label: "Audio" },
+          { value: "other", label: "Other" },
+        ],
+      },
+    },
+    {
       accessorKey: "mimeType",
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Type" />
@@ -156,7 +180,14 @@ export function createFilesColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Size" />
       ),
-      meta: { label: "Size", skeleton: <Skeleton className="h-4 w-16" /> },
+      enableColumnFilter: true,
+      meta: {
+        variant: "range",
+        label: "Size",
+        unit: "MB",
+        range: [0, 1024], // MB; matches SIZE_FILTER_MAX_MB in list view
+        skeleton: <Skeleton className="h-4 w-16" />,
+      },
       cell: ({ row }) => (
         <span className="tabular-nums">{formatBytes(row.original.size)}</span>
       ),
@@ -166,7 +197,21 @@ export function createFilesColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Status" />
       ),
-      meta: { label: "Status", skeleton: <Skeleton className="h-5 w-20" /> },
+      enableColumnFilter: true,
+      meta: {
+        variant: "select",
+        label: "Status",
+        options: [
+          { value: "pending", label: "Pending" },
+          { value: "processing", label: "Processing" },
+          { value: "completed", label: "Completed" },
+          { value: "partial", label: "Partial" },
+          { value: "skipped", label: "Skipped" },
+          { value: "failed", label: "Failed" },
+          { value: "cancelled", label: "Cancelled" },
+        ],
+        skeleton: <Skeleton className="h-5 w-20" />,
+      },
       cell: ({ row }) => {
         const status = row.original.processingStatus;
         if (!status) {
@@ -264,6 +309,12 @@ export function createFilesColumns(
             <Workflow className="mr-2 h-4 w-4" />
             View jobs
           </DropdownMenuItem>
+          {row.original.deletedAt ? (
+            <DropdownMenuItem onClick={() => onRestore?.(row.original)}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Restore
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             onClick={() => onDelete?.(row.original)}
             className="text-destructive focus:text-destructive"

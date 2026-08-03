@@ -81,7 +81,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Bump patch, build, publish npm
+      - name: Align version, build, publish npm
         working-directory: packages/client
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -92,8 +92,36 @@ jobs:
             exit 1
           fi
           pnpm install --frozen-lockfile
-          pnpm version patch --no-git-tag-version
+
+          LOCAL="$(node -p "require('./package.json').version")"
+          PUBLISHED="$(npm view @yaghmori/storage-service version 2>/dev/null || true)"
+          BASE="$LOCAL"
+          if [ -n "${PUBLISHED}" ]; then
+            BASE="$(node -e "
+              const parse = (v) => v.split('.').map((x) => Number(x) || 0);
+              const a = parse(process.argv[1]);
+              const b = parse(process.argv[2]);
+              for (let i = 0; i < 3; i++) {
+                if (b[i] > a[i]) { console.log(process.argv[2]); process.exit(0); }
+                if (a[i] > b[i]) { console.log(process.argv[1]); process.exit(0); }
+              }
+              console.log(process.argv[1]);
+            " "$LOCAL" "$PUBLISHED")"
+            echo "Aligning to base ${BASE} (local=${LOCAL}, npm=${PUBLISHED})"
+            npm version "$BASE" --no-git-tag-version --allow-same-version
+          fi
+
+          # If this exact version is not on npm yet, publish it; otherwise patch-bump.
           VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@yaghmori/storage-service@${VERSION}" version >/dev/null 2>&1; then
+            pnpm version patch --no-git-tag-version
+            VERSION="$(node -p "require('./package.json').version")"
+            while npm view "@yaghmori/storage-service@${VERSION}" version >/dev/null 2>&1; do
+              pnpm version patch --no-git-tag-version
+              VERSION="$(node -p "require('./package.json').version")"
+            done
+          fi
+
           sed -i "s|<Version>.*</Version>|<Version>${VERSION}</Version>|" \
             ../../sdk/dotnet/Yaghmori.StorageService/Yaghmori.StorageService.csproj
           pnpm run build

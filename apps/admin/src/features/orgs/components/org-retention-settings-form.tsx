@@ -1,7 +1,7 @@
 "use client";
 
 import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
-import { Button, Input, Label } from "@workspace/ui/components";
+import { Button, Card, CardContent, Input, Label } from "@workspace/ui/components";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -38,21 +38,24 @@ export function OrgRetentionSettingsForm({ orgId }: { orgId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2 max-w-sm">
-        <Label htmlFor="retention-days">Soft-delete retention (days)</Label>
-        <Input
-          id="retention-days"
-          type="number"
-          min={1}
-          max={3650}
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value) || 1)}
-        />
-        <p className="text-xs text-muted-foreground">
-          Soft-deleted files are hard-purged after this many days by a daily
-          cleanup job. Quota is freed only after hard purge.
-        </p>
-      </div>
+      <Card>
+        <CardContent className="space-y-2 p-6">
+          <Label htmlFor="retention-days">Soft-delete retention (days)</Label>
+          <Input
+            id="retention-days"
+            type="number"
+            min={1}
+            max={3650}
+            className="max-w-sm"
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value) || 1)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Soft-deleted files are hard-purged after this many days by a daily
+            cleanup job. Quota is freed only after hard purge.
+          </p>
+        </CardContent>
+      </Card>
       <div className="flex justify-end">
         <Button
           disabled={updateMutation.isPending}

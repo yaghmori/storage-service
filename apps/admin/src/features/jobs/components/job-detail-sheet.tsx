@@ -12,9 +12,8 @@ import {
 } from "@workspace/ui/components";
 import {
   JobStatusLabels,
-  JobTypeDescriptions,
-  JobTypeLabels,
-  type JobType,
+  ProcessorKeyDescriptions,
+  ProcessorKeyLabels,
 } from "@workspace/validation";
 import { Check, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -102,26 +101,24 @@ export function JobDetailSheet({
   );
   const retryMutation = useRetryJobMutation(activeOrg?.id);
 
-  const typeKey = data?.jobType as JobType | undefined;
+  const processorKey = data?.processorKey;
   const progress =
     data?.progress == null || !Number.isFinite(Number(data.progress))
       ? null
       : Math.max(0, Math.min(100, Number(data.progress)));
-  const canRetry =
-    data?.status === "failed" || data?.status === "cancelled";
+  const canRetry = data?.status === "failed" || data?.status === "cancelled";
 
   return (
     <ResponsiveSheet
       open={open}
       onOpenChange={onOpenChange}
       side="right"
-      className="w-full sm:max-w-lg"
+      className="w-full sm:max-w-2xl lg:max-w-3xl"
     >
       <ResponsiveSheet.Header>
         <ResponsiveSheet.Title>
           {data
-            ? (JobTypeLabels[data.jobType as keyof typeof JobTypeLabels] ??
-              data.jobType)
+            ? (ProcessorKeyLabels[data.processorKey] ?? data.processorKey)
             : "Job details"}
         </ResponsiveSheet.Title>
         <ResponsiveSheet.Description>
@@ -158,9 +155,9 @@ export function JobDetailSheet({
               </div>
             </div>
 
-            {typeKey && JobTypeDescriptions[typeKey] ? (
+            {processorKey && ProcessorKeyDescriptions[processorKey] ? (
               <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                {JobTypeDescriptions[typeKey]}
+                {ProcessorKeyDescriptions[processorKey]}
               </p>
             ) : null}
 
@@ -190,12 +187,10 @@ export function JobDetailSheet({
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Type</dt>
+                <dt className="text-muted-foreground">Processor</dt>
                 <dd>
                   <Badge variant="outline" className="capitalize">
-                    {JobTypeLabels[
-                      data.jobType as keyof typeof JobTypeLabels
-                    ] ?? data.jobType}
+                    {ProcessorKeyLabels[data.processorKey] ?? data.processorKey}
                   </Badge>
                 </dd>
               </div>
@@ -249,22 +244,57 @@ export function JobDetailSheet({
             <div className="space-y-3">
               <CopyableId label="Job ID" value={data.id} />
               <CopyableId label="File ID" value={data.fileId} />
-              <CopyableId
-                label="BullMQ ID"
-                value={data.bullmqJobId ?? "—"}
-              />
+              <CopyableId label="BullMQ ID" value={data.bullmqJobId ?? "—"} />
               {data.orgId ? (
                 <CopyableId label="Organization ID" value={data.orgId} />
               ) : null}
             </div>
 
-            {data.errorMessage ? (
+            {data.status === "failed" && data.errorMessage ? (
               <>
                 <Separator />
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-destructive">Error</p>
                   <pre className="max-h-64 overflow-auto rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs whitespace-pre-wrap break-words">
                     {data.errorMessage}
+                  </pre>
+                </div>
+              </>
+            ) : null}
+
+            {Array.isArray(data.logs) && data.logs.length > 0 ? (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Logs</p>
+                    {(data.status === "pending" ||
+                      data.status === "processing") && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Loader2 className="size-3 animate-spin" />
+                        Live
+                      </Badge>
+                    )}
+                  </div>
+                  <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+                    {data.logs
+                      .map(
+                        (line) =>
+                          `${line.ts} [${line.level}] ${line.message}`,
+                      )
+                      .join("\n")}
+                  </pre>
+                </div>
+              </>
+            ) : null}
+
+            {data.output && Object.keys(data.output).length > 0 ? (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Output</p>
+                  <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
+                    {JSON.stringify(data.output, null, 2)}
                   </pre>
                 </div>
               </>

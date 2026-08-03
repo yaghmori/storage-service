@@ -4,20 +4,18 @@ import type { processingJobs } from '../database/drizzle/schema';
 type ProcessingJobRow = typeof processingJobs.$inferSelect;
 
 /**
- * Maps job type from DB enum to contract enum
- * DB: 'image', 'video', 'metadata', 'thumbnail', 'transcode'
+ * Maps processor key to the legacy contract enum.
  * Contract: 'thumbnail', 'resize', 'compress', 'convert', 'transcode'
  */
-function mapJobType(dbJobType: string): ProcessingJobResponse['type'] {
+function mapJobType(processorKey: string): ProcessingJobResponse['type'] {
   const typeMap: Record<string, ProcessingJobResponse['type']> = {
-    thumbnail: 'thumbnail',
-    transcode: 'transcode',
-    image: 'resize', // Default image processing to resize
-    video: 'transcode', // Video processing is transcode
-    metadata: 'convert', // Metadata extraction is a form of conversion
+    'image.variants': 'resize',
+    'video.preview': 'transcode',
+    'metadata.exif': 'convert',
+    'ai.vision': 'convert',
   };
 
-  return typeMap[dbJobType] || 'resize';
+  return typeMap[processorKey] || 'convert';
 }
 
 /**
@@ -45,9 +43,9 @@ export function toProcessingJobResponse(
   return {
     id: row.id,
     fileId: row.fileId,
-    type: mapJobType(row.jobType),
+    type: mapJobType(row.processorKey),
     status: mapProcessingStatus(row.status),
-    parameters: null, // Parameters not stored in processingJobs table
+    parameters: row.parameters as Record<string, unknown> | null,
     result: null, // Result not stored in processingJobs table
     error: row.errorMessage ?? null,
     startedAt: row.startedAt?.toISOString() ?? null,

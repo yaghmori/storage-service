@@ -1,10 +1,13 @@
 "use client";
 
+import { readActiveThemeCookie } from "@/lib/active-theme-cookie";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ActiveThemeProvider } from "@workspace/ui/providers/active-theme";
 import { ThemeProvider } from "next-themes";
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./auth-provider";
+import { LocalTimezoneProvider } from "./local-timezone-provider";
 
 function useIsMobileOrTablet() {
   const [isMobileOrTablet, setIsMobileOrTablet] = useState(false);
@@ -38,6 +41,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         },
       }),
   );
+  const [initialTheme] = useState(() => readActiveThemeCookie());
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -48,12 +52,16 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster
-            position={isMobileOrTablet ? "top-center" : "bottom-right"}
-            richColors
-            duration={5000}
-          />
+          <ActiveThemeProvider initialTheme={initialTheme}>
+            <LocalTimezoneProvider>
+              {children}
+              <Toaster
+                position={isMobileOrTablet ? "top-center" : "bottom-right"}
+                richColors
+                duration={5000}
+              />
+            </LocalTimezoneProvider>
+          </ActiveThemeProvider>
         </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>

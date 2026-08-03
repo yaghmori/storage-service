@@ -44,6 +44,30 @@ export class S3StorageService {
         }
         return Buffer.concat(chunks);
       },
+      downloadToFile: async (key: string, destPath: string) => {
+        const { createWriteStream } = await import('fs');
+        const { pipeline } = await import('stream/promises');
+        const command = new GetObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+        });
+        const response = await client.send(command);
+        if (!response.Body) {
+          throw new Error(`S3 object "${key}" has empty body`);
+        }
+        await pipeline(response.Body as Readable, createWriteStream(destPath));
+      },
+      openReadStream: async (key: string) => {
+        const command = new GetObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+        });
+        const response = await client.send(command);
+        if (!response.Body) {
+          throw new Error(`S3 object "${key}" has empty body`);
+        }
+        return response.Body as Readable;
+      },
       delete: async (key: string) => {
         const command = new DeleteObjectCommand({
           Bucket: config.bucket,

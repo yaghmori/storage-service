@@ -17,7 +17,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@workspace/ui/components";
-import { ChevronsUpDown, LogOut, Palette, UserRound } from "lucide-react";
+import { ChevronsUpDown, Globe, LogOut, Palette, UserRound } from "lucide-react";
 import Link from "next/link";
 
 /**
@@ -79,6 +79,12 @@ export function NavUser() {
               <Link href={PAGE_ROUTES.ACCOUNT_PROFILE}>
                 <UserRound />
                 Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={PAGE_ROUTES.ACCOUNT_PREFERENCES}>
+                <Globe />
+                Preferences
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>

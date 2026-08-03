@@ -17,8 +17,6 @@ import {
   Building2,
   FileIcon,
   Home,
-  KeyRound,
-  Server,
   Settings,
   Users,
   Workflow,
@@ -36,17 +34,31 @@ export function AdminSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const { activeOrg } = useOptionalActiveOrg() ?? { activeOrg: null };
   const navTenant: NavMainItem[] = activeOrg
     ? [
-        { title: "Dashboard", url: PAGE_ROUTES.home(activeOrg.slug), icon: Home },
-        { title: "Files", url: PAGE_ROUTES.files(activeOrg.slug), icon: FileIcon },
-        { title: "Jobs", url: PAGE_ROUTES.jobs(activeOrg.slug), icon: Workflow },
+        {
+          title: "Dashboard",
+          url: PAGE_ROUTES.home(activeOrg.slug),
+          icon: Home,
+        },
+        {
+          title: "Files",
+          url: PAGE_ROUTES.files(activeOrg.slug),
+          icon: FileIcon,
+        },
+        {
+          title: "Jobs",
+          url: PAGE_ROUTES.jobs(activeOrg.slug),
+          icon: Workflow,
+        },
         {
           title: "Analytics",
           url: PAGE_ROUTES.analytics(activeOrg.slug),
           icon: BarChart3,
         },
-        { title: "Providers", url: PAGE_ROUTES.providers(activeOrg.slug), icon: Server },
-        { title: "Tokens", url: PAGE_ROUTES.tokens(activeOrg.slug), icon: KeyRound },
-        { title: "Settings", url: PAGE_ROUTES.settings(activeOrg.slug), icon: Settings },
+        {
+          title: "Settings",
+          url: PAGE_ROUTES.settings(activeOrg.slug),
+          icon: Settings,
+        },
       ]
     : [];
   const navPlatform: NavMainItem[] = [

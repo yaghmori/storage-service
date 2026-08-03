@@ -109,7 +109,7 @@ export function FileDeleteDialog({
                 <AlertDescription>
                   {permanent
                     ? "The file bytes and all variants will be removed from the storage provider."
-                    : "The file stays in storage and can still be hard-deleted later."}
+                    : "The object stays in storage. The file moves to the Deleted tab and can be restored until retention purge."}
                 </AlertDescription>
               </Alert>
             </div>

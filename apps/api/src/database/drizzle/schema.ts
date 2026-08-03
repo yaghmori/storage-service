@@ -31,30 +31,21 @@ export const fileVisibilityEnum = pgEnum('file_visibility', [
   'private',
   'unlisted',
 ]);
+export type JobLogEntry = {
+  ts: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  message: string;
+};
+
+/** Job execution status (+ file rollup `partial`). */
 export const processingStatusEnum = pgEnum('processing_status', [
   'pending',
   'processing',
   'completed',
   'failed',
   'cancelled',
-]);
-export const variantTypeEnum = pgEnum('variant_type', [
-  'thumbnail',
-  'webp',
-  'avif',
-  'medium',
-  'large',
-  'xlarge',
-  'preview-frame',
-  'thumbnail-video',
-  'preview-video',
-]);
-export const jobTypeEnum = pgEnum('job_type', [
-  'image',
-  'video',
-  'metadata',
-  'thumbnail',
-  'transcode',
+  'partial',
+  'skipped',
 ]);
 export const downloadMethodEnum = pgEnum('download_method', [
   'direct',
@@ -172,6 +163,66 @@ export const storageProviders = pgTable(
   }),
 );
 
+/** External processor endpoints (Ollama, OpenAI-compatible, ClamAV, webhooks, …). */
+export const processorBackends = pgTable(
+  'processor_backends',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    /** e.g. openai_compatible | clamav | http_webhook | internal */
+    kind: varchar('kind', { length: 64 }).notNull(),
+    config: jsonb('config').notNull().default({}),
+    isActive: boolean('is_active').notNull().default(true),
+    isDefault: boolean('is_default').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdIdx: index('processor_backends_org_id_idx').on(table.orgId),
+    kindIdx: index('processor_backends_kind_idx').on(table.kind),
+    activeIdx: index('processor_backends_active_idx').on(table.isActive),
+    orgNameUnique: uniqueIndex('processor_backends_org_id_name_unique').on(
+      table.orgId,
+      table.name,
+    ),
+    orgKindDefaultUnique: uniqueIndex('processor_backends_org_kind_default_unique')
+      .on(table.orgId, table.kind)
+      .where(sql`${table.isDefault} = true`),
+  }),
+);
+
+/** Per-org pipeline bindings: which registered processors run and with what settings. */
+export const orgProcessors = pgTable(
+  'org_processors',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    processorKey: varchar('processor_key', { length: 128 }).notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    sortOrder: integer('sort_order').notNull().default(0),
+    mimeInclude: text('mime_include').array(),
+    settings: jsonb('settings').notNull().default({}),
+    backendId: uuid('backend_id').references(() => processorBackends.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdIdx: index('org_processors_org_id_idx').on(table.orgId),
+    processorKeyIdx: index('org_processors_processor_key_idx').on(table.processorKey),
+    orgProcessorUnique: uniqueIndex('org_processors_org_id_processor_key_unique').on(
+      table.orgId,
+      table.processorKey,
+    ),
+  }),
+);
+
 export const files = pgTable(
   'files',
   {
@@ -192,39 +243,22 @@ export const files = pgTable(
     mimeType: varchar('mime_type', { length: 100 }).notNull(),
     size: bigint('size', { mode: 'bigint' }).notNull(),
     fileHash: varchar('file_hash', { length: 64 }).notNull(),
-    checksum: varchar('checksum', { length: 64 }),
+    perceptualHash: varchar('perceptual_hash', { length: 64 }),
     width: integer('width'),
     height: integer('height'),
-    aspectRatio: varchar('aspect_ratio', { length: 20 }),
     duration: integer('duration'),
-    bitrate: integer('bitrate'),
-    frameRate: integer('frame_rate'),
-    hasTransparency: boolean('has_transparency').default(false),
-    dominantColor: varchar('dominant_color', { length: 7 }),
-    colorPalette: text('color_palette'),
-    streamingUrl: text('streaming_url'),
-    subtitleKeys: text('subtitle_keys'),
     alt: text('alt'),
     title: text('title'),
     caption: text('caption'),
     description: text('description'),
-    transcript: text('transcript'),
     folder: varchar('folder', { length: 255 }),
     folderId: uuid('folder_id'),
     tags: text('tags'),
     referenceCount: integer('reference_count').notNull().default(1),
     isOrphaned: boolean('is_orphaned').default(false),
     orphanedAt: timestamp('orphaned_at', { withTimezone: false }),
-    isProcessed: boolean('is_processed').default(false),
     processingStatus: processingStatusEnum('processing_status'),
     processingError: text('processing_error'),
-    processingAttempts: integer('processing_attempts').default(0),
-    aiGeneratedTags: text('ai_generated_tags'),
-    aiDescription: text('ai_description'),
-    objectDetection: text('object_detection'),
-    faceDetection: text('face_detection'),
-    nsfwScore: real('nsfw_score'),
-    isNsfw: boolean('is_nsfw').default(false),
     visibility: fileVisibilityEnum('visibility').default('public'),
     downloadPassword: text('download_password'),
     uploadedBy: uuid('uploaded_by'),
@@ -247,6 +281,10 @@ export const files = pgTable(
     orgHashUnique: unique('files_org_id_hash_unique').on(table.orgId, table.fileHash),
     hashIdx: index('files_file_hash_idx').on(table.fileHash),
     orgIdIdx: index('files_org_id_idx').on(table.orgId),
+    orgPerceptualHashIdx: index('files_org_perceptual_hash_idx').on(
+      table.orgId,
+      table.perceptualHash,
+    ),
     providerIdx: index('files_storage_provider_idx').on(table.storageProviderId),
     mimeTypeIdx: index('files_mime_type_idx').on(table.mimeType),
     deletedAtIdx: index('files_deleted_at_idx').on(table.deletedAt),
@@ -261,35 +299,6 @@ export const files = pgTable(
       sql`${table.referenceCount} >= 0`,
     ),
     sizeCheck: check('files_size_check', sql`${table.size} >= 0`),
-    processingAttemptsCheck: check(
-      'files_processing_attempts_check',
-      sql`${table.processingAttempts} >= 0`,
-    ),
-    nsfwScoreCheck: check(
-      'files_nsfw_score_check',
-      sql`${table.nsfwScore} IS NULL OR (${table.nsfwScore} >= 0 AND ${table.nsfwScore} <= 1)`,
-    ),
-  }),
-);
-
-export const fileMetadata = pgTable(
-  'file_metadata',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    fileId: uuid('file_id')
-      .notNull()
-      .references(() => files.id, { onDelete: 'cascade' }),
-    metadata: jsonb('metadata').notNull(),
-    extractedAt: timestamp('extracted_at', { withTimezone: false })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: false })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => ({
-    fileIdIdx: index('file_metadata_file_id_idx').on(table.fileId),
-    fileIdUnique: unique('file_metadata_file_id_unique').on(table.fileId),
   }),
 );
 
@@ -300,7 +309,8 @@ export const fileVariants = pgTable(
     fileId: uuid('file_id')
       .notNull()
       .references(() => files.id, { onDelete: 'cascade' }),
-    variantType: variantTypeEnum('variant_type').notNull(),
+    /** Open string so processors can add artifact kinds without migrations. */
+    variantType: varchar('variant_type', { length: 64 }).notNull(),
     variantKey: varchar('variant_key', { length: 500 }).notNull(),
     storageProviderId: uuid('storage_provider_id')
       .notNull()
@@ -343,10 +353,21 @@ export const processingJobs = pgTable(
     fileId: uuid('file_id')
       .notNull()
       .references(() => files.id, { onDelete: 'cascade' }),
-    jobType: jobTypeEnum('job_type').notNull(),
+    processorKey: varchar('processor_key', { length: 128 }).notNull(),
     status: processingStatusEnum('status').notNull().default('pending'),
+    backendId: uuid('backend_id').references(() => processorBackends.id, {
+      onDelete: 'set null',
+    }),
+    parameters: jsonb('parameters').default({}),
     bullmqJobId: varchar('bullmq_job_id', { length: 255 }),
     errorMessage: text('error_message'),
+    /** Append-only job log lines for live / post-mortem debugging. */
+    logs: jsonb('logs')
+      .$type<JobLogEntry[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Final structured output when the processor produces JSON (e.g. ai.vision). */
+    output: jsonb('output').$type<Record<string, unknown> | null>(),
     retryCount: integer('retry_count').notNull().default(0),
     progress: integer('progress'),
     priority: integer('priority').default(0),
@@ -360,12 +381,15 @@ export const processingJobs = pgTable(
     orgIdIdx: index('processing_jobs_org_id_idx').on(table.orgId),
     fileIdIdx: index('processing_jobs_file_id_idx').on(table.fileId),
     statusIdx: index('processing_jobs_status_idx').on(table.status),
-    jobTypeIdx: index('processing_jobs_job_type_idx').on(table.jobType),
+    processorKeyIdx: index('processing_jobs_processor_key_idx').on(table.processorKey),
     bullmqJobIdIdx: index('processing_jobs_bullmq_job_id_idx').on(table.bullmqJobId),
     bullmqJobIdUnique: unique('processing_jobs_bullmq_job_id_unique').on(
       table.bullmqJobId,
     ),
     fileStatusIdx: index('processing_jobs_file_status_idx').on(table.fileId, table.status),
+    inFlightUnique: uniqueIndex('processing_jobs_file_processor_inflight_unique')
+      .on(table.fileId, table.processorKey)
+      .where(sql`${table.status} IN ('pending', 'processing')`),
     retryCountCheck: check(
       'processing_jobs_retry_count_check',
       sql`${table.retryCount} >= 0`,
@@ -373,6 +397,51 @@ export const processingJobs = pgTable(
     progressCheck: check(
       'processing_jobs_progress_check',
       sql`${table.progress} IS NULL OR (${table.progress} >= 0 AND ${table.progress} <= 100)`,
+    ),
+  }),
+);
+
+/** Current JSON/analysis output per (file, processor). Binary artifacts use file_variants. */
+export const fileProcessorResults = pgTable(
+  'file_processor_results',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    fileId: uuid('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    processorKey: varchar('processor_key', { length: 128 }).notNull(),
+    status: processingStatusEnum('status').notNull().default('pending'),
+    schemaVersion: integer('schema_version').notNull().default(1),
+    backendId: uuid('backend_id').references(() => processorBackends.id, {
+      onDelete: 'set null',
+    }),
+    backendKind: varchar('backend_kind', { length: 64 }),
+    model: varchar('model', { length: 255 }),
+    data: jsonb('data').notNull().default({}),
+    error: text('error'),
+    jobId: uuid('job_id').references(() => processingJobs.id, {
+      onDelete: 'set null',
+    }),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdIdx: index('file_processor_results_org_id_idx').on(table.orgId),
+    fileIdIdx: index('file_processor_results_file_id_idx').on(table.fileId),
+    processorKeyIdx: index('file_processor_results_processor_key_idx').on(
+      table.processorKey,
+    ),
+    orgProcessorIdx: index('file_processor_results_org_processor_idx').on(
+      table.orgId,
+      table.processorKey,
+    ),
+    fileProcessorUnique: uniqueIndex('file_processor_results_file_processor_unique').on(
+      table.fileId,
+      table.processorKey,
     ),
   }),
 );
@@ -421,6 +490,10 @@ export const fileDuplicates = pgTable(
     originalFileId: uuid('original_file_id')
       .notNull()
       .references(() => files.id, { onDelete: 'cascade' }),
+    /** Near-dupe / related file (content matches). Null for SHA upload-only flags. */
+    duplicateFileId: uuid('duplicate_file_id').references(() => files.id, {
+      onDelete: 'cascade',
+    }),
     detectedAt: timestamp('detected_at', { withTimezone: false })
       .notNull()
       .defaultNow(),
@@ -436,6 +509,9 @@ export const fileDuplicates = pgTable(
   (table) => ({
     orgIdIdx: index('file_duplicates_org_id_idx').on(table.orgId),
     originalFileIdx: index('file_duplicates_original_idx').on(table.originalFileId),
+    duplicateFileIdx: index('file_duplicates_duplicate_file_idx').on(
+      table.duplicateFileId,
+    ),
     detectedAtIdx: index('file_duplicates_detected_at_idx').on(table.detectedAt),
     uploadedByIdx: index('file_duplicates_uploaded_by_idx').on(table.uploadedBy),
     similarityScoreCheck: check(
@@ -448,6 +524,8 @@ export const fileDuplicates = pgTable(
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   apiKeys: many(apiKeys),
   providers: many(storageProviders),
+  processorBackends: many(processorBackends),
+  orgProcessors: many(orgProcessors),
   files: many(files),
 }));
 
@@ -465,7 +543,26 @@ export const storageProvidersRelations = relations(storageProviders, ({ one }) =
   }),
 }));
 
-export const filesRelations = relations(files, ({ one }) => ({
+export const processorBackendsRelations = relations(processorBackends, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [processorBackends.orgId],
+    references: [organizations.id],
+  }),
+  orgProcessors: many(orgProcessors),
+}));
+
+export const orgProcessorsRelations = relations(orgProcessors, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [orgProcessors.orgId],
+    references: [organizations.id],
+  }),
+  backend: one(processorBackends, {
+    fields: [orgProcessors.backendId],
+    references: [processorBackends.id],
+  }),
+}));
+
+export const filesRelations = relations(files, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [files.orgId],
     references: [organizations.id],
@@ -473,6 +570,28 @@ export const filesRelations = relations(files, ({ one }) => ({
   provider: one(storageProviders, {
     fields: [files.storageProviderId],
     references: [storageProviders.id],
+  }),
+  processorResults: many(fileProcessorResults),
+  variants: many(fileVariants),
+  jobs: many(processingJobs),
+}));
+
+export const fileProcessorResultsRelations = relations(fileProcessorResults, ({ one }) => ({
+  file: one(files, {
+    fields: [fileProcessorResults.fileId],
+    references: [files.id],
+  }),
+  organization: one(organizations, {
+    fields: [fileProcessorResults.orgId],
+    references: [organizations.id],
+  }),
+  backend: one(processorBackends, {
+    fields: [fileProcessorResults.backendId],
+    references: [processorBackends.id],
+  }),
+  job: one(processingJobs, {
+    fields: [fileProcessorResults.jobId],
+    references: [processingJobs.id],
   }),
 }));
 
@@ -482,3 +601,9 @@ export type AdminUser = typeof adminUsers.$inferSelect;
 export type NewAdminUser = typeof adminUsers.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+export type ProcessorBackend = typeof processorBackends.$inferSelect;
+export type NewProcessorBackend = typeof processorBackends.$inferInsert;
+export type OrgProcessor = typeof orgProcessors.$inferSelect;
+export type NewOrgProcessor = typeof orgProcessors.$inferInsert;
+export type FileProcessorResult = typeof fileProcessorResults.$inferSelect;
+export type NewFileProcessorResult = typeof fileProcessorResults.$inferInsert;

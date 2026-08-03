@@ -16,8 +16,9 @@ name: storage-service-dev
 services:
   api:
     build:
-      context: .
-      dockerfile: Dockerfile.dev
+      # Monorepo root so @workspace/validation is available
+      context: ../..
+      dockerfile: apps/api/Dockerfile.dev
       target: development
     container_name: storage-service-api-dev
     ports:
@@ -50,14 +51,20 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-storage}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      PROCESSOR_CREDENTIALS_ENCRYPTION_KEY: ${PROCESSOR_CREDENTIALS_ENCRYPTION_KEY:-change-me-32chars-min-dev-only}
+      PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL:-}
+      PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY:-}
+      PROCESSOR_BACKEND_OPENAI_COMPATIBLE_VISION_MODEL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_VISION_MODEL:-llava}
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "1000"
     volumes:
-      - ./src:/app/src
-      - ./nodemon.json:/app/nodemon.json:ro
-      - ./tsconfig.json:/app/tsconfig.json:ro
-      - ./tsconfig.app.json:/app/tsconfig.app.json:ro
-      - ./drizzle.config.ts:/app/drizzle.config.ts:ro
+      - ./src:/app/apps/api/src
+      - ./nodemon.json:/app/apps/api/nodemon.json:ro
+      - ./tsconfig.json:/app/apps/api/tsconfig.json:ro
+      - ./tsconfig.app.json:/app/apps/api/tsconfig.app.json:ro
+      - ./drizzle.config.ts:/app/apps/api/drizzle.config.ts:ro
+      # Hot-reload shared validation source; rebuild on container start if needed
+      - ../../packages/validation/src:/app/packages/validation/src:ro
       - storage-uploads:/tmp/storage-uploads
     networks:
       - internal

@@ -7,8 +7,16 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { RedisConfig } from '../config/redis.config';
 import {
+  AI_VISION_QUEUE,
+  DEDUPE_PHASH_QUEUE,
+  DOCUMENT_OCR_QUEUE,
+  DOCUMENT_PREVIEW_QUEUE,
+  DOCUMENT_TEXT_QUEUE,
+  IMAGE_NORMALIZE_QUEUE,
   IMAGE_PROCESSING_QUEUE,
+  INTEGRITY_VERIFY_QUEUE,
   METADATA_EXTRACTION_QUEUE,
+  NOTIFY_WEBHOOK_QUEUE,
   VIDEO_PROCESSING_QUEUE,
 } from './queue-names';
 
@@ -21,29 +29,26 @@ export class BullBoardSetupService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    // Create BullMQ Queue instances directly for Bull Board
-    // @nestjs/bull wraps queues, so we create separate instances for monitoring
-    const imageQueue = new Queue(IMAGE_PROCESSING_QUEUE, {
-      connection: this.redisConfig.connectionOptions,
-    });
-    const videoQueue = new Queue(VIDEO_PROCESSING_QUEUE, {
-      connection: this.redisConfig.connectionOptions,
-    });
-    const metadataQueue = new Queue(METADATA_EXTRACTION_QUEUE, {
-      connection: this.redisConfig.connectionOptions,
-    });
+    const connection = this.redisConfig.connectionOptions;
+    const queues = [
+      IMAGE_NORMALIZE_QUEUE,
+      IMAGE_PROCESSING_QUEUE,
+      VIDEO_PROCESSING_QUEUE,
+      METADATA_EXTRACTION_QUEUE,
+      AI_VISION_QUEUE,
+      DEDUPE_PHASH_QUEUE,
+      INTEGRITY_VERIFY_QUEUE,
+      DOCUMENT_PREVIEW_QUEUE,
+      DOCUMENT_TEXT_QUEUE,
+      DOCUMENT_OCR_QUEUE,
+      NOTIFY_WEBHOOK_QUEUE,
+    ].map((name) => new Queue(name, { connection }));
 
-    // Create Express adapter
     this.serverAdapter = new ExpressAdapter();
     this.serverAdapter.setBasePath('/api/admin/queues');
 
-    // Create Bull Board with the BullMQ queue instances
     createBullBoard({
-      queues: [
-        new BullMQAdapter(imageQueue, { readOnlyMode: false }),
-        new BullMQAdapter(videoQueue, { readOnlyMode: false }),
-        new BullMQAdapter(metadataQueue, { readOnlyMode: false }),
-      ],
+      queues: queues.map((q) => new BullMQAdapter(q, { readOnlyMode: false })),
       serverAdapter: this.serverAdapter,
     });
   }

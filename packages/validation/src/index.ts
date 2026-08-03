@@ -6,6 +6,7 @@ export * from "./api-key/api-key.schema";
 export * from "./common/index";
 export * from "./org/organization.schema";
 export * from "./provider/provider.schema";
+export * from "./processor/processor.schema";
 export * from "./file/file-upload.schema";
 export * from "./responses/index";
 export * from "./storage/enums";

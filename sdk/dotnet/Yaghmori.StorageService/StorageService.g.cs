@@ -27,6 +27,10 @@ public static class StorageService
         public const string DeleteFile = "storage.delete_file";
         public const string BatchOperations = "storage.batch_operations";
         public const string GetSignedUrl = "storage.get_signed_url";
+        public const string ListProcessorResults = "storage.list_processor_results";
+        public const string GetProcessorResult = "storage.get_processor_result";
+        public const string GetFileMetadata = "storage.get_file_metadata";
+        public const string ListVariants = "storage.list_variants";
         public const string UploadFile = "uploadFile";
         public const string GetAssetUrl = "getAssetUrl";
         public const string DeleteAsset = "deleteAsset";
@@ -40,6 +44,10 @@ public static class StorageService
         public const string DeleteFile = "/files/{id}";
         public const string Download = "/files/{id}/download";
         public const string SignedUrl = "/files/{id}/signed-url";
+        public const string Metadata = "/files/{id}/metadata";
+        public const string ProcessorResults = "/files/{id}/processor-results";
+        public const string ProcessorResult = "/files/{id}/processor-results/{processorKey}";
+        public const string Variants = "/files/{id}/variants";
         public const string Health = "/health";
     }
 

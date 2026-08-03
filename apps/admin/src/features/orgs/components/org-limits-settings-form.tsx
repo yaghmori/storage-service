@@ -232,81 +232,85 @@ export function OrgLimitsSettingsForm({ orgId }: { orgId: string }) {
   const defaults = limitsQuery.data?.defaults;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {usageQuery.data && <UsageMeter usage={usageQuery.data} />}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="max-file-size">Max file size (bytes)</Label>
-          <Input
-            id="max-file-size"
-            inputMode="numeric"
-            value={form.maxFileSizeBytes}
-            onChange={(e) =>
-              setForm((f) =>
-                f ? { ...f, maxFileSizeBytes: e.target.value } : f,
-              )
-            }
-            placeholder={
-              defaults
-                ? `Platform default: ${defaults.maxFileSizeBytes}`
-                : "Platform default"
-            }
-          />
-          <p className="text-xs text-muted-foreground">
-            Leave empty to use the platform max. Org cannot exceed platform
-            ceiling.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="storage-quota">Storage quota (bytes)</Label>
-          <Input
-            id="storage-quota"
-            inputMode="numeric"
-            value={form.storageQuotaBytes}
-            onChange={(e) =>
-              setForm((f) =>
-                f ? { ...f, storageQuotaBytes: e.target.value } : f,
-              )
-            }
-            placeholder="Unlimited"
-          />
-          <p className="text-xs text-muted-foreground">
-            Empty = unlimited. Example: 10737418240 for 10 GB.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="max-objects">Max object count</Label>
-          <Input
-            id="max-objects"
-            inputMode="numeric"
-            value={form.maxObjectCount}
-            onChange={(e) =>
-              setForm((f) =>
-                f ? { ...f, maxObjectCount: e.target.value } : f,
-              )
-            }
-            placeholder="Unlimited"
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="mime-types">Allowed MIME types</Label>
-          <Input
-            id="mime-types"
-            value={form.allowedMimeTypesText}
-            onChange={(e) =>
-              setForm((f) =>
-                f ? { ...f, allowedMimeTypesText: e.target.value } : f,
-              )
-            }
-            placeholder="image/jpeg, image/png, application/pdf"
-          />
-          <p className="text-xs text-muted-foreground">
-            Comma-separated. Empty = platform allowlist (or allow all if
-            platform is empty).
-          </p>
-        </div>
-      </div>
+      <Card>
+        <CardContent className="space-y-4 p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="max-file-size">Max file size (bytes)</Label>
+              <Input
+                id="max-file-size"
+                inputMode="numeric"
+                value={form.maxFileSizeBytes}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, maxFileSizeBytes: e.target.value } : f,
+                  )
+                }
+                placeholder={
+                  defaults
+                    ? `Platform default: ${defaults.maxFileSizeBytes}`
+                    : "Platform default"
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty to use the platform max. Org cannot exceed platform
+                ceiling.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="storage-quota">Storage quota (bytes)</Label>
+              <Input
+                id="storage-quota"
+                inputMode="numeric"
+                value={form.storageQuotaBytes}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, storageQuotaBytes: e.target.value } : f,
+                  )
+                }
+                placeholder="Unlimited"
+              />
+              <p className="text-xs text-muted-foreground">
+                Empty = unlimited. Example: 10737418240 for 10 GB.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="max-objects">Max object count</Label>
+              <Input
+                id="max-objects"
+                inputMode="numeric"
+                value={form.maxObjectCount}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, maxObjectCount: e.target.value } : f,
+                  )
+                }
+                placeholder="Unlimited"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="mime-types">Allowed MIME types</Label>
+              <Input
+                id="mime-types"
+                value={form.allowedMimeTypesText}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, allowedMimeTypesText: e.target.value } : f,
+                  )
+                }
+                placeholder="image/jpeg, image/png, application/pdf"
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma-separated. Empty = platform allowlist (or allow all if
+                platform is empty).
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end">
         <Button

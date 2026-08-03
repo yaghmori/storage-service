@@ -1,31 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { OrganizationService } from '../../organizations/organization.service';
+import { Injectable } from '@nestjs/common';
+import { OrgProcessorsService } from './org-processors.service';
 import {
-  extractProcessingFromMetadata,
   mergeProcessingSettings,
   OrgProcessingSettings,
   PLATFORM_PROCESSING_DEFAULTS,
   ProcessingSettingsOverride,
-  withProcessingInMetadata,
 } from '../types/processing-settings';
 
 @Injectable()
 export class ProcessingSettingsService {
-  constructor(private readonly organizations: OrganizationService) {}
+  constructor(private readonly orgProcessors: OrgProcessorsService) {}
 
   getPlatformDefaults(): OrgProcessingSettings {
     return { ...PLATFORM_PROCESSING_DEFAULTS };
   }
 
   /**
-   * Resolve settings: upload override → org metadata.processing → platform defaults.
+   * Resolve settings from org_processors, with an optional upload override.
    */
   async resolve(
     orgId: string,
     uploadOverride?: ProcessingSettingsOverride | null,
   ): Promise<OrgProcessingSettings> {
-    const org = await this.organizations.getById(orgId);
-    const fromOrg = extractProcessingFromMetadata(org?.metadata);
+    const rows = await this.orgProcessors.ensureDefaults(orgId);
+    const fromOrg = this.orgProcessors.toLegacyProcessingSettings(rows);
     return mergeProcessingSettings(
       PLATFORM_PROCESSING_DEFAULTS,
       fromOrg,
@@ -34,8 +32,6 @@ export class ProcessingSettingsService {
   }
 
   async getForOrg(orgId: string): Promise<OrgProcessingSettings> {
-    const org = await this.organizations.getById(orgId);
-    if (!org) throw new NotFoundException(`Organization ${orgId} not found`);
     return this.resolve(orgId);
   }
 
@@ -43,18 +39,9 @@ export class ProcessingSettingsService {
     orgId: string,
     patch: ProcessingSettingsOverride,
   ): Promise<OrgProcessingSettings> {
-    const org = await this.organizations.getById(orgId);
-    if (!org) {
-      throw new NotFoundException(`Organization ${orgId} not found`);
-    }
-    const next = mergeProcessingSettings(
-      PLATFORM_PROCESSING_DEFAULTS,
-      extractProcessingFromMetadata(org.metadata),
-      patch,
+    return this.orgProcessors.updateFromLegacySettings(
+      orgId,
+      patch as Record<string, unknown>,
     );
-    await this.organizations.update(orgId, {
-      metadata: withProcessingInMetadata(org.metadata, next),
-    });
-    return next;
   }
 }

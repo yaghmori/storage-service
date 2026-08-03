@@ -1,27 +1,76 @@
 "use client";
-import React, { createContext, useContext, useMemo, useState } from "react";
 
-type ActiveTheme = string;
+import {
+  ACTIVE_THEME_COOKIE,
+  DEFAULT_THEME_NAME,
+  isThemeName,
+  themeBodyClass,
+  type ThemeName,
+} from "../config/themes";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 type ActiveThemeContextValue = {
-  activeTheme: ActiveTheme;
-  setActiveTheme: (theme: ActiveTheme) => void;
+  activeTheme: ThemeName;
+  setActiveTheme: (theme: ThemeName | string) => void;
 };
 
 const ActiveThemeContext = createContext<ActiveThemeContextValue | undefined>(
-  undefined
+  undefined,
 );
+
+function setThemeCookie(theme: ThemeName) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${ACTIVE_THEME_COOKIE}=${theme}; path=/; max-age=31536000; SameSite=Lax; ${
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "Secure;"
+      : ""
+  }`;
+}
+
+function applyThemeClass(theme: ThemeName) {
+  if (typeof document === "undefined") return;
+
+  Array.from(document.body.classList)
+    .filter((cls) => cls.startsWith("theme-"))
+    .forEach((cls) => document.body.classList.remove(cls));
+
+  const nextClass = themeBodyClass(theme);
+  if (nextClass) {
+    document.body.classList.add(nextClass);
+  }
+}
 
 export function ActiveThemeProvider({
   children,
   initialTheme,
 }: {
   children: React.ReactNode;
-  initialTheme: ActiveTheme;
+  initialTheme?: string;
 }) {
-  const [activeTheme, setActiveTheme] = useState<ActiveTheme>(initialTheme);
+  const [activeTheme, setActiveThemeState] = useState<ThemeName>(() =>
+    isThemeName(initialTheme) ? initialTheme : DEFAULT_THEME_NAME,
+  );
 
-  const value = useMemo(() => ({ activeTheme, setActiveTheme }), [activeTheme]);
+  useEffect(() => {
+    setThemeCookie(activeTheme);
+    applyThemeClass(activeTheme);
+  }, [activeTheme]);
+
+  const setActiveTheme = useCallback((theme: ThemeName | string) => {
+    setActiveThemeState(isThemeName(theme) ? theme : DEFAULT_THEME_NAME);
+  }, []);
+
+  const value = useMemo(
+    () => ({ activeTheme, setActiveTheme }),
+    [activeTheme, setActiveTheme],
+  );
 
   return (
     <ActiveThemeContext.Provider value={value}>

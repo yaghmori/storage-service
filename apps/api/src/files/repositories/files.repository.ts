@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/drizzle/schema';
 
@@ -47,6 +47,35 @@ export class FilesRepository {
     }
   }
 
+  async updatePerceptualHash(id: string, perceptualHash: string) {
+    const [row] = await this.db
+      .update(schema.files)
+      .set({ perceptualHash, updatedAt: new Date() })
+      .where(eq(schema.files.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async findRecentWithPerceptualHash(
+    orgId: string,
+    excludeFileId: string,
+    limit = 500,
+  ) {
+    return this.db
+      .select()
+      .from(schema.files)
+      .where(
+        and(
+          eq(schema.files.orgId, orgId),
+          ne(schema.files.id, excludeFileId),
+          isNotNull(schema.files.perceptualHash),
+          isNull(schema.files.deletedAt),
+        ),
+      )
+      .orderBy(desc(schema.files.createdAt))
+      .limit(limit);
+  }
+
   async findByKeyAndProvider(storageKey: string, storageProviderId: string) {
     const result = await this.db
       .select()
@@ -72,7 +101,6 @@ export class FilesRepository {
     mimeType: string;
     size: bigint;
     fileHash: string;
-    checksum?: string;
     uploadedBy?: string;
     tags?: string;
     referenceCount?: number;
@@ -90,7 +118,6 @@ export class FilesRepository {
         mimeType: data.mimeType,
         size: data.size,
         fileHash: data.fileHash,
-        checksum: data.checksum,
         uploadedBy: data.uploadedBy,
         tags: data.tags,
         referenceCount: data.referenceCount || 1,
@@ -189,9 +216,17 @@ export class FilesRepository {
   async update(id: string, data: {
     width?: number;
     height?: number;
-    aspectRatio?: string;
-    isProcessed?: boolean;
-    processingStatus?: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+    duration?: number;
+    perceptualHash?: string;
+    processingStatus?:
+      | 'pending'
+      | 'processing'
+      | 'completed'
+      | 'failed'
+      | 'cancelled'
+      | 'partial'
+      | 'skipped';
+    processingError?: string | null;
     [key: string]: unknown;
   }) {
     // Build update object with only defined fields
@@ -199,16 +234,30 @@ export class FilesRepository {
       updatedAt: new Date(),
     };
 
-    // Only include defined fields
     if (data.width !== undefined) updateData.width = data.width;
     if (data.height !== undefined) updateData.height = data.height;
-    if (data.aspectRatio !== undefined) updateData.aspectRatio = data.aspectRatio;
-    if (data.isProcessed !== undefined) updateData.isProcessed = data.isProcessed;
-    if (data.processingStatus !== undefined) updateData.processingStatus = data.processingStatus;
+    if (data.duration !== undefined) updateData.duration = data.duration;
+    if (data.perceptualHash !== undefined) {
+      updateData.perceptualHash = data.perceptualHash;
+    }
+    if (data.processingStatus !== undefined) {
+      updateData.processingStatus = data.processingStatus;
+    }
+    if (data.processingError !== undefined) {
+      updateData.processingError = data.processingError;
+    }
 
-    // Include any other fields from data
     Object.keys(data).forEach((key) => {
-      if (!['width', 'height', 'aspectRatio', 'isProcessed', 'processingStatus'].includes(key)) {
+      if (
+        ![
+          'width',
+          'height',
+          'duration',
+          'perceptualHash',
+          'processingStatus',
+          'processingError',
+        ].includes(key)
+      ) {
         updateData[key] = data[key];
       }
     });

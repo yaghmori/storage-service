@@ -4,9 +4,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Yaghmori.StorageService</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>yaghmori</Authors>
-    <Description>Client SDK for storage-service — HTTP + NestJS TCP + Kafka constants</Description>
+    <Description>Client SDK for storage-service — upload, signed URLs, processor results, TCP/Kafka</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/yaghmori/storage-service</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>

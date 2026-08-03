@@ -26,6 +26,16 @@ export class LocalStorageService {
         const filePath = join(basePath, key);
         return fs.readFile(filePath);
       },
+      downloadToFile: async (key: string, destPath: string) => {
+        const { createReadStream, createWriteStream } = await import('fs');
+        const { pipeline } = await import('stream/promises');
+        const filePath = join(basePath, key);
+        await pipeline(createReadStream(filePath), createWriteStream(destPath));
+      },
+      openReadStream: async (key: string) => {
+        const { createReadStream } = await import('fs');
+        return createReadStream(join(basePath, key));
+      },
       delete: async (key: string) => {
         const filePath = join(basePath, key);
         await fs.unlink(filePath).catch((error) => {

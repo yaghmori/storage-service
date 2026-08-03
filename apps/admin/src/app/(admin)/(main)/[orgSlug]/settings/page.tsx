@@ -1,5 +1,11 @@
-import { OrgSettingsView } from "@/features/orgs/components/org-settings-view";
+import { PAGE_ROUTES } from "@/lib/constants/page-routes";
+import { redirect } from "next/navigation";
 
-export default function OrganizationSettingsPage() {
-  return <OrgSettingsView />;
+export default async function OrganizationSettingsPage({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>;
+}) {
+  const { orgSlug } = await params;
+  redirect(PAGE_ROUTES.settingsGeneral(decodeURIComponent(orgSlug)));
 }

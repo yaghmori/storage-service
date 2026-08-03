@@ -7,9 +7,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   DateDisplay,
   useAppForm,
 } from "@workspace/ui/components";
@@ -20,6 +17,7 @@ import {
   useChangePasswordMutation,
 } from "../hooks/use-account-queries";
 import { AccountSettingsShell } from "./account-settings-shell";
+import { SettingsHeading } from "./settings-heading";
 
 export function AccountProfileView() {
   const { user } = useAuth();
@@ -59,13 +57,14 @@ export function AccountProfileView() {
       title="Profile"
       description="Your admin account identity and security."
     >
-      <div className="space-y-6">
+      <div className="flex flex-col gap-5">
+        <SettingsHeading
+          title="Account"
+          description="Signed-in administrator details for this console."
+        />
+
         <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>Signed-in administrator details.</CardDescription>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             {isLoading && !me ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
@@ -115,14 +114,13 @@ export function AccountProfileView() {
           </CardContent>
         </Card>
 
+        <SettingsHeading
+          title="Change password"
+          description="Update the password used to sign in to this admin console."
+        />
+
         <Card>
-          <CardHeader>
-            <CardTitle>Change password</CardTitle>
-            <CardDescription>
-              Update the password used to sign in to this admin console.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -132,12 +130,18 @@ export function AccountProfileView() {
             >
               <form.AppField name="currentPassword">
                 {(field) => (
-                  <field.Password label="Current password" autoComplete="current-password" />
+                  <field.Password
+                    label="Current password"
+                    autoComplete="current-password"
+                  />
                 )}
               </form.AppField>
               <form.AppField name="newPassword">
                 {(field) => (
-                  <field.Password label="New password" autoComplete="new-password" />
+                  <field.Password
+                    label="New password"
+                    autoComplete="new-password"
+                  />
                 )}
               </form.AppField>
               <form.AppField name="confirmPassword">

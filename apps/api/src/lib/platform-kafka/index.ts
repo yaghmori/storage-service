@@ -13,3 +13,4 @@ export * from './kafka-config';
 export * from './kafka-client-factory';
 export * from './kafka.module';
 export * from './kafka-topic-initializer.service';
+export * from './storage-lifecycle-events.service';

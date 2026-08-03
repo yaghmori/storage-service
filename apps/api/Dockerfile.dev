@@ -1,35 +1,40 @@
-# Development image — hot-reload via nodemon + tsx (source mounted in compose)
+# Development image — hot-reload via nodemon + ts-node
+# Build from monorepo root so @workspace/validation resolves.
+#
+#   context: repo root
+#   dockerfile: apps/api/Dockerfile.dev
+
 FROM node:20-alpine AS base
 
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
  && npm install -g nodemon \
- && apk add --no-cache ffmpeg
+ && apk add --no-cache ffmpeg poppler-utils tesseract-ocr libheif
 
 WORKDIR /app
 
-FROM base AS dependencies
-
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install
-
 FROM base AS development
 
-COPY package.json pnpm-lock.yaml* ./
-COPY --from=dependencies /app/node_modules ./node_modules
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/config-typescript ./packages/config-typescript
+COPY packages/config-eslint ./packages/config-eslint
+COPY packages/validation ./packages/validation
+COPY apps/api ./apps/api
 
-COPY tsconfig.json tsconfig.app.json tsconfig.typecheck.json ./
-COPY drizzle.config.ts nodemon.json tsup.config.ts ./
+# Install workspace graph for the API (includes @workspace/validation)
+RUN pnpm install --filter @yaghmori/storage-service-server... --filter @workspace/validation... \
+ && pnpm --filter @workspace/validation build
 
-# Seed copy only — compose mounts overwrite ./src and nodemon.json at runtime
-COPY src ./src
+WORKDIR /app/apps/api
 
 ENV NODE_ENV=development
 ENV HOST=0.0.0.0
-ENV PORT=6000
+ENV PORT=6100
 ENV TCP_PORT=6001
 ENV CHOKIDAR_USEPOLLING=true
 ENV CHOKIDAR_INTERVAL=1000
 
-EXPOSE 6000 6001 6300
+EXPOSE 6100 6001 6300
 
-CMD ["nodemon", "--config", "nodemon.json"]
+# Rebuild validation from mounted src so ProcessorKey / schemas stay in sync
+# with host changes (dist is not volume-mounted).
+CMD ["sh", "-c", "pnpm --filter @workspace/validation build && nodemon --config nodemon.json"]

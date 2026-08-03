@@ -142,6 +142,140 @@ public sealed class StorageServiceHttpClient : IDisposable
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>EXIF/IPTC/XMP sidecar from <c>metadata.exif</c>.</summary>
+    public Task<JsonDocument> GetMetadataAsync(
+        string fileId,
+        CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            StorageService.HttpPaths.Metadata.Replace("{id}", Uri.EscapeDataString(fileId)),
+            cancellationToken);
+
+    /// <summary>All processor results (OCR, AI vision, EXIF, …).</summary>
+    public Task<JsonDocument> GetProcessorResultsAsync(
+        string fileId,
+        CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            StorageService.HttpPaths.ProcessorResults.Replace("{id}", Uri.EscapeDataString(fileId)),
+            cancellationToken);
+
+    /// <summary>One processor result by key, e.g. <c>document.ocr</c>.</summary>
+    public Task<JsonDocument> GetProcessorResultAsync(
+        string fileId,
+        string processorKey,
+        CancellationToken cancellationToken = default)
+    {
+        var path = StorageService.HttpPaths.ProcessorResult
+            .Replace("{id}", Uri.EscapeDataString(fileId))
+            .Replace("{processorKey}", Uri.EscapeDataString(processorKey));
+        return GetJsonAsync(path, cancellationToken);
+    }
+
+    /// <summary>Generated variants (thumbnail, medium, normalized, …).</summary>
+    public Task<JsonDocument> GetVariantsAsync(
+        string fileId,
+        CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            StorageService.HttpPaths.Variants.Replace("{id}", Uri.EscapeDataString(fileId)),
+            cancellationToken);
+
+    /// <summary>
+    /// Best-effort extracted text: prefers <c>document.ocr</c>, then <c>document.text</c>.
+    /// Returns <c>null</c> when neither has text yet.
+    /// </summary>
+    public async Task<string?> GetExtractedTextAsync(
+        string fileId,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var key in new[] { "document.ocr", "document.text" })
+        {
+            using var doc = await GetProcessorResultAsync(fileId, key, cancellationToken)
+                .ConfigureAwait(false);
+            var text = TryReadProcessorText(doc.RootElement);
+            if (!string.IsNullOrWhiteSpace(text))
+                return text;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Poll until OCR/native text appears or <paramref name="attempts"/> are exhausted.
+    /// </summary>
+    public async Task<string?> WaitForExtractedTextAsync(
+        string fileId,
+        int attempts = 8,
+        TimeSpan? interval = null,
+        CancellationToken cancellationToken = default)
+    {
+        var delay = interval ?? TimeSpan.FromMilliseconds(2500);
+        for (var i = 0; i < Math.Max(1, attempts); i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var text = await GetExtractedTextAsync(fileId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(text))
+                    return text;
+            }
+            catch (HttpRequestException)
+            {
+                // File/org may not be ready yet — keep polling.
+            }
+
+            if (i < attempts - 1)
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private static string? TryReadProcessorText(JsonElement root)
+    {
+        // Supports both raw result and { success, data: result } envelopes.
+        JsonElement result = root;
+        if (root.ValueKind == JsonValueKind.Object &&
+            root.TryGetProperty("data", out var envelope) &&
+            envelope.ValueKind == JsonValueKind.Object &&
+            (envelope.TryGetProperty("processorKey", out _) ||
+             envelope.TryGetProperty("status", out _) ||
+             envelope.TryGetProperty("data", out _)))
+        {
+            result = envelope;
+        }
+
+        if (result.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!result.TryGetProperty("data", out var payload) ||
+            payload.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (payload.TryGetProperty("text", out var textEl) &&
+            textEl.ValueKind == JsonValueKind.String)
+        {
+            var text = textEl.GetString();
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+
+        return null;
+    }
+
+    private async Task<JsonDocument> GetJsonAsync(string path, CancellationToken cancellationToken)
+    {
+        using var res = await _http.GetAsync(path.TrimStart('/'), cancellationToken).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+        {
+            var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new HttpRequestException(
+                $"storage-service HTTP {(int)res.StatusCode} GET {path}: {body}");
+        }
+
+        return await JsonDocument.ParseAsync(
+            await res.Content.ReadAsStreamAsync(cancellationToken),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         if (_ownsHttp) _http.Dispose();

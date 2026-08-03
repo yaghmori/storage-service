@@ -14,6 +14,7 @@ import { and, count, desc, eq, ilike, or, SQL } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ProcessorKey } from '@workspace/validation';
 import { Public } from '../../common/decorators/public.decorator';
 import { toJsonSafe } from '../../common/utils/json-safe.util';
 import * as schema from '../../database/drizzle/schema';
@@ -22,7 +23,7 @@ import { AdminAuthGuard } from '../guards/admin-auth.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
 const JOB_STATUSES = ['pending', 'processing', 'completed', 'failed', 'cancelled'] as const;
-const JOB_TYPES = ['image', 'video', 'metadata', 'thumbnail', 'transcode'] as const;
+const PROCESSOR_KEYS = Object.values(ProcessorKey);
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -46,8 +47,8 @@ class ListJobsQueryDto {
   status?: (typeof JOB_STATUSES)[number];
 
   @IsOptional()
-  @IsIn(JOB_TYPES)
-  jobType?: (typeof JOB_TYPES)[number];
+  @IsIn(PROCESSOR_KEYS)
+  processorKey?: ProcessorKey;
 
   @IsOptional()
   @Type(() => Number)
@@ -79,8 +80,9 @@ export class JobsController {
     @Headers('x-org-id') headerOrgId?: string,
   ) {
     const orgId = requireOrgId(query.orgId, headerOrgId);
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 50;
+    // Query params arrive as strings (ValidationPipe returns plain payload).
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 50));
     const offset = (page - 1) * limit;
 
     const conditions: SQL[] = [eq(schema.processingJobs.orgId, orgId)];
@@ -107,8 +109,8 @@ export class JobsController {
     if (query.status) {
       conditions.push(eq(schema.processingJobs.status, query.status));
     }
-    if (query.jobType) {
-      conditions.push(eq(schema.processingJobs.jobType, query.jobType));
+    if (query.processorKey) {
+      conditions.push(eq(schema.processingJobs.processorKey, query.processorKey));
     }
 
     const where = and(...conditions);
@@ -119,10 +121,13 @@ export class JobsController {
           id: schema.processingJobs.id,
           orgId: schema.processingJobs.orgId,
           fileId: schema.processingJobs.fileId,
-          jobType: schema.processingJobs.jobType,
+          processorKey: schema.processingJobs.processorKey,
+          parameters: schema.processingJobs.parameters,
           status: schema.processingJobs.status,
           bullmqJobId: schema.processingJobs.bullmqJobId,
           errorMessage: schema.processingJobs.errorMessage,
+          logs: schema.processingJobs.logs,
+          output: schema.processingJobs.output,
           retryCount: schema.processingJobs.retryCount,
           progress: schema.processingJobs.progress,
           priority: schema.processingJobs.priority,
@@ -223,10 +228,10 @@ export class JobsController {
       );
     }
 
-    const jobType = String(job.jobType);
-    if (jobType !== 'image' && jobType !== 'video' && jobType !== 'metadata') {
+    const processorKey = String(job.processorKey);
+    if (!PROCESSOR_KEYS.includes(processorKey as ProcessorKey)) {
       throw new BadRequestException(
-        `Retry is not supported for job type "${jobType}"`,
+        `Retry is not supported for processor key "${processorKey}"`,
       );
     }
 
@@ -242,6 +247,8 @@ export class JobsController {
         completedAt: null,
         retryCount: nextRetry,
         bullmqJobId: null,
+        logs: [],
+        output: null,
       })
       .where(
         and(
@@ -250,12 +257,32 @@ export class JobsController {
         ),
       );
 
+    // Clear stale processor result so file detail doesn't keep the previous error.
+    await this.db
+      .update(schema.fileProcessorResults)
+      .set({
+        status: 'pending',
+        error: null,
+        data: {},
+        jobId: id,
+        processedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.fileProcessorResults.fileId, String(job.fileId)),
+          eq(schema.fileProcessorResults.processorKey, processorKey),
+          eq(schema.fileProcessorResults.orgId, orgId),
+        ),
+      );
+
     await this.queuesService.requeueExistingJob({
       jobId: id,
       orgId,
       fileId: String(job.fileId),
-      jobType: jobType as 'image' | 'video' | 'metadata',
+      processorKey,
       retryAttempt: nextRetry,
+      parameters: job.parameters as Record<string, unknown> | null,
     });
 
     return this.findOrgJob(id, orgId);
@@ -267,10 +294,13 @@ export class JobsController {
         id: schema.processingJobs.id,
         orgId: schema.processingJobs.orgId,
         fileId: schema.processingJobs.fileId,
-        jobType: schema.processingJobs.jobType,
+        processorKey: schema.processingJobs.processorKey,
+        parameters: schema.processingJobs.parameters,
         status: schema.processingJobs.status,
         bullmqJobId: schema.processingJobs.bullmqJobId,
         errorMessage: schema.processingJobs.errorMessage,
+        logs: schema.processingJobs.logs,
+        output: schema.processingJobs.output,
         retryCount: schema.processingJobs.retryCount,
         progress: schema.processingJobs.progress,
         priority: schema.processingJobs.priority,

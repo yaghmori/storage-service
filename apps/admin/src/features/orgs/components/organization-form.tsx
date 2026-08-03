@@ -23,6 +23,8 @@ export function OrganizationForm({
   layout = "stack",
   /** Hide helper copy (create-org page). */
   minimal = false,
+  /** Omit inline save/cancel; use an external submit button with `form={formId}`. */
+  hideActions = false,
 }: {
   formId?: string;
   initialValues?: Partial<OrganizationRow>;
@@ -34,6 +36,7 @@ export function OrganizationForm({
   inSheet?: boolean;
   layout?: "stack" | "wide";
   minimal?: boolean;
+  hideActions?: boolean;
 }) {
   const isEdit = mode === "edit" || Boolean(initialValues?.id);
   const isWide = layout === "wide" && !inSheet;
@@ -191,15 +194,17 @@ export function OrganizationForm({
       className="space-y-4"
     >
       {fields}
-      <div
-        className={
-          isWide
-            ? "flex justify-end gap-2 border-t pt-4"
-            : "flex justify-end gap-2 pt-2"
-        }
-      >
-        {actions}
-      </div>
+      {!hideActions ? (
+        <div
+          className={
+            isWide
+              ? "flex justify-end gap-2 border-t pt-4"
+              : "flex justify-end gap-2 pt-2"
+          }
+        >
+          {actions}
+        </div>
+      ) : null}
     </form>
   );
 }

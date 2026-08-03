@@ -30,8 +30,7 @@ export function invalidateAccount(qc: Qc) {
 
 export const dashboardKeys = {
   all: ["dashboard"] as const,
-  stats: (orgId?: string) =>
-    [...dashboardKeys.all, "stats", orgId] as const,
+  stats: (orgId?: string) => [...dashboardKeys.all, "stats", orgId] as const,
 };
 
 export function invalidateDashboard(qc: Qc) {
@@ -58,12 +57,19 @@ export const fileKeys = {
     [...fileKeys.all, params ?? {}] as const,
   detail: (orgId: string | undefined, id: string | undefined) =>
     [...fileKeys.all, orgId, "detail", id] as const,
-  signedUrl: (orgId: string | undefined, id: string | undefined) =>
-    [...fileKeys.all, orgId, "signed-url", id] as const,
+  signedUrl: (
+    orgId: string | undefined,
+    id: string | undefined,
+    variant?: string | null,
+  ) => [...fileKeys.all, orgId, "signed-url", id, variant ?? "original"] as const,
   metadata: (orgId: string | undefined, id: string | undefined) =>
     [...fileKeys.all, orgId, "metadata", id] as const,
+  processorResults: (orgId: string | undefined, id: string | undefined) =>
+    [...fileKeys.all, orgId, "processor-results", id] as const,
   variants: (orgId: string | undefined, id: string | undefined) =>
     [...fileKeys.all, orgId, "variants", id] as const,
+  duplicates: (orgId: string | undefined, id: string | undefined) =>
+    [...fileKeys.all, orgId, "duplicates", id] as const,
 };
 
 export function invalidateFiles(
@@ -76,6 +82,18 @@ export function invalidateFiles(
     });
     qc.invalidateQueries({
       queryKey: fileKeys.variants(opts.orgId, opts.fileId),
+    });
+    qc.invalidateQueries({
+      queryKey: fileKeys.duplicates(opts.orgId, opts.fileId),
+    });
+    qc.invalidateQueries({
+      queryKey: fileKeys.processorResults(opts.orgId, opts.fileId),
+    });
+    qc.invalidateQueries({
+      queryKey: fileKeys.signedUrl(opts.orgId, opts.fileId),
+    });
+    qc.invalidateQueries({
+      queryKey: fileKeys.metadata(opts.orgId, opts.fileId),
     });
   }
   qc.invalidateQueries({ queryKey: fileKeys.all });
@@ -107,8 +125,7 @@ export const orgKeys = {
     [...orgKeys.all, orgId, "processing-settings"] as const,
   usage: (orgId?: string) => [...orgKeys.all, orgId, "usage"] as const,
   limits: (orgId?: string) => [...orgKeys.all, orgId, "limits"] as const,
-  retention: (orgId?: string) =>
-    [...orgKeys.all, orgId, "retention"] as const,
+  retention: (orgId?: string) => [...orgKeys.all, orgId, "retention"] as const,
 };
 
 export function invalidateOrgs(
@@ -149,6 +166,17 @@ export const providerKeys = {
 
 export function invalidateProviders(qc: Qc) {
   qc.invalidateQueries({ queryKey: providerKeys.all });
+}
+
+export const processorBackendKeys = {
+  all: ["processor-backends"] as const,
+  list: (orgId?: string) => [...processorBackendKeys.all, orgId] as const,
+  detail: (orgId?: string, id?: string) =>
+    [...processorBackendKeys.all, orgId, "detail", id] as const,
+};
+
+export function invalidateProcessorBackends(qc: Qc) {
+  qc.invalidateQueries({ queryKey: processorBackendKeys.all });
 }
 
 export const apiKeyKeys = {
