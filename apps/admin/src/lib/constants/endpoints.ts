@@ -48,6 +48,8 @@ export const JobsEndpoints = {
   Detail: "admin/api/jobs/{0}",
   Cancel: "admin/api/jobs/{0}/cancel",
   Retry: "admin/api/jobs/{0}/retry",
+  BulkCancel: "admin/api/jobs/bulk-cancel",
+  BulkRetry: "admin/api/jobs/bulk-retry",
 } as const;
 
 export const AnalyticsEndpoints = {

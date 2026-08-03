@@ -1602,7 +1602,10 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
           const canCancel =
             job.status === "pending" || job.status === "processing";
           const canRetry =
-            job.status === "failed" || job.status === "cancelled";
+            job.status === "failed" ||
+            job.status === "cancelled" ||
+            job.status === "skipped" ||
+            job.status === "partial";
           return (
             <li
               key={job.id}
@@ -1710,6 +1713,15 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                   lines={3}
                   mono
                   className="rounded-md border border-destructive/20 bg-destructive/5 p-2 text-left! text-[11px] leading-relaxed text-destructive"
+                />
+              ) : null}
+              {(job.status === "skipped" || job.status === "partial") &&
+              job.errorMessage ? (
+                <TruncatedText
+                  text={job.errorMessage}
+                  lines={3}
+                  mono
+                  className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-left! text-[11px] leading-relaxed text-amber-800 dark:text-amber-400"
                 />
               ) : null}
               {Array.isArray(job.logs) && job.logs.length > 0 ? (

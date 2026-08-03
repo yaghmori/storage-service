@@ -321,6 +321,18 @@ export class UpdateProcessingSettingsDto {
   @IsOptional()
   @IsString()
   notifyWebhookSecret?: string;
+
+  /** Per-processor concurrency / rate limits (org-scoped). */
+  @IsOptional()
+  @IsObject()
+  processorCapacity?: Record<
+    string,
+    {
+      concurrency?: number;
+      rateMax?: number | null;
+      rateDurationMs?: number | null;
+    }
+  >;
 }
 
 export class UpdateOrgLimitsDto {

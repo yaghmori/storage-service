@@ -1,22 +1,26 @@
-﻿import { Processor } from '@nestjs/bullmq';
+import { Processor } from '@nestjs/bullmq';
+import { Optional } from '@nestjs/common';
 import { ProcessorKey } from '@workspace/validation';
 import { Job } from 'bullmq';
 import { DOCUMENT_OCR_QUEUE } from '../../queues/queue-names';
+import { processorWorkerOptions } from '../../queues/queue-runtime-settings.service';
+import { OrgProcessorCapacityService } from '../services/org-processor-capacity.service';
 import { FileProcessorResultsRepository } from '../repositories/file-processor-results.repository';
 import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
 import { DocumentOcrProcessingService } from '../services/document-ocr-processing.service';
 import { FileProcessingRollupService } from '../services/file-processing-rollup.service';
 import { RoadmapJobData, RoadmapProcessingProcessor } from './roadmap-processing.processor';
 
-@Processor(DOCUMENT_OCR_QUEUE, { concurrency: 1 })
+@Processor(DOCUMENT_OCR_QUEUE, processorWorkerOptions(DOCUMENT_OCR_QUEUE))
 export class DocumentOcrProcessingProcessor extends RoadmapProcessingProcessor {
   constructor(
     private readonly service: DocumentOcrProcessingService,
     jobs: ProcessingJobsRepository,
     results: FileProcessorResultsRepository,
     rollup: FileProcessingRollupService,
+    @Optional() capacity?: OrgProcessorCapacityService,
   ) {
-    super(jobs, results, rollup);
+    super(jobs, results, rollup, capacity);
   }
 
   process(job: Job<RoadmapJobData>) {

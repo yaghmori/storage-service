@@ -1,15 +1,17 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { ProcessorKey } from '@workspace/validation';
-import { Job } from 'bullmq';
+import { DelayedError, Job } from 'bullmq';
 import { VIDEO_PROCESSING_QUEUE } from '../../queues/queue-names';
+import { processorWorkerOptions } from '../../queues/queue-runtime-settings.service';
 import { VideoProcessingJobData } from '../../queues/queues.service';
 import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
 import { FileProcessingRollupService } from '../services/file-processing-rollup.service';
 import { VideoProcessingService } from '../services/video-processing.service';
+import { OrgProcessorCapacityService } from '../services/org-processor-capacity.service';
 
 @Processor(VIDEO_PROCESSING_QUEUE, {
-  concurrency: 1,
+  ...processorWorkerOptions(VIDEO_PROCESSING_QUEUE),
   lockDuration: 12 * 60 * 1000,
 })
 export class VideoProcessingProcessor extends WorkerHost {
@@ -19,11 +21,14 @@ export class VideoProcessingProcessor extends WorkerHost {
     private readonly videoProcessingService: VideoProcessingService,
     private readonly jobsRepository: ProcessingJobsRepository,
     private readonly rollup: FileProcessingRollupService,
+    @Optional() private readonly capacity?: OrgProcessorCapacityService,
   ) {
     super();
   }
 
   async process(job: Job<VideoProcessingJobData>) {
+    await this.capacity?.assertOrDelay(job, ProcessorKey.VIDEO_PREVIEW);
+
     const fileId =
       typeof job.data.fileId === 'number'
         ? String(job.data.fileId)
@@ -75,6 +80,7 @@ export class VideoProcessingProcessor extends WorkerHost {
       if (orgId) await this.rollup.refresh(fileId, orgId);
       return { success: true, variants };
     } catch (error) {
+      if (error instanceof DelayedError) throw error;
       this.logger.error(
         `Video processing failed for file ${fileId}: ${(error as Error).message}`,
         (error as Error).stack,

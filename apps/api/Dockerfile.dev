@@ -7,8 +7,22 @@
 FROM node:20-alpine AS base
 
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
- && npm install -g nodemon \
- && apk add --no-cache ffmpeg poppler-utils tesseract-ocr libheif
+ && npm install -g nodemon
+
+# PDF/OCR/video tools (separate layer). Alpine CDN DNS can flake — retry apk.
+RUN set -eux; \
+  i=1; \
+  while [ "$i" -le 5 ]; do \
+    if apk update && apk add --no-cache ffmpeg poppler-utils tesseract-ocr libheif; then \
+      break; \
+    fi; \
+    echo "apk attempt $i failed; retrying in 5s..."; \
+    i=$((i + 1)); \
+    sleep 5; \
+  done; \
+  command -v pdftoppm; \
+  command -v pdftotext; \
+  command -v tesseract
 
 WORKDIR /app
 

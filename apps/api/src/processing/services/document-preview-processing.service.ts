@@ -35,7 +35,10 @@ export class DocumentPreviewProcessingService {
         ]);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          return this.skip(input, 'pdftoppm binary is not available');
+          return this.skip(
+            input,
+            'pdftoppm binary is not available (install poppler-utils on the worker image)',
+          );
         }
         throw error;
       }

@@ -25,6 +25,13 @@ import {
   mergeProcessingSettings,
   normalizeImageVariants,
 } from '../types/processing-settings';
+import {
+  ProcessorCapacityMap,
+  emptyCapacityMap,
+  extractCapacity,
+  normalizeCapacity,
+  withCapacity,
+} from '../types/processor-capacity';
 
 export type OrgProcessorRow = schema.OrgProcessor;
 
@@ -63,7 +70,13 @@ export class OrgProcessorsService {
             enabled: d.enabled,
             sortOrder: d.sortOrder,
             mimeInclude: DEFAULT_MIME_INCLUDE[processorKey] ?? null,
-            settings: d.settings,
+            settings: withCapacity(
+              { ...(d.settings as Record<string, unknown>) },
+              extractCapacity(
+                d.settings as Record<string, unknown>,
+                processorKey,
+              ),
+            ),
             backendId: null,
           };
         }),
@@ -84,7 +97,13 @@ export class OrgProcessorsService {
             enabled: d.enabled,
             sortOrder: d.sortOrder,
             mimeInclude: DEFAULT_MIME_INCLUDE[processorKey] ?? null,
-            settings: d.settings,
+            settings: withCapacity(
+              { ...(d.settings as Record<string, unknown>) },
+              extractCapacity(
+                d.settings as Record<string, unknown>,
+                processorKey,
+              ),
+            ),
             backendId: null,
           };
         }),
@@ -309,7 +328,31 @@ export class OrgProcessorsService {
       enableNotifyWebhook: notify?.enabled ?? false,
       notifyWebhookUrl: notifySettings.url ?? '',
       notifyWebhookSecret: notifySettings.secret ?? '',
+      processorCapacity: this.capacityMapFromRows(rows),
     };
+  }
+
+  capacityMapFromRows(rows: OrgProcessorRow[]): ProcessorCapacityMap {
+    const map = emptyCapacityMap();
+    for (const row of rows) {
+      map[row.processorKey] = extractCapacity(
+        (row.settings ?? {}) as Record<string, unknown>,
+        row.processorKey,
+      );
+    }
+    return map;
+  }
+
+  async getCapacity(
+    orgId: string,
+    processorKey: string,
+  ): Promise<ReturnType<typeof extractCapacity>> {
+    const rows = await this.ensureDefaults(orgId);
+    const row = rows.find((r) => r.processorKey === processorKey);
+    return extractCapacity(
+      (row?.settings ?? {}) as Record<string, unknown>,
+      processorKey,
+    );
   }
 
   async updateFromLegacySettings(
@@ -358,6 +401,22 @@ export class OrgProcessorsService {
     const imageFormats =
       (body.imageFormats as ImageFormat[] | undefined) ?? legacy.imageFormats;
 
+    const capacityIncoming =
+      body.processorCapacity && typeof body.processorCapacity === 'object'
+        ? (body.processorCapacity as Record<string, Partial<{
+            concurrency: number;
+            rateMax: number | null;
+            rateDurationMs: number | null;
+          }>>)
+        : {};
+    const capacityFor = (processorKey: string) =>
+      normalizeCapacity(
+        capacityIncoming[processorKey] ??
+          (legacy as { processorCapacity?: ProcessorCapacityMap })
+            .processorCapacity?.[processorKey],
+        processorKey,
+      );
+
     // String literals avoid undefined keys if a stale @workspace/validation
     // build is still loaded in a long-lived API process.
     await this.upsertMany(orgId, [
@@ -369,34 +428,43 @@ export class OrgProcessorsService {
             : (legacy as { enableImageNormalize?: boolean }).enableImageNormalize ??
               true,
         sortOrder: 5,
-        settings: { forceAllImages: false, maxEdge: 2048 },
+        settings: withCapacity(
+          { forceAllImages: false, maxEdge: 2048 },
+          capacityFor('image.normalize'),
+        ),
       },
       {
         processorKey: 'image.variants',
         enabled: enableImage,
         sortOrder: 10,
-        settings: { imageVariants, imageFormats },
+        settings: withCapacity(
+          { imageVariants, imageFormats },
+          capacityFor('image.variants'),
+        ),
       },
       {
         processorKey: 'video.preview',
         enabled: enableVideo,
         sortOrder: 20,
-        settings: {
-          videoThumbnail:
-            typeof body.videoThumbnail === 'boolean'
-              ? body.videoThumbnail
-              : legacy.videoThumbnail,
-          videoPreviewFrames:
-            typeof body.videoPreviewFrames === 'number'
-              ? body.videoPreviewFrames
-              : legacy.videoPreviewFrames,
-        },
+        settings: withCapacity(
+          {
+            videoThumbnail:
+              typeof body.videoThumbnail === 'boolean'
+                ? body.videoThumbnail
+                : legacy.videoThumbnail,
+            videoPreviewFrames:
+              typeof body.videoPreviewFrames === 'number'
+                ? body.videoPreviewFrames
+                : legacy.videoPreviewFrames,
+          },
+          capacityFor('video.preview'),
+        ),
       },
       {
         processorKey: 'metadata.exif',
         enabled: enableMeta,
         sortOrder: 30,
-        settings: {},
+        settings: withCapacity({}, capacityFor('metadata.exif')),
       },
       {
         processorKey: 'ai.vision',
@@ -406,33 +474,36 @@ export class OrgProcessorsService {
           body.aiBackendId === undefined
             ? legacy.aiBackendId
             : (body.aiBackendId as string | null),
-        settings: {
-          enableCaption:
-            typeof body.enableAiCaption === 'boolean'
-              ? body.enableAiCaption
-              : legacy.enableAiCaption,
-          enableTags:
-            typeof body.enableAiTags === 'boolean'
-              ? body.enableAiTags
-              : legacy.enableAiTags,
-          enableNsfw:
-            typeof body.enableAiNsfw === 'boolean'
-              ? body.enableAiNsfw
-              : legacy.enableAiNsfw,
-          nsfwThreshold:
-            typeof body.nsfwThreshold === 'number'
-              ? body.nsfwThreshold
-              : legacy.nsfwThreshold,
-          models: {
-            vision:
-              body.aiVisionModel === undefined
-                ? (legacy as { aiVisionModel?: string | null }).aiVisionModel ||
-                  undefined
-                : typeof body.aiVisionModel === 'string'
-                  ? body.aiVisionModel.trim() || undefined
-                  : undefined,
+        settings: withCapacity(
+          {
+            enableCaption:
+              typeof body.enableAiCaption === 'boolean'
+                ? body.enableAiCaption
+                : legacy.enableAiCaption,
+            enableTags:
+              typeof body.enableAiTags === 'boolean'
+                ? body.enableAiTags
+                : legacy.enableAiTags,
+            enableNsfw:
+              typeof body.enableAiNsfw === 'boolean'
+                ? body.enableAiNsfw
+                : legacy.enableAiNsfw,
+            nsfwThreshold:
+              typeof body.nsfwThreshold === 'number'
+                ? body.nsfwThreshold
+                : legacy.nsfwThreshold,
+            models: {
+              vision:
+                body.aiVisionModel === undefined
+                  ? (legacy as { aiVisionModel?: string | null }).aiVisionModel ||
+                    undefined
+                  : typeof body.aiVisionModel === 'string'
+                    ? body.aiVisionModel.trim() || undefined
+                    : undefined,
+            },
           },
-        },
+          capacityFor('ai.vision'),
+        ),
       },
       {
         processorKey: 'dedupe.phash',
@@ -442,13 +513,16 @@ export class OrgProcessorsService {
             : (legacy as { enableDedupePhash?: boolean }).enableDedupePhash ??
               false,
         sortOrder: 45,
-        settings: {
-          thresholdBits:
-            typeof body.phashThresholdBits === 'number'
-              ? body.phashThresholdBits
-              : (legacy as { phashThresholdBits?: number }).phashThresholdBits ??
-                10,
-        },
+        settings: withCapacity(
+          {
+            thresholdBits:
+              typeof body.phashThresholdBits === 'number'
+                ? body.phashThresholdBits
+                : (legacy as { phashThresholdBits?: number }).phashThresholdBits ??
+                  10,
+          },
+          capacityFor('dedupe.phash'),
+        ),
       },
       {
         processorKey: 'integrity.verify',
@@ -458,7 +532,7 @@ export class OrgProcessorsService {
             : (legacy as { enableIntegrityVerify?: boolean })
                 .enableIntegrityVerify ?? false,
         sortOrder: 50,
-        settings: {},
+        settings: withCapacity({}, capacityFor('integrity.verify')),
       },
       {
         processorKey: 'document.preview',
@@ -468,7 +542,10 @@ export class OrgProcessorsService {
             : (legacy as { enableDocumentPreview?: boolean })
                 .enableDocumentPreview ?? true,
         sortOrder: 60,
-        settings: { maxEdge: 800 },
+        settings: withCapacity(
+          { maxEdge: 800 },
+          capacityFor('document.preview'),
+        ),
       },
       {
         processorKey: 'document.text',
@@ -478,7 +555,10 @@ export class OrgProcessorsService {
             : (legacy as { enableDocumentText?: boolean }).enableDocumentText ??
               true,
         sortOrder: 70,
-        settings: { maxChars: 524_288 },
+        settings: withCapacity(
+          { maxChars: 524_288 },
+          capacityFor('document.text'),
+        ),
       },
       {
         processorKey: 'document.ocr',
@@ -492,28 +572,31 @@ export class OrgProcessorsService {
           body.documentOcrBackendId === undefined
             ? legacy.documentOcrBackendId
             : (body.documentOcrBackendId as string | null),
-        settings: {
-          minCharsBeforeSkip: 40,
-          engine:
-            typeof body.documentOcrEngine === 'string'
-              ? body.documentOcrEngine === 'tesseract'
-                ? 'tesseract'
-                : 'openai_compatible'
-              : (legacy as { documentOcrEngine?: string }).documentOcrEngine ===
-                  'tesseract'
-                ? 'tesseract'
-                : 'openai_compatible',
-          models: {
-            vision:
-              body.documentOcrVisionModel === undefined
-                ? (
-                    legacy as { documentOcrVisionModel?: string | null }
-                  ).documentOcrVisionModel || undefined
-                : typeof body.documentOcrVisionModel === 'string'
-                  ? body.documentOcrVisionModel.trim() || undefined
-                  : undefined,
+        settings: withCapacity(
+          {
+            minCharsBeforeSkip: 40,
+            engine:
+              typeof body.documentOcrEngine === 'string'
+                ? body.documentOcrEngine === 'tesseract'
+                  ? 'tesseract'
+                  : 'openai_compatible'
+                : (legacy as { documentOcrEngine?: string }).documentOcrEngine ===
+                    'tesseract'
+                  ? 'tesseract'
+                  : 'openai_compatible',
+            models: {
+              vision:
+                body.documentOcrVisionModel === undefined
+                  ? (
+                      legacy as { documentOcrVisionModel?: string | null }
+                    ).documentOcrVisionModel || undefined
+                  : typeof body.documentOcrVisionModel === 'string'
+                    ? body.documentOcrVisionModel.trim() || undefined
+                    : undefined,
+            },
           },
-        },
+          capacityFor('document.ocr'),
+        ),
       },
       {
         processorKey: 'notify.webhook',
@@ -523,22 +606,25 @@ export class OrgProcessorsService {
             : (legacy as { enableNotifyWebhook?: boolean })
                 .enableNotifyWebhook ?? false,
         sortOrder: 100,
-        settings: {
-          url:
-            typeof body.notifyWebhookUrl === 'string'
-              ? body.notifyWebhookUrl
-              : (legacy as { notifyWebhookUrl?: string }).notifyWebhookUrl ?? '',
-          secret:
-            typeof body.notifyWebhookSecret === 'string'
-              ? body.notifyWebhookSecret
-              : (legacy as { notifyWebhookSecret?: string })
-                  .notifyWebhookSecret ?? '',
-          events: [
-            'processing.completed',
-            'processing.failed',
-            'processing.partial',
-          ],
-        },
+        settings: withCapacity(
+          {
+            url:
+              typeof body.notifyWebhookUrl === 'string'
+                ? body.notifyWebhookUrl
+                : (legacy as { notifyWebhookUrl?: string }).notifyWebhookUrl ?? '',
+            secret:
+              typeof body.notifyWebhookSecret === 'string'
+                ? body.notifyWebhookSecret
+                : (legacy as { notifyWebhookSecret?: string })
+                    .notifyWebhookSecret ?? '',
+            events: [
+              'processing.completed',
+              'processing.failed',
+              'processing.partial',
+            ],
+          },
+          capacityFor('notify.webhook'),
+        ),
       },
     ]);
 
@@ -550,37 +636,47 @@ export class OrgProcessorsService {
     processorKey: string,
     settings: Record<string, unknown>,
   ): Record<string, unknown> {
+    const capacity = extractCapacity(settings, processorKey);
     // Use string literals so a stale ProcessorKey export cannot skip validation.
     if (processorKey === 'image.variants') {
       const parsed = imageVariantsProcessorSettingsSchema.safeParse(settings);
-      if (parsed.success) return parsed.data;
+      if (parsed.success) return withCapacity(parsed.data, capacity);
       this.logger.warn(
         `image.variants settings failed schema parse; merging with defaults. keys=${Object.keys(settings).join(',')}`,
       );
-      return {
-        ...DEFAULT_IMAGE_VARIANTS_SETTINGS,
-        ...settings,
-        imageVariants:
-          coerceImageVariants(settings.imageVariants) ??
-          DEFAULT_IMAGE_VARIANTS_SETTINGS.imageVariants,
-        imageFormats: Array.isArray(settings.imageFormats)
-          ? settings.imageFormats
-          : DEFAULT_IMAGE_VARIANTS_SETTINGS.imageFormats,
-      };
+      return withCapacity(
+        {
+          ...DEFAULT_IMAGE_VARIANTS_SETTINGS,
+          ...settings,
+          imageVariants:
+            coerceImageVariants(settings.imageVariants) ??
+            DEFAULT_IMAGE_VARIANTS_SETTINGS.imageVariants,
+          imageFormats: Array.isArray(settings.imageFormats)
+            ? settings.imageFormats
+            : DEFAULT_IMAGE_VARIANTS_SETTINGS.imageFormats,
+        },
+        capacity,
+      );
     }
     if (processorKey === 'video.preview') {
       const parsed = videoPreviewProcessorSettingsSchema.safeParse(settings);
-      return parsed.success
-        ? parsed.data
-        : { ...DEFAULT_VIDEO_PREVIEW_SETTINGS, ...settings };
+      return withCapacity(
+        parsed.success
+          ? parsed.data
+          : { ...DEFAULT_VIDEO_PREVIEW_SETTINGS, ...settings },
+        capacity,
+      );
     }
     if (processorKey === 'ai.vision') {
       const parsed = aiVisionProcessorSettingsSchema.safeParse(settings);
-      return parsed.success
-        ? parsed.data
-        : { ...DEFAULT_AI_VISION_SETTINGS, ...settings };
+      return withCapacity(
+        parsed.success
+          ? parsed.data
+          : { ...DEFAULT_AI_VISION_SETTINGS, ...settings },
+        capacity,
+      );
     }
-    return settings;
+    return withCapacity(settings, capacity);
   }
 }
 

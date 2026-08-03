@@ -30,6 +30,8 @@ function statusBadgeClass(status: string): string {
       return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400";
     case "failed":
       return "bg-destructive/15 text-destructive";
+    case "skipped":
+      return "bg-amber-500/15 text-amber-800 dark:text-amber-400";
     case "processing":
       return "bg-blue-500/15 text-blue-700 dark:text-blue-400";
     case "cancelled":
@@ -106,7 +108,11 @@ export function JobDetailSheet({
     data?.progress == null || !Number.isFinite(Number(data.progress))
       ? null
       : Math.max(0, Math.min(100, Number(data.progress)));
-  const canRetry = data?.status === "failed" || data?.status === "cancelled";
+  const canRetry =
+    data?.status === "failed" ||
+    data?.status === "cancelled" ||
+    data?.status === "skipped" ||
+    data?.status === "partial";
 
   return (
     <ResponsiveSheet
@@ -256,6 +262,21 @@ export function JobDetailSheet({
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-destructive">Error</p>
                   <pre className="max-h-64 overflow-auto rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs whitespace-pre-wrap break-words">
+                    {data.errorMessage}
+                  </pre>
+                </div>
+              </>
+            ) : null}
+
+            {(data.status === "skipped" || data.status === "partial") &&
+            data.errorMessage ? (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-400">
+                    Skip reason
+                  </p>
+                  <pre className="max-h-64 overflow-auto rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs whitespace-pre-wrap break-words">
                     {data.errorMessage}
                   </pre>
                 </div>

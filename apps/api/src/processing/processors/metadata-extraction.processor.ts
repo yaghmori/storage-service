@@ -1,14 +1,19 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { ProcessorKey } from '@workspace/validation';
-import { Job } from 'bullmq';
+import { DelayedError, Job } from 'bullmq';
 import { METADATA_EXTRACTION_QUEUE } from '../../queues/queue-names';
+import { processorWorkerOptions } from '../../queues/queue-runtime-settings.service';
 import { MetadataExtractionJobData } from '../../queues/queues.service';
 import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
 import { FileProcessingRollupService } from '../services/file-processing-rollup.service';
 import { MetadataExtractionService } from '../services/metadata-extraction.service';
+import { OrgProcessorCapacityService } from '../services/org-processor-capacity.service';
 
-@Processor(METADATA_EXTRACTION_QUEUE, { concurrency: 3 })
+@Processor(
+  METADATA_EXTRACTION_QUEUE,
+  processorWorkerOptions(METADATA_EXTRACTION_QUEUE),
+)
 export class MetadataExtractionProcessor extends WorkerHost {
   private readonly logger = new Logger(MetadataExtractionProcessor.name);
 
@@ -16,11 +21,14 @@ export class MetadataExtractionProcessor extends WorkerHost {
     private readonly metadataExtractionService: MetadataExtractionService,
     private readonly jobsRepository: ProcessingJobsRepository,
     private readonly rollup: FileProcessingRollupService,
+    @Optional() private readonly capacity?: OrgProcessorCapacityService,
   ) {
     super();
   }
 
   async process(job: Job<MetadataExtractionJobData>) {
+    await this.capacity?.assertOrDelay(job, ProcessorKey.METADATA_EXIF);
+
     const fileId =
       typeof job.data.fileId === 'number'
         ? String(job.data.fileId)
@@ -77,6 +85,7 @@ export class MetadataExtractionProcessor extends WorkerHost {
       await this.rollup.refresh(fileId, orgId);
       return { success: true, metadata };
     } catch (error) {
+      if (error instanceof DelayedError) throw error;
       this.logger.error(
         `Metadata extraction failed for file ${fileId}: ${(error as Error).message}`,
         (error as Error).stack,

@@ -1,11 +1,13 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import { Job } from 'bullmq';
+import { Logger, Optional } from '@nestjs/common';
+import { DelayedError, Job } from 'bullmq';
 import { ProcessorKey } from '@workspace/validation';
 import { AI_VISION_QUEUE } from '../../queues/queue-names';
+import { processorWorkerOptions } from '../../queues/queue-runtime-settings.service';
 import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
 import { AiVisionProcessingService } from '../services/ai-vision-processing.service';
 import { FileProcessingRollupService } from '../services/file-processing-rollup.service';
+import { OrgProcessorCapacityService } from '../services/org-processor-capacity.service';
 
 export type AiVisionJobData = {
   fileId: string;
@@ -14,7 +16,7 @@ export type AiVisionJobData = {
   settings?: Record<string, unknown>;
 };
 
-@Processor(AI_VISION_QUEUE, { concurrency: 1 })
+@Processor(AI_VISION_QUEUE, processorWorkerOptions(AI_VISION_QUEUE))
 export class AiVisionProcessingProcessor extends WorkerHost {
   private readonly logger = new Logger(AiVisionProcessingProcessor.name);
 
@@ -22,11 +24,14 @@ export class AiVisionProcessingProcessor extends WorkerHost {
     private readonly aiVision: AiVisionProcessingService,
     private readonly jobsRepository: ProcessingJobsRepository,
     private readonly rollup: FileProcessingRollupService,
+    @Optional() private readonly capacity?: OrgProcessorCapacityService,
   ) {
     super();
   }
 
   async process(job: Job<AiVisionJobData>) {
+    await this.capacity?.assertOrDelay(job, ProcessorKey.AI_VISION);
+
     const { fileId, orgId, backendId, settings } = job.data;
     this.logger.log(`Processing ai.vision for file ${fileId}`);
 
@@ -68,6 +73,7 @@ export class AiVisionProcessingProcessor extends WorkerHost {
       await this.rollup.refresh(fileId, orgId);
       return { success: true, fileId, processorKey: ProcessorKey.AI_VISION };
     } catch (error) {
+      if (error instanceof DelayedError) throw error;
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`ai.vision failed for ${fileId}: ${message}`);
       if (tracked) {

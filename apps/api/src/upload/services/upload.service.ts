@@ -44,6 +44,7 @@ export class UploadService {
     storageProviderId?: string,
     userId?: string,
     storageKeyOverride?: string,
+    options?: { skipProcessing?: boolean },
   ) {
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -151,8 +152,9 @@ export class UploadService {
 
     const config = providerConfig.config as { bucket?: string };
     let fileRecord;
+    let createdNewRow = false;
     try {
-      fileRecord = await this.filesService.createFile({
+      const created = await this.filesService.createFile({
         orgId,
         storageProviderId: providerConfig.id,
         storageKey: key,
@@ -164,7 +166,25 @@ export class UploadService {
         size: BigInt(buffer.length),
         fileHash: sha256Hash,
       });
-      await this.usageService.increment(orgId, buffer.length);
+      fileRecord = created.file;
+      createdNewRow = created.created;
+
+      // Hash/key race recovery can return an existing row with a different key.
+      if (!createdNewRow && fileRecord.key && fileRecord.key !== key) {
+        try {
+          await provider.delete(key);
+        } catch (deleteError) {
+          this.logger.warn(
+            `Orphan cleanup after duplicate recovery failed for key=${key}: ${
+              deleteError instanceof Error ? deleteError.message : deleteError
+            }`,
+          );
+        }
+      }
+
+      if (createdNewRow) {
+        await this.usageService.increment(orgId, buffer.length);
+      }
     } catch (error) {
       try {
         await provider.delete(key);
@@ -178,12 +198,18 @@ export class UploadService {
       throw new BadRequestException('File record not found');
     }
 
-    void this.scheduleProcessingJobs(
-      fileRecord.id,
-      file.mimetype,
-      orgId,
-      file.originalname,
-    );
+    if (createdNewRow && !options?.skipProcessing) {
+      void this.scheduleProcessingJobs(
+        fileRecord.id,
+        file.mimetype,
+        orgId,
+        file.originalname,
+      );
+    } else if (options?.skipProcessing) {
+      this.logger.log(
+        `Skipping processors for file ${fileRecord.id} (skipProcessing=true)`,
+      );
+    }
 
     void this.lifecycleEvents?.fileUploaded({
       fileId: fileRecord.id,
@@ -191,7 +217,7 @@ export class UploadService {
       fileName: fileRecord.originalFilename,
       fileSize: Number(fileRecord.size),
       mimeType: fileRecord.mimeType,
-      isDuplicate: false,
+      isDuplicate: !createdNewRow,
     });
 
     return {
@@ -199,10 +225,12 @@ export class UploadService {
       originalFileName: fileRecord.originalFilename,
       mimeType: fileRecord.mimeType,
       size: Number(fileRecord.size),
-      isDuplicate: false,
-      message: 'File uploaded successfully.',
-      uploadedToStorage: true,
-      storageKey: key,
+      isDuplicate: !createdNewRow,
+      message: createdNewRow
+        ? 'File uploaded successfully.'
+        : `File already exists in the system. Using existing file (ID: ${fileRecord.id}).`,
+      uploadedToStorage: createdNewRow,
+      storageKey: createdNewRow ? key : fileRecord.key,
       createdAt: fileRecord.createdAt,
     };
   }

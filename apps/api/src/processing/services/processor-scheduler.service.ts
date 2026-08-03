@@ -188,6 +188,14 @@ export class ProcessorSchedulerService {
         }
 
         if (proc.processorKey === ProcessorKey.DOCUMENT_OCR) {
+          // PDFs need document.preview first (pdftoppm → page JPEG).
+          // Images can OCR immediately from the original bytes.
+          if (input.mimeType.toLowerCase() === 'application/pdf') {
+            this.logger.debug(
+              `Deferring document.ocr for PDF ${input.fileId} until preview completes`,
+            );
+            continue;
+          }
           await this.queues.enqueueProcessorJob({
             processorKey: proc.processorKey,
             fileId: input.fileId,
@@ -219,6 +227,39 @@ export class ProcessorSchedulerService {
     }
 
     return { scheduled };
+  }
+
+  /** Called after successful document.preview for PDFs. */
+  async enqueueDocumentOcrAfterPreview(input: {
+    fileId: string;
+    orgId: string;
+  }): Promise<boolean> {
+    const enabled = await this.orgProcessors.getEnabledForFile(
+      input.orgId,
+      'application/pdf',
+    );
+    const ocr = enabled.find((p) => p.processorKey === ProcessorKey.DOCUMENT_OCR);
+    if (!ocr) return false;
+
+    const settings = (ocr.settings ?? {}) as Record<string, unknown>;
+    await this.queues.enqueueProcessorJob({
+      processorKey: ProcessorKey.DOCUMENT_OCR,
+      fileId: input.fileId,
+      orgId: input.orgId,
+      backendId: ocr.backendId,
+      parameters: settings,
+      data: {
+        fileId: input.fileId,
+        orgId: input.orgId,
+        backendId: ocr.backendId,
+        settings,
+      },
+      priority: 4,
+    });
+    this.logger.log(
+      `Enqueued document.ocr after preview for file ${input.fileId}`,
+    );
+    return true;
   }
 
   private shouldQueueImageVariants(

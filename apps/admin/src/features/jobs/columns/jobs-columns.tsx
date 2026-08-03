@@ -5,6 +5,8 @@ import {
   Badge,
   Button,
   DataGridColumnHeader,
+  DataGridTableRowSelect,
+  DataGridTableRowSelectAll,
   DateDisplay,
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +25,8 @@ function statusBadgeClass(status: string): string {
       return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400";
     case "failed":
       return "bg-destructive/15 text-destructive";
+    case "skipped":
+      return "bg-amber-500/15 text-amber-800 dark:text-amber-400";
     case "processing":
       return "bg-blue-500/15 text-blue-700 dark:text-blue-400";
     case "cancelled":
@@ -39,6 +43,22 @@ export function createJobsColumns(
 ): ColumnDef<JobRow>[] {
   return [
     {
+      id: "select",
+      header: () => <DataGridTableRowSelectAll />,
+      cell: ({ row }) => <DataGridTableRowSelect row={row} />,
+      enableSorting: false,
+      enableHiding: false,
+      enableResizing: false,
+      enableColumnFilter: false,
+      size: 40,
+      minSize: 40,
+      maxSize: 40,
+      meta: {
+        headerClassName: "w-10 min-w-10 max-w-10 px-3",
+        cellClassName: "w-10 min-w-10 max-w-10 px-3",
+      },
+    },
+    {
       id: "search",
       accessorFn: () => "",
       header: "Search",
@@ -50,7 +70,7 @@ export function createJobsColumns(
       meta: {
         variant: "text",
         label: "Search",
-        placeholder: "Search by file name or UUID…",
+        placeholder: "Search by file name, file ID, or job ID…",
       },
     },
     {
@@ -60,7 +80,7 @@ export function createJobsColumns(
       ),
       enableColumnFilter: true,
       meta: {
-        variant: "select",
+        variant: "multiSelect",
         label: "Type",
         options: Object.entries(ProcessorKeyLabels).map(([value, label]) => ({
           value,
@@ -82,7 +102,7 @@ export function createJobsColumns(
       ),
       enableColumnFilter: true,
       meta: {
-        variant: "select",
+        variant: "multiSelect",
         label: "Status",
         options: Object.entries(JobStatusLabels).map(([value, label]) => ({
           value,
@@ -152,7 +172,12 @@ export function createJobsColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Created" />
       ),
-      meta: { label: "Created", skeleton: <Skeleton className="h-4 w-28" /> },
+      enableColumnFilter: true,
+      meta: {
+        variant: "dateRange",
+        label: "Created",
+        skeleton: <Skeleton className="h-4 w-28" />,
+      },
       cell: ({ row }) => (
         <DateDisplay date={row.original.createdAt} format="relative" />
       ),
@@ -167,7 +192,9 @@ export function createJobsColumns(
           row.original.status === "processing";
         const canRetry =
           row.original.status === "failed" ||
-          row.original.status === "cancelled";
+          row.original.status === "cancelled" ||
+          row.original.status === "skipped" ||
+          row.original.status === "partial";
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
