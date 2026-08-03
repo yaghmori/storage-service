@@ -1,6 +1,6 @@
 {
   "name": "@yaghmori/storage-service",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Client SDK for storage-service — ports, TCP patterns, Kafka topics, Zod DTOs",
   "license": "MIT",
   "type": "commonjs",
