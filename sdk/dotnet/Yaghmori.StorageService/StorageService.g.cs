@@ -40,6 +40,13 @@ public static class StorageService
     public static class HttpPaths
     {
         public const string Upload = "/upload";
+        public const string UploadInitiate = "/upload/initiate";
+        public const string UploadComplete = "/upload/complete";
+        public const string UploadAbort = "/upload/abort";
+        public const string UploadMultipartPartUrl = "/upload/multipart/part-url";
+        public const string UploadMultipartInitiate = "/upload/multipart/initiate";
+        public const string UploadMultipartComplete = "/upload/multipart/complete";
+        public const string UploadMultipartAbort = "/upload/multipart/abort";
         public const string GetFile = "/files/{id}";
         public const string DeleteFile = "/files/{id}";
         public const string Download = "/files/{id}/download";
