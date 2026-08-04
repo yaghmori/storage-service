@@ -1,0 +1,10 @@
+{
+  "name": "storage-service",
+  "private": true,
+  "description": "Production container package.json — use pnpm migrate / npm run migrate",
+  "scripts": {
+    "migrate": "node api/dist/migrate.js",
+    "db:migrate": "node api/dist/migrate.js",
+    "migrate:prod": "node api/dist/migrate.js"
+  }
+}

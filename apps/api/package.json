@@ -21,7 +21,9 @@
     "start:dev": "node -r reflect-metadata -r ts-node/register/transpile-only src/main.ts",
     "type-check": "tsc --noEmit -p tsconfig.typecheck.json",
     "db:generate": "drizzle-kit generate --config=./drizzle.config.ts",
-    "db:migrate": "drizzle-kit migrate --config=./drizzle.config.ts",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "migrate": "tsx src/scripts/migrate.ts",
+    "migrate:prod": "node dist/migrate.js",
     "db:push": "drizzle-kit push --config=./drizzle.config.ts",
     "db:seed": "tsx src/database/seed/seed.ts"
   },

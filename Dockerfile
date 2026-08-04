@@ -30,13 +30,14 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
 WORKDIR /app/api
 COPY apps/api/package.json ./
 # tsup bundles @workspace/validation — drop workspace protocol for standalone prod install
-RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
+RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; p.scripts={...(p.scripts||{}),migrate:'node dist/migrate.js','db:migrate':'node dist/migrate.js','migrate:prod':'node dist/migrate.js'}; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
  && pnpm install --prod --ignore-scripts \
  && pnpm rebuild sharp || true
 
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache netcat-openbsd tini ffmpeg poppler-utils tesseract-ocr libheif \
+RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
+ && apk add --no-cache netcat-openbsd tini ffmpeg poppler-utils tesseract-ocr libheif \
  && addgroup -g 1001 -S nodejs \
  && adduser -S nestjs -u 1001
 
@@ -59,9 +60,12 @@ COPY --from=build --chown=nestjs:nodejs /app/apps/api/src/database/drizzle /app/
 COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/standalone /app/web
 COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/static /app/web/apps/admin/.next/static
 
-COPY --from=build --chown=nestjs:nodejs /app/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
- && chmod +x /app/docker-entrypoint.sh
+COPY --from=build /app/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --from=build /app/scripts/migrate.sh /usr/local/bin/migrate
+COPY --from=build /app/scripts/container-package.json /app/package.json
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh /usr/local/bin/migrate \
+ && chmod +x /app/docker-entrypoint.sh /usr/local/bin/migrate \
+ && chown nestjs:nodejs /app/package.json
 
 USER nestjs
 
@@ -70,4 +74,9 @@ EXPOSE 6000 6001 6200
 HEALTHCHECK --interval=30s --timeout=3s --start-period=50s --retries=3 \
   CMD nc -z localhost $${PORT:-6000} || exit 1
 
+# Schema upgrade (any of these):
+#   docker exec <container> pnpm migrate
+#   docker exec <container> npm run migrate
+#   docker exec <container> migrate
+# Optional boot migrate: RUN_MIGRATIONS=true
 ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]
