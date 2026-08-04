@@ -123,3 +123,11 @@ export function zodFlatFields(
   }
   return { fields };
 }
+
+/** First Zod issue message for toast / non-field validation UX. */
+export function zodFirstMessage(
+  error: z.ZodError,
+  fallback = "Invalid input",
+): string {
+  return error.issues[0]?.message?.trim() || fallback;
+}

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, BadRequestException } from '@nestjs/common';
 import {
   BUILTIN_ORG_PROCESSOR_DEFAULTS,
   DEFAULT_AI_VISION_SETTINGS,
@@ -148,7 +148,7 @@ export class OrgProcessorsService {
           ? (DEFAULT_MIME_INCLUDE[processorKey] ?? null)
           : p.mimeInclude;
       const sortOrder = p.sortOrder ?? 0;
-      const backendId = p.backendId ?? null;
+      const backendId = await this.resolveOrgBackendId(orgId, p.backendId);
 
       await this.db
         .insert(schema.orgProcessors)
@@ -178,6 +178,30 @@ export class OrgProcessorsService {
     }
 
     return this.listByOrg(orgId);
+  }
+
+  /** Reject assigning a processor backend that belongs to another org. */
+  private async resolveOrgBackendId(
+    orgId: string,
+    backendId: string | null | undefined,
+  ): Promise<string | null> {
+    if (backendId == null || backendId === '') return null;
+    const [row] = await this.db
+      .select({ id: schema.processorBackends.id })
+      .from(schema.processorBackends)
+      .where(
+        and(
+          eq(schema.processorBackends.id, backendId),
+          eq(schema.processorBackends.orgId, orgId),
+        ),
+      )
+      .limit(1);
+    if (!row) {
+      throw new BadRequestException(
+        `Processor backend ${backendId} does not belong to this organization`,
+      );
+    }
+    return row.id;
   }
 
   private requireProcessorKey(value: unknown): string {
@@ -264,6 +288,9 @@ export class OrgProcessorsService {
     const phash = byKey.get('dedupe.phash') ?? byKey.get(ProcessorKey.DEDUPE_PHASH);
     const integrity =
       byKey.get('integrity.verify') ?? byKey.get(ProcessorKey.INTEGRITY_VERIFY);
+    const virusScan =
+      byKey.get('security.virus_scan') ??
+      byKey.get(ProcessorKey.SECURITY_VIRUS_SCAN);
     const docPreview =
       byKey.get('document.preview') ?? byKey.get(ProcessorKey.DOCUMENT_PREVIEW);
     const docText =
@@ -319,6 +346,8 @@ export class OrgProcessorsService {
       enableDedupePhash: phash?.enabled ?? false,
       phashThresholdBits: phashSettings.thresholdBits ?? 10,
       enableIntegrityVerify: integrity?.enabled ?? false,
+      enableVirusScan: virusScan?.enabled ?? false,
+      virusScanBackendId: virusScan?.backendId ?? null,
       enableDocumentPreview: docPreview?.enabled ?? true,
       enableDocumentText: docText?.enabled ?? true,
       enableDocumentOcr: docOcr?.enabled ?? false,
@@ -420,6 +449,21 @@ export class OrgProcessorsService {
     // String literals avoid undefined keys if a stale @workspace/validation
     // build is still loaded in a long-lived API process.
     await this.upsertMany(orgId, [
+      {
+        processorKey: 'security.virus_scan',
+        enabled:
+          typeof body.enableVirusScan === 'boolean'
+            ? body.enableVirusScan
+            : (legacy as { enableVirusScan?: boolean }).enableVirusScan ??
+              false,
+        sortOrder: 1,
+        backendId:
+          body.virusScanBackendId === undefined
+            ? (legacy as { virusScanBackendId?: string | null })
+                .virusScanBackendId ?? null
+            : (body.virusScanBackendId as string | null),
+        settings: withCapacity({}, capacityFor('security.virus_scan')),
+      },
       {
         processorKey: 'image.normalize',
         enabled:

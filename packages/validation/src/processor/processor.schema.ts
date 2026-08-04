@@ -21,7 +21,12 @@ export const openaiCompatibleBackendConfigSchema = z.object({
       text: optionalTrimmed.max(255).optional(),
     })
     .optional(),
-  timeoutMs: z.number().int().min(1_000).max(600_000).optional(),
+  timeoutMs: z
+    .number({ error: "Timeout must be a number" })
+    .int("Timeout must be a whole number")
+    .min(1_000, "Timeout must be at least 1,000 ms")
+    .max(600_000, "Timeout must not exceed 600,000 ms")
+    .optional(),
 });
 
 export type OpenaiCompatibleBackendConfig = z.infer<
@@ -29,25 +34,64 @@ export type OpenaiCompatibleBackendConfig = z.infer<
 >;
 
 /** Admin create/update input — plaintext apiKey is write-only. */
-export const processorBackendFormSchema = z.object({
-  name: z.string().trim().min(1).max(255),
-  kind: z.literal(ProcessorBackendKind.OPENAI_COMPATIBLE),
-  isActive: z.boolean().default(true),
-  isDefault: z.boolean().default(false),
-  baseUrl: z
-    .string()
-    .trim()
-    .min(1, "Base URL is required")
-    .max(500)
-    .refine((v) => /^https?:\/\//i.test(v), {
-      message: "Base URL must start with http:// or https://",
-    }),
-  apiKey: z.string().max(512).optional().or(z.literal("")),
-  clearApiKey: z.boolean().optional(),
-  visionModel: optionalTrimmed.max(255).optional().or(z.literal("")),
-  textModel: optionalTrimmed.max(255).optional().or(z.literal("")),
-  timeoutMs: z.number().int().min(1_000).max(600_000).optional(),
-});
+export const processorBackendFormSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Name is required")
+      .max(255, "Name must not exceed 255 characters"),
+    kind: z.enum([
+      ProcessorBackendKind.OPENAI_COMPATIBLE,
+      ProcessorBackendKind.CLAMAV,
+    ]),
+    isActive: z.boolean().default(true),
+    isDefault: z.boolean().default(false),
+    baseUrl: z
+      .string()
+      .trim()
+      .min(1, "Host / URL is required")
+      .max(500, "Host / URL must not exceed 500 characters"),
+    apiKey: z
+      .string()
+      .max(512, "API key must not exceed 512 characters")
+      .optional()
+      .or(z.literal("")),
+    clearApiKey: z.boolean().optional(),
+    visionModel: optionalTrimmed
+      .max(255, "Vision model must not exceed 255 characters")
+      .optional()
+      .or(z.literal("")),
+    textModel: optionalTrimmed
+      .max(255, "Text model must not exceed 255 characters")
+      .optional()
+      .or(z.literal("")),
+    timeoutMs: z
+      .number({ error: "Timeout must be a number" })
+      .int("Timeout must be a whole number")
+      .min(1_000, "Timeout must be at least 1,000 ms")
+      .max(600_000, "Timeout must not exceed 600,000 ms")
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === ProcessorBackendKind.OPENAI_COMPATIBLE) {
+      if (!/^https?:\/\//i.test(value.baseUrl)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["baseUrl"],
+          message: "Base URL must start with http:// or https://",
+        });
+      }
+    } else if (value.kind === ProcessorBackendKind.CLAMAV) {
+      if (value.baseUrl.indexOf(":") < 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["baseUrl"],
+          message: "Clamd host must be host:port (e.g. clamav:3310)",
+        });
+      }
+    }
+  });
 
 export type ProcessorBackendFormValues = z.infer<
   typeof processorBackendFormSchema
@@ -204,6 +248,12 @@ export const BUILTIN_ORG_PROCESSOR_DEFAULTS: Array<{
   sortOrder: number;
   settings: Record<string, unknown>;
 }> = [
+  {
+    processorKey: ProcessorKey.SECURITY_VIRUS_SCAN,
+    enabled: false,
+    sortOrder: 1,
+    settings: {},
+  },
   {
     processorKey: ProcessorKey.IMAGE_NORMALIZE,
     enabled: true,

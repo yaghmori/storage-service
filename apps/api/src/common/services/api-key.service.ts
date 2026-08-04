@@ -17,7 +17,12 @@ export class ApiKeyService {
 
   async verifyApiKey(
     apiKey: string,
-  ): Promise<{ valid: boolean; serviceName?: string; orgId?: string }> {
+  ): Promise<{
+    valid: boolean;
+    serviceName?: string;
+    orgId?: string;
+    permissions?: unknown;
+  }> {
     const keyHash = await this.hashApiKey(apiKey.trim());
 
     const [apiKeyRecord] = await this.db
@@ -25,6 +30,7 @@ export class ApiKeyService {
         serviceName: schema.apiKeys.serviceName,
         orgId: schema.apiKeys.orgId,
         orgStatus: schema.organizations.status,
+        permissions: schema.apiKeys.permissions,
       })
       .from(schema.apiKeys)
       .innerJoin(
@@ -51,6 +57,7 @@ export class ApiKeyService {
       valid: true,
       serviceName: apiKeyRecord.serviceName,
       orgId: apiKeyRecord.orgId,
+      permissions: apiKeyRecord.permissions,
     };
   }
 }

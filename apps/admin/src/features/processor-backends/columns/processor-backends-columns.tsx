@@ -1,6 +1,6 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, FilterFn } from "@tanstack/react-table";
 import {
   Badge,
   Button,
@@ -11,15 +11,54 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from "@workspace/ui/components";
-import { ProcessorBackendKindLabels } from "@workspace/validation";
+import {
+  ProcessorBackendKind,
+  ProcessorBackendKindLabels,
+} from "@workspace/validation";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ProcessorBackendRow } from "../hooks/use-processor-backends-queries";
+
+const KIND_FILTER_OPTIONS = [
+  ProcessorBackendKind.OPENAI_COMPATIBLE,
+  ProcessorBackendKind.CLAMAV,
+].map((value) => ({
+  value,
+  label: ProcessorBackendKindLabels[value] ?? value,
+}));
+
+const multiSelectIncludes: FilterFn<ProcessorBackendRow> = (
+  row,
+  columnId,
+  filterValue,
+) => {
+  const selected = Array.isArray(filterValue)
+    ? filterValue.filter((value): value is string => typeof value === "string")
+    : [];
+  if (selected.length === 0) return true;
+  const cell = String(row.getValue(columnId) ?? "");
+  return selected.includes(cell);
+};
 
 export function createProcessorBackendsColumns(
   onEdit: (row: ProcessorBackendRow) => void,
   onDelete: (row: ProcessorBackendRow) => void,
 ): ColumnDef<ProcessorBackendRow>[] {
   return [
+    {
+      id: "search",
+      accessorFn: () => "",
+      header: "Search",
+      cell: () => null,
+      enableColumnFilter: true,
+      enableSorting: false,
+      enableHiding: false,
+      filterFn: () => true,
+      meta: {
+        variant: "text",
+        label: "Search",
+        placeholder: "Search name, kind, or URL…",
+      },
+    },
     {
       accessorKey: "name",
       header: ({ column }) => (
@@ -32,7 +71,17 @@ export function createProcessorBackendsColumns(
     },
     {
       accessorKey: "kind",
-      header: "Kind",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Kind" />
+      ),
+      enableColumnFilter: true,
+      filterFn: multiSelectIncludes,
+      meta: {
+        variant: "multiSelect",
+        label: "Kind",
+        options: KIND_FILTER_OPTIONS,
+        skeleton: <Skeleton className="h-5 w-28" />,
+      },
       cell: ({ row }) => (
         <Badge variant="outline">
           {ProcessorBackendKindLabels[row.original.kind] ?? row.original.kind}
@@ -41,7 +90,13 @@ export function createProcessorBackendsColumns(
     },
     {
       accessorKey: "baseUrl",
-      header: "Base URL",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="URL / host" />
+      ),
+      meta: {
+        label: "URL / host",
+        skeleton: <Skeleton className="h-4 w-40" />,
+      },
       cell: ({ row }) => (
         <span className="block max-w-64 truncate font-mono text-xs">
           {row.original.baseUrl}
@@ -49,17 +104,16 @@ export function createProcessorBackendsColumns(
       ),
     },
     {
-      accessorKey: "visionModel",
-      header: "Fallback vision",
-      cell: ({ row }) => row.original.visionModel ?? "—",
-    },
-    {
       accessorKey: "apiKeyConfigured",
       header: "API key",
-      cell: ({ row }) =>
-        row.original.apiKeyConfigured
+      cell: ({ row }) => {
+        if (row.original.kind === ProcessorBackendKind.CLAMAV) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return row.original.apiKeyConfigured
           ? `••••${row.original.apiKeyLast4 ?? ""}`
-          : "Not set",
+          : "Not set";
+      },
     },
     {
       accessorKey: "isActive",
@@ -102,4 +156,31 @@ export function createProcessorBackendsColumns(
       ),
     },
   ];
+}
+
+export function filterProcessorBackends(
+  items: ProcessorBackendRow[],
+  search: string | undefined,
+  kinds: string[],
+): ProcessorBackendRow[] {
+  const query = search?.trim().toLowerCase() ?? "";
+  return items.filter((item) => {
+    if (kinds.length > 0 && !kinds.includes(item.kind)) return false;
+    if (!query) return true;
+    const kindLabel = (
+      ProcessorBackendKindLabels[item.kind] ?? item.kind
+    ).toLowerCase();
+    const haystack = [
+      item.name,
+      item.kind,
+      kindLabel,
+      item.baseUrl,
+      item.visionModel ?? "",
+      item.textModel ?? "",
+      item.apiKeyLast4 ?? "",
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
+  });
 }

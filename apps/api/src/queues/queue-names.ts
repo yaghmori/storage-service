@@ -9,3 +9,4 @@ export const DOCUMENT_PREVIEW_QUEUE = 'document-preview';
 export const DOCUMENT_TEXT_QUEUE = 'document-text';
 export const DOCUMENT_OCR_QUEUE = 'document-ocr';
 export const NOTIFY_WEBHOOK_QUEUE = 'notify-webhook';
+export const VIRUS_SCAN_QUEUE = 'virus-scan';

@@ -40,7 +40,11 @@ export const orgLimitsFormSchema = z.object({
 export type OrgLimitsFormInput = z.infer<typeof orgLimitsFormSchema>;
 
 export const orgRetentionFormSchema = z.object({
-  softDeleteRetentionDays: z.number().int().min(1).max(3650),
+  softDeleteRetentionDays: z
+    .number({ error: "Retention days must be a number" })
+    .int("Retention days must be a whole number")
+    .min(1, "Retention must be at least 1 day")
+    .max(3650, "Retention must not exceed 3650 days"),
 });
 
 export type OrgRetentionFormInput = z.infer<typeof orgRetentionFormSchema>;

@@ -89,6 +89,24 @@ export class StorageHttpClient {
     return res.json();
   }
 
+  /** Opt-in direct-to-object-store upload (presigned / multipart). */
+  async uploadLarge(
+    source: import('./upload-large').UploadLargeSource,
+    options?: import('./upload-large').UploadLargeOptions,
+  ) {
+    const { uploadLarge } = await import('./upload-large');
+    return uploadLarge(this, source, options);
+  }
+
+  /** Internal helpers used by uploadLarge — stable for SDK extensions. */
+  getAuthHeaders(): Record<string, string> {
+    return { ...this.headers };
+  }
+
+  getFetch(): typeof fetch {
+    return this.fetchImpl;
+  }
+
   /** EXIF/IPTC/XMP sidecar from metadata.exif (when that processor has run). */
   async getMetadata(id: string): Promise<FileMetadataSidecar> {
     const raw = await this.request(

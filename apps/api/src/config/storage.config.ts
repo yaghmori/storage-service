@@ -1,6 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+/** Default multipart form / Multer ceiling (100 MiB). */
+const DEFAULT_MAX_FILE_SIZE = 104_857_600;
+/** Default direct-to-object-store ceiling (5 GiB). */
+const DEFAULT_DIRECT_UPLOAD_MAX = 5_368_709_120;
+/** Default signed upload URL TTL. */
+const DEFAULT_UPLOAD_URL_EXPIRES = 3600;
+/** Default multipart part size (16 MiB). */
+const DEFAULT_MULTIPART_PART_SIZE = 16_777_216;
+/** Use multipart when declared size exceeds this (100 MiB). */
+const DEFAULT_MULTIPART_THRESHOLD = 104_857_600;
+
 @Injectable()
 export class StorageConfig {
   constructor(
@@ -11,11 +22,44 @@ export class StorageConfig {
     return this.configService.get<string>('DEFAULT_STORAGE_PROVIDER') || 'local';
   }
 
+  /** Platform ceiling for proxy multipart uploads (Multer / POST /upload). */
   get maxFileSize(): number {
-    return parseInt(
-      this.configService.get<string>('MAX_FILE_SIZE') || '524288000',
-      10,
-    ); // 500MB default (safe with stream-to-disk video / integrity I/O)
+    return this.parsePositiveInt(
+      this.configService.get<string>('MAX_FILE_SIZE'),
+      DEFAULT_MAX_FILE_SIZE,
+    );
+  }
+
+  /**
+   * Ceiling for direct/presigned uploads (initiate → object store → complete).
+   * May exceed MAX_FILE_SIZE so large files skip Nest RAM.
+   */
+  get directUploadMaxFileSize(): number {
+    return this.parsePositiveInt(
+      this.configService.get<string>('DIRECT_UPLOAD_MAX_FILE_SIZE'),
+      DEFAULT_DIRECT_UPLOAD_MAX,
+    );
+  }
+
+  get uploadUrlExpiresIn(): number {
+    return this.parsePositiveInt(
+      this.configService.get<string>('UPLOAD_URL_EXPIRES_IN'),
+      DEFAULT_UPLOAD_URL_EXPIRES,
+    );
+  }
+
+  get multipartPartSize(): number {
+    return this.parsePositiveInt(
+      this.configService.get<string>('MULTIPART_PART_SIZE'),
+      DEFAULT_MULTIPART_PART_SIZE,
+    );
+  }
+
+  get multipartThreshold(): number {
+    return this.parsePositiveInt(
+      this.configService.get<string>('MULTIPART_THRESHOLD'),
+      DEFAULT_MULTIPART_THRESHOLD,
+    );
   }
 
   get allowedMimeTypes(): string[] {
@@ -26,5 +70,9 @@ export class StorageConfig {
   get uploadPath(): string {
     return this.configService.get<string>('UPLOAD_PATH') || './uploads';
   }
-}
 
+  private parsePositiveInt(raw: string | undefined, fallback: number): number {
+    const parsed = parseInt(raw || String(fallback), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+}

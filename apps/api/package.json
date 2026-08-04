@@ -48,6 +48,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/schedule": "^6.1.3",
     "@nestjs/terminus": "^11.0.0",
+    "@nestjs/throttler": "6.5.0",
     "@workspace/validation": "workspace:^",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.0.0",

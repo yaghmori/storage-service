@@ -279,6 +279,17 @@ export class MinIOStorageService {
           return false;
         }
       },
+      stat: async (key: string) => {
+        const info = await client.statObject(config.bucket, key);
+        return {
+          size: info.size,
+          etag: info.etag,
+          contentType:
+            typeof info.metaData?.['content-type'] === 'string'
+              ? info.metaData['content-type']
+              : undefined,
+        };
+      },
       getSignedUrl: async (key: string, expiresIn = 3600) => {
         const url = await signingClient.presignedGetObject(
           config.bucket,
@@ -291,6 +302,54 @@ export class MinIOStorageService {
       getPublicUrl: async (key: string) => {
         const protocol = publicEp.useSSL ? 'https' : 'http';
         return `${protocol}://${publicEp.endPoint}:${publicEp.port}/${config.bucket}/${key}`;
+      },
+      getSignedUploadUrl: async (key: string, expiresIn = 3600) => {
+        const url = await signingClient.presignedPutObject(
+          config.bucket,
+          key,
+          expiresIn,
+        );
+        return rewriteSignedUrlEndpoint(url, internal, publicEp);
+      },
+      createMultipartUpload: async (key: string, contentType?: string) => {
+        const meta: Record<string, string> = {};
+        if (contentType) meta['Content-Type'] = contentType;
+        const uploadId = await client.initiateNewMultipartUpload(
+          config.bucket,
+          key,
+          meta,
+        );
+        return { uploadId };
+      },
+      getSignedUploadPartUrl: async (
+        key: string,
+        uploadId: string,
+        partNumber: number,
+        expiresIn = 3600,
+      ) => {
+        const url = await signingClient.presignedUrl(
+          'PUT',
+          config.bucket,
+          key,
+          expiresIn,
+          { uploadId, partNumber },
+        );
+        return rewriteSignedUrlEndpoint(url, internal, publicEp);
+      },
+      completeMultipartUpload: async (key, uploadId, parts) => {
+        const etags = parts
+          .slice()
+          .sort((a, b) => a.partNumber - b.partNumber)
+          .map((p) => ({ part: p.partNumber, etag: p.etag }));
+        await client.completeMultipartUpload(
+          config.bucket,
+          key,
+          uploadId,
+          etags,
+        );
+      },
+      abortMultipartUpload: async (key, uploadId) => {
+        await client.abortMultipartUpload(config.bucket, key, uploadId);
       },
     };
   }

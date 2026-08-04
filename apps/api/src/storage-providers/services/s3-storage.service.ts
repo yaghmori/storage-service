@@ -1,4 +1,14 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { Readable } from 'stream';
@@ -87,6 +97,18 @@ export class S3StorageService {
           return false;
         }
       },
+      stat: async (key: string) => {
+        const command = new HeadObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+        });
+        const response = await client.send(command);
+        return {
+          size: response.ContentLength ?? 0,
+          etag: response.ETag,
+          contentType: response.ContentType,
+        };
+      },
       getSignedUrl: async (key: string, expiresIn = 3600) => {
         const command = new GetObjectCommand({
           Bucket: config.bucket,
@@ -103,7 +125,72 @@ export class S3StorageService {
         }
         return `https://${config.bucket}.s3.${config.region || 'us-east-1'}.amazonaws.com/${key}`;
       },
+      getSignedUploadUrl: async (
+        key: string,
+        expiresIn = 3600,
+        contentType?: string,
+      ) => {
+        const command = new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+          ContentType: contentType,
+        });
+        return getSignedUrl(client, command, { expiresIn });
+      },
+      createMultipartUpload: async (key: string, contentType?: string) => {
+        const response = await client.send(
+          new CreateMultipartUploadCommand({
+            Bucket: config.bucket,
+            Key: key,
+            ContentType: contentType,
+          }),
+        );
+        if (!response.UploadId) {
+          throw new Error('S3 CreateMultipartUpload returned no UploadId');
+        }
+        return { uploadId: response.UploadId };
+      },
+      getSignedUploadPartUrl: async (
+        key: string,
+        uploadId: string,
+        partNumber: number,
+        expiresIn = 3600,
+      ) => {
+        const command = new UploadPartCommand({
+          Bucket: config.bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+        });
+        return getSignedUrl(client, command, { expiresIn });
+      },
+      completeMultipartUpload: async (key, uploadId, parts) => {
+        await client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket: config.bucket,
+            Key: key,
+            UploadId: uploadId,
+            MultipartUpload: {
+              Parts: parts
+                .slice()
+                .sort((a, b) => a.partNumber - b.partNumber)
+                .map((p) => ({
+                  ETag: p.etag,
+                  PartNumber: p.partNumber,
+                })),
+            },
+          }),
+        );
+      },
+      abortMultipartUpload: async (key, uploadId) => {
+        await client.send(
+          new AbortMultipartUploadCommand({
+            Bucket: config.bucket,
+            Key: key,
+            UploadId: uploadId,
+          }),
+        );
+      },
     };
   }
 }
-

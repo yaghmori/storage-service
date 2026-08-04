@@ -17,6 +17,7 @@ import {
   METADATA_EXTRACTION_QUEUE,
   NOTIFY_WEBHOOK_QUEUE,
   VIDEO_PROCESSING_QUEUE,
+  VIRUS_SCAN_QUEUE,
 } from './queue-names';
 import { QueuesService } from './queues.service';
 
@@ -36,6 +37,7 @@ const defaultAttempts = {
       inject: [RedisConfig],
     }),
     BullModule.registerQueue(
+      { name: VIRUS_SCAN_QUEUE, defaultJobOptions: defaultAttempts },
       { name: IMAGE_NORMALIZE_QUEUE, defaultJobOptions: defaultAttempts },
       { name: IMAGE_PROCESSING_QUEUE, defaultJobOptions: defaultAttempts },
       {

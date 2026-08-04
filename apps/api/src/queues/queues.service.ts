@@ -16,6 +16,7 @@ import {
   METADATA_EXTRACTION_QUEUE,
   NOTIFY_WEBHOOK_QUEUE,
   VIDEO_PROCESSING_QUEUE,
+  VIRUS_SCAN_QUEUE,
 } from './queue-names';
 
 export interface ImageProcessingJobData {
@@ -50,6 +51,7 @@ export interface AiVisionJobData {
 }
 
 const JOB_NAME_BY_PROCESSOR: Record<string, string> = {
+  [ProcessorKey.SECURITY_VIRUS_SCAN]: 'process-virus-scan',
   [ProcessorKey.IMAGE_NORMALIZE]: 'process-image-normalize',
   [ProcessorKey.IMAGE_VARIANTS]: 'process-image',
   [ProcessorKey.VIDEO_PREVIEW]: 'process-video',
@@ -90,12 +92,16 @@ export class QueuesService {
     private readonly documentOcrQueue: Queue,
     @InjectQueue(NOTIFY_WEBHOOK_QUEUE)
     private readonly notifyWebhookQueue: Queue,
+    @InjectQueue(VIRUS_SCAN_QUEUE)
+    private readonly virusScanQueue: Queue,
     private readonly jobsRepository: ProcessingJobsRepository,
   ) {}
 
   private queueFor(processorKey: string): Queue {
     const name = PROCESSOR_QUEUE_BY_KEY[processorKey];
     switch (name) {
+      case VIRUS_SCAN_QUEUE:
+        return this.virusScanQueue;
       case IMAGE_NORMALIZE_QUEUE:
         return this.imageNormalizeQueue;
       case IMAGE_PROCESSING_QUEUE:
@@ -289,7 +295,8 @@ export class QueuesService {
       };
     } else if (
       input.processorKey === ProcessorKey.AI_VISION ||
-      input.processorKey === ProcessorKey.DOCUMENT_OCR
+      input.processorKey === ProcessorKey.DOCUMENT_OCR ||
+      input.processorKey === ProcessorKey.SECURITY_VIRUS_SCAN
     ) {
       data = {
         ...data,

@@ -19,6 +19,11 @@ x-storage-env: &storage-env
   MINIO_SECRET_KEY: minioadmin
   MINIO_BUCKET: storage
   MINIO_USE_SSL: "false"
+  MAX_FILE_SIZE: "104857600"
+  DIRECT_UPLOAD_MAX_FILE_SIZE: "5368709120"
+  CLAMAV_HOST: clamav
+  CLAMAV_PORT: "3310"
+  RATE_LIMIT_EXEMPT_SERVICE_NAMES: migration,storage-migrate,eallyfe-migrate
 
 services:
   postgres:
@@ -58,6 +63,12 @@ services:
       - "9001:9001"
     volumes:
       - storage_minio:/data
+
+  clamav:
+    image: clamav/clamav:stable
+    volumes:
+      - storage_clamav:/var/lib/clamav
+    # Workers reach clamd at clamav:3310 (virus-scan processor)
 
   api:
     build:
@@ -101,8 +112,11 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      clamav:
+        condition: service_started
 
 volumes:
   storage_pg:
   storage_minio:
   storage_uploads:
+  storage_clamav:
