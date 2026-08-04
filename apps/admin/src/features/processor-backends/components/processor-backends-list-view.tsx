@@ -17,9 +17,12 @@ import {
 } from "@workspace/ui/components";
 import { useDataTable } from "@workspace/ui/hooks/use-data-table";
 import { Cpu } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { createProcessorBackendsColumns } from "../columns/processor-backends-columns";
+import {
+  createProcessorBackendsColumns,
+  filterProcessorBackends,
+} from "../columns/processor-backends-columns";
 import {
   useCreateProcessorBackendMutation,
   useDeleteProcessorBackendMutation,
@@ -28,6 +31,20 @@ import {
   type ProcessorBackendRow,
 } from "../hooks/use-processor-backends-queries";
 import { ProcessorBackendForm } from "./processor-backend-form";
+
+function firstStringFilter(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    const first = value.find((item) => typeof item === "string");
+    return typeof first === "string" ? first : undefined;
+  }
+  return undefined;
+}
+
+function stringArrayFilter(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
 
 export function ProcessorBackendsListView({
   hideHeading = false,
@@ -49,17 +66,53 @@ export function ProcessorBackendsListView({
     columns,
     data: [] as ProcessorBackendRow[],
     pageCount: 0,
-    initialState: { pagination: { pageIndex: 0, pageSize: 10 } },
+    initialState: {
+      pagination: { pageIndex: 0, pageSize: 10 },
+      columnVisibility: { search: false },
+    },
   });
   const { data, isLoading, error, refetch } = useProcessorBackendsQuery(
     activeOrg?.id,
   );
 
+  const columnFilters = table.getState().columnFilters;
+  const pagination = table.getState().pagination;
+  const searchTerm =
+    firstStringFilter(columnFilters.find((f) => f.id === "search")?.value) ??
+    "";
+  const kindFilter = stringArrayFilter(
+    columnFilters.find((f) => f.id === "kind")?.value,
+  );
+
+  const filteredItems = useMemo(
+    () =>
+      filterProcessorBackends(data?.items ?? [], searchTerm, kindFilter),
+    [data?.items, searchTerm, kindFilter],
+  );
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredItems.length / Math.max(pagination.pageSize, 1)),
+  );
+  const pageIndex = Math.min(pagination.pageIndex, pageCount - 1);
+  const pageItems = filteredItems.slice(
+    pageIndex * pagination.pageSize,
+    pageIndex * pagination.pageSize + pagination.pageSize,
+  );
+
+  useEffect(() => {
+    if (pagination.pageIndex !== pageIndex) {
+      table.setPageIndex(pageIndex);
+    }
+  }, [pageIndex, pagination.pageIndex, table]);
+
   table.setOptions((previous) => ({
     ...previous,
-    data: data?.items ?? [],
-    pageCount: data?.totalPages ?? 0,
+    data: pageItems,
+    pageCount,
   }));
+
+  const hasActiveFilters = Boolean(searchTerm.trim()) || kindFilter.length > 0;
 
   return (
     <div className="space-y-6">
@@ -67,15 +120,16 @@ export function ProcessorBackendsListView({
         <div>
           <h1 className="text-2xl font-semibold">Processor backends</h1>
           <p className="text-sm text-muted-foreground">
-            OpenAI-compatible endpoints selected from Processing for AI Vision
-            and Document OCR.
+            Org-scoped backends for Processing: OpenAI-compatible (AI Vision /
+            Document OCR) and ClamAV (virus scan). Each organization only sees
+            its own backends.
           </p>
         </div>
       ) : null}
 
       <DataGrid
         table={table}
-        recordCount={data?.total ?? 0}
+        recordCount={filteredItems.length}
         isLoading={isLoading}
         errorState={
           error ? (
@@ -88,8 +142,16 @@ export function ProcessorBackendsListView({
         }
         emptyMessage={
           <TableEmptyState
-            title="No processor backends"
-            description="Add a backend before enabling AI processing."
+            title={
+              hasActiveFilters
+                ? "No matching backends"
+                : "No processor backends"
+            }
+            description={
+              hasActiveFilters
+                ? "No backends match the current filters."
+                : "Add OpenAI-compatible or ClamAV backends for this organization."
+            }
             icon={Cpu}
           />
         }
@@ -116,7 +178,8 @@ export function ProcessorBackendsListView({
         <ResponsiveSheet.Header>
           <ResponsiveSheet.Title>Add processor backend</ResponsiveSheet.Title>
           <ResponsiveSheet.Description>
-            Connect an OpenAI-compatible vision or text endpoint.
+            Connect an OpenAI-compatible endpoint or a ClamAV/clamd host for
+            this organization.
           </ResponsiveSheet.Description>
         </ResponsiveSheet.Header>
         {createOpen ? (

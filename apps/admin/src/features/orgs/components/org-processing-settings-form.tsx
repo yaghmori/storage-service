@@ -77,6 +77,8 @@ type FormState = {
   enableDedupePhash: boolean;
   phashThresholdBits: number;
   enableIntegrityVerify: boolean;
+  enableVirusScan: boolean;
+  virusScanBackendId: string;
   enableDocumentPreview: boolean;
   enableDocumentText: boolean;
   enableDocumentOcr: boolean;
@@ -100,6 +102,7 @@ type EnabledKey = keyof Pick<
   | "enableDocumentText"
   | "enableDocumentOcr"
   | "enableIntegrityVerify"
+  | "enableVirusScan"
   | "enableDedupePhash"
   | "enableAiProcessing"
   | "enableNotifyWebhook"
@@ -117,6 +120,19 @@ const PROCESSOR_GROUPS: Array<{
   description: string;
   processors: ProcessorDef[];
 }> = [
+  {
+    id: "security",
+    label: "Security",
+    description: "Antivirus scanning via ClamAV before other processors.",
+    processors: [
+      {
+        key: ProcessorKey.SECURITY_VIRUS_SCAN,
+        enabledKey: "enableVirusScan",
+        whenDisabled:
+          "Uploaded files are not scanned; infected content is not quarantined.",
+      },
+    ],
+  },
   {
     id: "images",
     label: "Images",
@@ -255,6 +271,8 @@ function toForm(settings: OrgProcessingSettings): FormState {
     enableDedupePhash: settings.enableDedupePhash ?? false,
     phashThresholdBits: settings.phashThresholdBits ?? 10,
     enableIntegrityVerify: settings.enableIntegrityVerify ?? false,
+    enableVirusScan: settings.enableVirusScan ?? false,
+    virusScanBackendId: settings.virusScanBackendId ?? NONE_BACKEND_VALUE,
     enableDocumentPreview: settings.enableDocumentPreview ?? true,
     enableDocumentText: settings.enableDocumentText ?? true,
     enableDocumentOcr: settings.enableDocumentOcr ?? false,
@@ -296,6 +314,7 @@ export function OrgProcessingSettingsForm({ orgId }: { orgId: string }) {
   const [activeTab, setActiveTab] = useState<string>("images");
   const [visionBackendPickerOpen, setVisionBackendPickerOpen] = useState(false);
   const [ocrBackendPickerOpen, setOcrBackendPickerOpen] = useState(false);
+  const [virusBackendPickerOpen, setVirusBackendPickerOpen] = useState(false);
 
   useEffect(() => {
     if (query.data) setForm(toForm(query.data));
@@ -307,6 +326,19 @@ export function OrgProcessingSettingsForm({ orgId }: { orgId: string }) {
         (backend) => backend.isActive,
       ),
     [processorBackends.data?.items],
+  );
+
+  const openaiBackends = useMemo(
+    () =>
+      activeBackends.filter(
+        (backend) => backend.kind === "openai_compatible",
+      ),
+    [activeBackends],
+  );
+
+  const clamavBackends = useMemo(
+    () => activeBackends.filter((backend) => backend.kind === "clamav"),
+    [activeBackends],
   );
 
   const backendsSettingsHref = activeOrg
@@ -448,7 +480,10 @@ export function OrgProcessingSettingsForm({ orgId }: { orgId: string }) {
                             }
                             ocrBackendPickerOpen={ocrBackendPickerOpen}
                             setOcrBackendPickerOpen={setOcrBackendPickerOpen}
-                            activeBackends={activeBackends}
+                            virusBackendPickerOpen={virusBackendPickerOpen}
+                            setVirusBackendPickerOpen={setVirusBackendPickerOpen}
+                            openaiBackends={openaiBackends}
+                            clamavBackends={clamavBackends}
                             backendsSettingsHref={backendsSettingsHref}
                           />
                         </div>
@@ -490,7 +525,10 @@ function ProcessorTabOptions({
   setVisionBackendPickerOpen,
   ocrBackendPickerOpen,
   setOcrBackendPickerOpen,
-  activeBackends,
+  virusBackendPickerOpen,
+  setVirusBackendPickerOpen,
+  openaiBackends,
+  clamavBackends,
   backendsSettingsHref,
 }: {
   orgId: string;
@@ -501,7 +539,15 @@ function ProcessorTabOptions({
   setVisionBackendPickerOpen: (open: boolean) => void;
   ocrBackendPickerOpen: boolean;
   setOcrBackendPickerOpen: (open: boolean) => void;
-  activeBackends: Array<{
+  virusBackendPickerOpen: boolean;
+  setVirusBackendPickerOpen: (open: boolean) => void;
+  openaiBackends: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    isDefault: boolean;
+  }>;
+  clamavBackends: Array<{
     id: string;
     name: string;
     kind: string;
@@ -509,6 +555,30 @@ function ProcessorTabOptions({
   }>;
   backendsSettingsHref: string;
 }) {
+  if (processorKey === ProcessorKey.SECURITY_VIRUS_SCAN) {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Scans stored bytes via ClamAV (clamd). Infected files are quarantined
+          (soft-deleted) and stop serving. Prefer enabling this early in the
+          pipeline. Create a ClamAV backend under Settings → Processor backends.
+        </p>
+        <BackendPickerField
+          label="ClamAV backend"
+          description="Org-scoped ClamAV/clamd connection (host:port). Only backends of kind clamav are listed."
+          value={form.virusScanBackendId}
+          selectedLabel={backendLabel(form.virusScanBackendId, clamavBackends)}
+          open={virusBackendPickerOpen}
+          onOpenChange={setVirusBackendPickerOpen}
+          activeBackends={clamavBackends}
+          backendsSettingsHref={backendsSettingsHref}
+          onSelect={(id) => patch({ virusScanBackendId: id })}
+          emptyHint="No active ClamAV backends yet."
+        />
+      </div>
+    );
+  }
+
   if (processorKey === ProcessorKey.IMAGE_NORMALIZE) {
     return (
       <p className="text-xs text-muted-foreground">
@@ -678,13 +748,14 @@ function ProcessorTabOptions({
               value={form.documentOcrBackendId}
               selectedLabel={backendLabel(
                 form.documentOcrBackendId,
-                activeBackends,
+                openaiBackends,
               )}
               open={ocrBackendPickerOpen}
               onOpenChange={setOcrBackendPickerOpen}
-              activeBackends={activeBackends}
+              activeBackends={openaiBackends}
               backendsSettingsHref={backendsSettingsHref}
               onSelect={(id) => patch({ documentOcrBackendId: id })}
+              emptyHint="No active OpenAI-compatible backends yet."
             />
             <BackendModelPicker
               orgId={orgId}
@@ -752,12 +823,13 @@ function ProcessorTabOptions({
           label="Processor backend"
           description="Connection only — choose an active OpenAI-compatible backend (Ollama, vLLM, OpenAI, etc.)."
           value={form.aiBackendId}
-          selectedLabel={backendLabel(form.aiBackendId, activeBackends)}
+          selectedLabel={backendLabel(form.aiBackendId, openaiBackends)}
           open={visionBackendPickerOpen}
           onOpenChange={setVisionBackendPickerOpen}
-          activeBackends={activeBackends}
+          activeBackends={openaiBackends}
           backendsSettingsHref={backendsSettingsHref}
           onSelect={(id) => patch({ aiBackendId: id })}
+          emptyHint="No active OpenAI-compatible backends yet."
         />
 
         <BackendModelPicker
@@ -891,6 +963,13 @@ function saveForm(
     return;
   }
   if (
+    form.enableVirusScan &&
+    (!form.virusScanBackendId || form.virusScanBackendId === NONE_BACKEND_VALUE)
+  ) {
+    toast.error("Select a ClamAV backend for virus scan");
+    return;
+  }
+  if (
     form.enableAiProcessing &&
     (!form.aiBackendId || form.aiBackendId === NONE_BACKEND_VALUE)
   ) {
@@ -972,6 +1051,12 @@ function saveForm(
       enableDedupePhash: form.enableDedupePhash,
       phashThresholdBits: form.phashThresholdBits,
       enableIntegrityVerify: form.enableIntegrityVerify,
+      enableVirusScan: form.enableVirusScan,
+      virusScanBackendId:
+        form.virusScanBackendId &&
+        form.virusScanBackendId !== NONE_BACKEND_VALUE
+          ? form.virusScanBackendId
+          : null,
       enableDocumentPreview: form.enableDocumentPreview,
       enableDocumentText: form.enableDocumentText,
       enableDocumentOcr: form.enableDocumentOcr,
@@ -999,6 +1084,7 @@ function BackendPickerField({
   activeBackends,
   backendsSettingsHref,
   onSelect,
+  emptyHint,
 }: {
   label: string;
   description: string;
@@ -1014,6 +1100,7 @@ function BackendPickerField({
   }>;
   backendsSettingsHref: string;
   onSelect: (id: string) => void;
+  emptyHint?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -1021,7 +1108,7 @@ function BackendPickerField({
       <p className="text-xs text-muted-foreground">{description}</p>
       {activeBackends.length === 0 ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-          No active processor backends yet.{" "}
+          {emptyHint ?? "No active processor backends yet."}{" "}
           <Link
             href={backendsSettingsHref}
             className="font-medium underline underline-offset-2"

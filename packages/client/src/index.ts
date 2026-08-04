@@ -32,6 +32,13 @@ export type { ClientAuth } from './auth';
 export { StorageHttpClient, createStorageHttpClient } from './http';
 export type { StorageHttpClientOptions } from './http';
 
+export { uploadLarge } from './upload-large';
+export type {
+  UploadLargeOptions,
+  UploadLargeResult,
+  UploadLargeSource,
+} from './upload-large';
+
 export { StorageKafka, resolveKafkaConnection } from './kafka';
 export type { KafkaConnectionEnv } from './kafka';
 

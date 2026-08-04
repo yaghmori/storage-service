@@ -344,9 +344,10 @@ export function FileUploadDialog({
                     ? "Add more files"
                     : "Drag & drop files, or click to browse"}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Multiple files supported
-              </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Multiple files supported. Files over 100MB use direct
+                    object-store upload automatically.
+                  </p>
             </div>
           </div>
 

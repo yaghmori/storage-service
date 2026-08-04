@@ -595,6 +595,39 @@ export const fileProcessorResultsRelations = relations(fileProcessorResults, ({ 
   }),
 }));
 
+/** Pending direct-to-object-store uploads (presigned PUT / multipart). */
+export const uploadSessions = pgTable(
+  'upload_sessions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    storageProviderId: uuid('storage_provider_id')
+      .notNull()
+      .references(() => storageProviders.id, { onDelete: 'restrict' }),
+    storageKey: varchar('storage_key', { length: 500 }).notNull(),
+    storageBucket: varchar('storage_bucket', { length: 255 }),
+    originalFilename: varchar('original_filename', { length: 255 }).notNull(),
+    mimeType: varchar('mime_type', { length: 100 }).notNull(),
+    declaredSize: bigint('declared_size', { mode: 'bigint' }).notNull(),
+    multipartUploadId: varchar('multipart_upload_id', { length: 255 }),
+    partSize: integer('part_size'),
+    skipProcessing: boolean('skip_processing').notNull().default(false),
+    uploadedBy: uuid('uploaded_by'),
+    /** pending | completed | aborted | expired */
+    status: varchar('status', { length: 32 }).notNull().default('pending'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => ({
+    orgIdIdx: index('upload_sessions_org_id_idx').on(table.orgId),
+    statusIdx: index('upload_sessions_status_idx').on(table.status),
+    expiresAtIdx: index('upload_sessions_expires_at_idx').on(table.expiresAt),
+  }),
+);
+
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
 export type AdminUser = typeof users.$inferSelect;
@@ -607,3 +640,5 @@ export type OrgProcessor = typeof orgProcessors.$inferSelect;
 export type NewOrgProcessor = typeof orgProcessors.$inferInsert;
 export type FileProcessorResult = typeof fileProcessorResults.$inferSelect;
 export type NewFileProcessorResult = typeof fileProcessorResults.$inferInsert;
+export type UploadSession = typeof uploadSessions.$inferSelect;
+export type NewUploadSession = typeof uploadSessions.$inferInsert;

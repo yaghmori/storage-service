@@ -25,6 +25,7 @@ import { IntegrityVerifyProcessingProcessor } from './processors/integrity-verif
 import { MetadataExtractionProcessor } from './processors/metadata-extraction.processor';
 import { NotifyWebhookProcessingProcessor } from './processors/notify-webhook-processing.processor';
 import { VideoProcessingProcessor } from './processors/video-processing.processor';
+import { VirusScanProcessingProcessor } from './processors/virus-scan-processing.processor';
 import { FileProcessorResultsRepository } from './repositories/file-processor-results.repository';
 import { ProcessingJobsRepository } from './repositories/processing-jobs.repository';
 import { AiVisionProcessingService } from './services/ai-vision-processing.service';
@@ -47,6 +48,7 @@ import { ProcessingSettingsService } from './services/processing-settings.servic
 import { ProcessorBackendsService } from './services/processor-backends.service';
 import { ProcessorSchedulerService } from './services/processor-scheduler.service';
 import { VideoProcessingService } from './services/video-processing.service';
+import { VirusScanProcessingService } from './services/virus-scan-processing.service';
 
 const CORE_PROVIDERS: Provider[] = [
   ProcessingService,
@@ -57,6 +59,7 @@ const CORE_PROVIDERS: Provider[] = [
   ProcessorSchedulerService,
   FileProcessingRollupService,
   OpenaiCompatibleClient,
+  VirusScanProcessingService,
   ImageNormalizeProcessingService,
   ImageProcessingService,
   VideoProcessingService,
@@ -73,6 +76,7 @@ const CORE_PROVIDERS: Provider[] = [
 ];
 
 const WORKER_PROVIDERS: Type[] = [
+  VirusScanProcessingProcessor,
   ImageNormalizeProcessingProcessor,
   ImageProcessingProcessor,
   VideoProcessingProcessor,

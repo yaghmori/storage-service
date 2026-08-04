@@ -18,6 +18,7 @@ import {
   METADATA_EXTRACTION_QUEUE,
   NOTIFY_WEBHOOK_QUEUE,
   VIDEO_PROCESSING_QUEUE,
+  VIRUS_SCAN_QUEUE,
 } from './queue-names';
 
 @Injectable()
@@ -31,6 +32,7 @@ export class BullBoardSetupService implements OnModuleInit {
   onModuleInit() {
     const connection = this.redisConfig.connectionOptions;
     const queues = [
+      VIRUS_SCAN_QUEUE,
       IMAGE_NORMALIZE_QUEUE,
       IMAGE_PROCESSING_QUEUE,
       VIDEO_PROCESSING_QUEUE,

@@ -104,6 +104,31 @@ export class FilesService {
     }
   }
 
+  /**
+   * Force soft-delete for security quarantine (virus scan), ignoring reference count.
+   * Serving paths already exclude soft-deleted rows.
+   */
+  async quarantineFile(id: string, reason?: string): Promise<void> {
+    const fileRow = await this.repository.findById(id);
+    if (!fileRow) {
+      throw new NotFoundException(`File with ID ${id} not found`);
+    }
+    if (fileRow.deletedAt) return;
+    await this.repository.softDelete(id);
+    if (reason) {
+      await this.repository.update(id, {
+        processingStatus: 'failed',
+        processingError: reason,
+      });
+    }
+    this.logger.warn(`Quarantined file ${id}${reason ? `: ${reason}` : ''}`);
+    void this.lifecycleEvents?.fileDeleted({
+      fileId: id,
+      orgId: fileRow.orgId,
+      hardDelete: false,
+    });
+  }
+
   async deleteFile(id: string, hardDelete = false, userId?: string): Promise<FileResponse> {
     const file = await this.findById(id);
     // Get raw file row for internal operations (need storageProviderId and storageKey)

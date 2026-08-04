@@ -34,7 +34,10 @@ class CreateProcessorBackendDto {
   @MaxLength(255)
   name!: string;
 
-  @IsIn([ProcessorBackendKind.OPENAI_COMPATIBLE])
+  @IsIn([
+    ProcessorBackendKind.OPENAI_COMPATIBLE,
+    ProcessorBackendKind.CLAMAV,
+  ])
   kind!: string;
 
   @IsOptional()
@@ -81,7 +84,10 @@ class UpdateProcessorBackendDto {
   name?: string;
 
   @IsOptional()
-  @IsIn([ProcessorBackendKind.OPENAI_COMPATIBLE])
+  @IsIn([
+    ProcessorBackendKind.OPENAI_COMPATIBLE,
+    ProcessorBackendKind.CLAMAV,
+  ])
   kind?: string;
 
   @IsOptional()

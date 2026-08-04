@@ -48,6 +48,23 @@ Verify:
 docker exec <worker-container> which pdftoppm
 ```
 
+## Large uploads
+
+- Keep `POST /upload` for files within `MAX_FILE_SIZE` (Multer / proxy body limit).
+- Use `POST /upload/initiate` → client PUT/parts to MinIO/S3 → `POST /upload/complete` for larger objects (`DIRECT_UPLOAD_MAX_FILE_SIZE`).
+- Align nginx/Traefik `client_max_body_size` and timeouts with `MAX_FILE_SIZE` for the small path only.
+
+## Virus scan
+
+- Run ClamAV (`clamav` service, clamd `:3310`) on the internal network.
+- Enable org processor `security.virus_scan` and point a `clamav` backend at `clamav:3310`.
+- During migrate: `skipProcessing=true` or leave virus scan disabled until backfill.
+
+## Rate limits vs migrate
+
+- HTTP throttle skips service names in `RATE_LIMIT_EXEMPT_SERVICE_NAMES` (includes `migration` by default) and API keys with `permissions.migration=true`.
+- Prefer migrate with `skipProcessing`, then enable processors.
+
 ## Migrator with processing ON
 
 ```bash

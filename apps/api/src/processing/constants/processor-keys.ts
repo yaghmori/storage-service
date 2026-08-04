@@ -6,6 +6,7 @@ import {
 export { BUILTIN_ORG_PROCESSOR_DEFAULTS, ProcessorKey };
 
 export const PROCESSOR_QUEUE_BY_KEY: Record<string, string> = {
+  [ProcessorKey.SECURITY_VIRUS_SCAN]: 'virus-scan',
   [ProcessorKey.IMAGE_NORMALIZE]: 'image-normalize',
   [ProcessorKey.IMAGE_VARIANTS]: 'image-processing',
   [ProcessorKey.VIDEO_PREVIEW]: 'video-processing',
@@ -20,6 +21,7 @@ export const PROCESSOR_QUEUE_BY_KEY: Record<string, string> = {
 };
 
 export const DEFAULT_MIME_INCLUDE: Record<string, string[] | null> = {
+  [ProcessorKey.SECURITY_VIRUS_SCAN]: null,
   [ProcessorKey.IMAGE_NORMALIZE]: ['image/heic', 'image/heif', 'image/gif'],
   [ProcessorKey.IMAGE_VARIANTS]: ['image/*'],
   [ProcessorKey.VIDEO_PREVIEW]: ['video/*'],

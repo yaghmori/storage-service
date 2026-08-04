@@ -31,7 +31,10 @@ export const localProviderConfigSchema = z.object({
     .trim()
     .min(1, "Upload path is required")
     .max(500, "Path is too long"),
-  bucket: optionalTrimmed.max(100).optional().or(z.literal("")),
+  bucket: optionalTrimmed
+    .max(100, "Bucket must not exceed 100 characters")
+    .optional()
+    .or(z.literal("")),
 });
 
 export const minioProviderConfigSchema = z.object({
@@ -63,13 +66,16 @@ export const minioProviderConfigSchema = z.object({
     .string()
     .trim()
     .min(1, "Access key is required")
-    .max(255),
+    .max(255, "Access key must not exceed 255 characters"),
   secretAccessKey: z
     .string()
     .min(1, "Secret key is required")
-    .max(255),
+    .max(255, "Secret key must not exceed 255 characters"),
   useSSL: z.boolean(),
-  region: optionalTrimmed.max(64).optional().or(z.literal("")),
+  region: optionalTrimmed
+    .max(64, "Region must not exceed 64 characters")
+    .optional()
+    .or(z.literal("")),
   signedUrlExpiresIn: optionalExpiresInSchema,
 });
 
@@ -88,12 +94,15 @@ export const s3ProviderConfigSchema = z.object({
     .string()
     .trim()
     .min(1, "Access key is required")
-    .max(255),
+    .max(255, "Access key must not exceed 255 characters"),
   secretAccessKey: z
     .string()
     .min(1, "Secret key is required")
-    .max(255),
-  endpoint: optionalTrimmed.max(255).optional().or(z.literal("")),
+    .max(255, "Secret key must not exceed 255 characters"),
+  endpoint: optionalTrimmed
+    .max(255, "Endpoint must not exceed 255 characters")
+    .optional()
+    .or(z.literal("")),
   publicEndpoint: optionalTrimmed
     .refine(
       (v) =>

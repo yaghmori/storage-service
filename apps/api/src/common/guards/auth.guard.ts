@@ -113,6 +113,7 @@ export class AuthGuard implements CanActivate {
       if (verification.valid && verification.serviceName) {
         request.serviceName = verification.serviceName;
         request.orgId = verification.orgId;
+        request.apiKeyPermissions = verification.permissions;
         request.user = {
           serviceName: verification.serviceName,
           orgId: verification.orgId,

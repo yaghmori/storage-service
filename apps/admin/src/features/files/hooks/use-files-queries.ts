@@ -193,10 +193,131 @@ export type UploadFileInput = {
   onProgress?: (percent: number) => void;
 };
 
+/** Files above this use initiate → object-store → complete (default 100 MiB). */
+const DIRECT_UPLOAD_THRESHOLD =
+  typeof process !== "undefined" &&
+  process.env.NEXT_PUBLIC_DIRECT_UPLOAD_THRESHOLD
+    ? parseInt(process.env.NEXT_PUBLIC_DIRECT_UPLOAD_THRESHOLD, 10)
+    : 104_857_600;
+
+async function sha256Hex(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function uploadLargeViaDirect(
+  input: UploadFileInput,
+  orgId?: string,
+): Promise<UploadFileResult> {
+  const file = input.file;
+  const initiateRes = await upstream.post(
+    FilesEndpoints.UploadInitiate,
+    {
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      storageProviderId: input.storageProviderId,
+      storageKey: input.storageKey,
+    },
+    { params: { orgId }, timeout: 0 },
+  );
+  const initiated = unwrapApiData<{
+    fileId: string;
+    uploadUrl?: string | null;
+    method: "PUT" | "MULTIPART";
+    partSize?: number;
+    partCount?: number;
+    headers?: Record<string, string>;
+  }>(initiateRes.data);
+
+  const parts: Array<{ partNumber: number; etag: string }> = [];
+
+  try {
+    if (initiated.method === "MULTIPART") {
+      const partSize = initiated.partSize || 16 * 1024 * 1024;
+      const partCount =
+        initiated.partCount || Math.max(1, Math.ceil(file.size / partSize));
+      for (let partNumber = 1; partNumber <= partCount; partNumber++) {
+        const start = (partNumber - 1) * partSize;
+        const end = Math.min(start + partSize, file.size);
+        const chunk = file.slice(start, end);
+        const partUrlRes = await upstream.post(
+          FilesEndpoints.UploadPartUrl,
+          { fileId: initiated.fileId, partNumber },
+          { params: { orgId }, timeout: 0 },
+        );
+        const partInfo = unwrapApiData<{ uploadUrl: string }>(partUrlRes.data);
+        const putRes = await fetch(partInfo.uploadUrl, {
+          method: "PUT",
+          body: chunk,
+        });
+        if (!putRes.ok) {
+          throw new Error(`Part ${partNumber} upload failed (${putRes.status})`);
+        }
+        const etag =
+          putRes.headers.get("etag") ||
+          putRes.headers.get("ETag") ||
+          `part-${partNumber}`;
+        parts.push({
+          partNumber,
+          etag: etag.replace(/"/g, ""),
+        });
+        input.onProgress?.(Math.round((end / file.size) * 90));
+      }
+    } else {
+      if (!initiated.uploadUrl) {
+        throw new Error("Missing uploadUrl from initiate");
+      }
+      const putRes = await fetch(initiated.uploadUrl, {
+        method: "PUT",
+        headers: initiated.headers,
+        body: file,
+      });
+      if (!putRes.ok) {
+        throw new Error(`Direct upload failed (${putRes.status})`);
+      }
+      input.onProgress?.(90);
+    }
+
+    const sha256Hash = await sha256Hex(file);
+    const completeRes = await upstream.post(
+      FilesEndpoints.UploadComplete,
+      {
+        fileId: initiated.fileId,
+        sha256Hash,
+        parts: parts.length ? parts : undefined,
+      },
+      { params: { orgId }, timeout: 0 },
+    );
+    input.onProgress?.(100);
+    return unwrapApiData<UploadFileResult>(completeRes.data);
+  } catch (error) {
+    await upstream
+      .post(
+        FilesEndpoints.UploadAbort,
+        { fileId: initiated.fileId },
+        { params: { orgId } },
+      )
+      .catch(() => undefined);
+    throw error;
+  }
+}
+
 export function useUploadFileMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: UploadFileInput) => {
+      // Auto-branch: large files use direct-to-object-store path.
+      if (
+        Number.isFinite(DIRECT_UPLOAD_THRESHOLD) &&
+        input.file.size > DIRECT_UPLOAD_THRESHOLD
+      ) {
+        return uploadLargeViaDirect(input, orgId);
+      }
+
       const formData = new FormData();
       formData.append("file", input.file);
       if (input.storageProviderId?.trim()) {

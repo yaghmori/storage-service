@@ -296,6 +296,15 @@ export class UpdateProcessingSettingsDto {
 
   @IsOptional()
   @IsBoolean()
+  enableVirusScan?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
+  @IsUUID()
+  virusScanBackendId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
   enableDocumentPreview?: boolean;
 
   @IsOptional()

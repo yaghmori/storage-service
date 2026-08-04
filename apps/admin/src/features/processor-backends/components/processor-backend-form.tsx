@@ -6,12 +6,19 @@ import {
   Input,
   Label,
   ResponsiveSheet,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Switch,
 } from "@workspace/ui/components";
 import {
   ProcessorBackendKind,
   ProcessorBackendKindLabels,
   processorBackendFormSchema,
+  zodFirstMessage,
+  zodFlatFields,
 } from "@workspace/validation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -34,6 +41,14 @@ export function ProcessorBackendForm({
   onCancel?: () => void;
 }) {
   const [name, setName] = useState(initialValues?.name ?? "");
+  const [kind, setKind] = useState<
+    | typeof ProcessorBackendKind.OPENAI_COMPATIBLE
+    | typeof ProcessorBackendKind.CLAMAV
+  >(
+    initialValues?.kind === ProcessorBackendKind.CLAMAV
+      ? ProcessorBackendKind.CLAMAV
+      : ProcessorBackendKind.OPENAI_COMPATIBLE,
+  );
   const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? "");
   const [apiKey, setApiKey] = useState("");
   const [clearApiKey, setClearApiKey] = useState(false);
@@ -46,29 +61,47 @@ export function ProcessorBackendForm({
   );
   const [isActive, setIsActive] = useState(initialValues?.isActive ?? true);
   const [isDefault, setIsDefault] = useState(initialValues?.isDefault ?? false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const isClamav = kind === ProcessorBackendKind.CLAMAV;
+
+  const clearFieldError = (key: string) => {
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
 
   return (
     <form
       className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
+        const parsedTimeout = Number(timeoutMs);
         const candidate = {
           name: name.trim(),
-          kind: ProcessorBackendKind.OPENAI_COMPATIBLE,
+          kind,
           isActive,
           isDefault,
           baseUrl: baseUrl.trim(),
-          apiKey,
-          clearApiKey,
-          visionModel: visionModel.trim(),
-          textModel: textModel.trim(),
-          timeoutMs: Number(timeoutMs),
+          apiKey: isClamav ? "" : apiKey,
+          clearApiKey: isClamav ? false : clearApiKey,
+          visionModel: isClamav ? "" : visionModel.trim(),
+          textModel: isClamav ? "" : textModel.trim(),
+          timeoutMs: Number.isFinite(parsedTimeout)
+            ? parsedTimeout
+            : Number.NaN,
         };
         const parsed = processorBackendFormSchema.safeParse(candidate);
         if (!parsed.success) {
-          toast.error(parsed.error.issues[0]?.message ?? "Invalid backend");
+          const flat = zodFlatFields(parsed.error);
+          setFieldErrors(flat.fields);
+          toast.error(zodFirstMessage(parsed.error, "Invalid backend"));
           return;
         }
+        setFieldErrors({});
         onSubmit({
           ...parsed.data,
           apiKey: parsed.data.apiKey || undefined,
@@ -83,97 +116,156 @@ export function ProcessorBackendForm({
           <Input
             id="processor-backend-name"
             value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="local-ollama"
+            onChange={(event) => {
+              setName(event.target.value);
+              clearFieldError("name");
+            }}
+            placeholder={isClamav ? "local-clamav" : "local-ollama"}
+            aria-invalid={Boolean(fieldErrors.name)}
           />
+          <FieldError message={fieldErrors.name} />
         </div>
 
         <div className="space-y-2">
           <Label>Kind</Label>
-          <Input
-            value={
-              ProcessorBackendKindLabels[ProcessorBackendKind.OPENAI_COMPATIBLE]
-            }
-            disabled
-          />
+          <Select
+            value={kind}
+            onValueChange={(value) => {
+              if (
+                value === ProcessorBackendKind.OPENAI_COMPATIBLE ||
+                value === ProcessorBackendKind.CLAMAV
+              ) {
+                setKind(value);
+                clearFieldError("kind");
+                clearFieldError("baseUrl");
+              }
+            }}
+            disabled={Boolean(initialValues)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {ProcessorBackendKindLabels[kind] ?? kind}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ProcessorBackendKind.OPENAI_COMPATIBLE}>
+                {
+                  ProcessorBackendKindLabels[
+                    ProcessorBackendKind.OPENAI_COMPATIBLE
+                  ]
+                }
+              </SelectItem>
+              <SelectItem value={ProcessorBackendKind.CLAMAV}>
+                {ProcessorBackendKindLabels[ProcessorBackendKind.CLAMAV]}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="processor-backend-url">Base URL *</Label>
+          <Label htmlFor="processor-backend-url">
+            {isClamav ? "Clamd host *" : "Base URL *"}
+          </Label>
           <Input
             id="processor-backend-url"
             value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="http://ollama:11434/v1"
+            onChange={(event) => {
+              setBaseUrl(event.target.value);
+              clearFieldError("baseUrl");
+            }}
+            placeholder={isClamav ? "clamav:3310" : "http://ollama:11434/v1"}
+            aria-invalid={Boolean(fieldErrors.baseUrl)}
           />
           <p className="text-xs text-muted-foreground">
-            OpenAI-compatible API root, including `/v1` when required.
+            {isClamav
+              ? "Reachable clamd address (host:port). Workers use the internal Docker hostname."
+              : "OpenAI-compatible API root, including `/v1` when required."}
           </p>
+          <FieldError message={fieldErrors.baseUrl} />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="processor-backend-api-key">API key</Label>
-          <Input
-            id="processor-backend-api-key"
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            disabled={clearApiKey}
-            autoComplete="new-password"
-            placeholder={
-              initialValues?.apiKeyConfigured
-                ? `Configured (ends in ${initialValues.apiKeyLast4 ?? "••••"})`
-                : "Optional"
-            }
-          />
-          {initialValues?.apiKeyConfigured ? (
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={clearApiKey}
-                onCheckedChange={(checked) => {
-                  setClearApiKey(checked === true);
-                  if (checked === true) setApiKey("");
+        {!isClamav ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="processor-backend-api-key">API key</Label>
+              <Input
+                id="processor-backend-api-key"
+                type="password"
+                value={apiKey}
+                onChange={(event) => {
+                  setApiKey(event.target.value);
+                  clearFieldError("apiKey");
                 }}
+                disabled={clearApiKey}
+                autoComplete="new-password"
+                placeholder={
+                  initialValues?.apiKeyConfigured
+                    ? `Configured (ends in ${initialValues.apiKeyLast4 ?? "••••"})`
+                    : "Optional"
+                }
+                aria-invalid={Boolean(fieldErrors.apiKey)}
               />
-              Clear configured API key
-            </label>
-          ) : null}
-        </div>
+              {initialValues?.apiKeyConfigured ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={clearApiKey}
+                    onCheckedChange={(checked) => {
+                      setClearApiKey(checked === true);
+                      if (checked === true) setApiKey("");
+                    }}
+                  />
+                  Clear configured API key
+                </label>
+              ) : null}
+              <FieldError message={fieldErrors.apiKey} />
+            </div>
 
-        <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Default models (fallback)</p>
-            <p className="text-xs text-muted-foreground">
-              Optional. Prefer setting vision/text models on each processor in
-              Processing settings. These are used only when a processor has no
-              model configured.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="processor-backend-vision-model">
-                Fallback vision model
-              </Label>
-              <Input
-                id="processor-backend-vision-model"
-                value={visionModel}
-                onChange={(event) => setVisionModel(event.target.value)}
-                placeholder="llava"
-              />
+            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Default models (fallback)</p>
+                <p className="text-xs text-muted-foreground">
+                  Optional. Prefer setting vision/text models on each processor
+                  in Processing settings. These are used only when a processor
+                  has no model configured.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="processor-backend-vision-model">
+                    Fallback vision model
+                  </Label>
+                  <Input
+                    id="processor-backend-vision-model"
+                    value={visionModel}
+                    onChange={(event) => {
+                      setVisionModel(event.target.value);
+                      clearFieldError("visionModel");
+                    }}
+                    placeholder="llava"
+                    aria-invalid={Boolean(fieldErrors.visionModel)}
+                  />
+                  <FieldError message={fieldErrors.visionModel} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="processor-backend-text-model">
+                    Fallback text model
+                  </Label>
+                  <Input
+                    id="processor-backend-text-model"
+                    value={textModel}
+                    onChange={(event) => {
+                      setTextModel(event.target.value);
+                      clearFieldError("textModel");
+                    }}
+                    placeholder="llama3.2"
+                    aria-invalid={Boolean(fieldErrors.textModel)}
+                  />
+                  <FieldError message={fieldErrors.textModel} />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="processor-backend-text-model">
-                Fallback text model
-              </Label>
-              <Input
-                id="processor-backend-text-model"
-                value={textModel}
-                onChange={(event) => setTextModel(event.target.value)}
-                placeholder="llama3.2"
-              />
-            </div>
-          </div>
-        </div>
+          </>
+        ) : null}
 
         <div className="space-y-2">
           <Label htmlFor="processor-backend-timeout">Timeout (ms)</Label>
@@ -183,8 +275,13 @@ export function ProcessorBackendForm({
             min={1_000}
             max={600_000}
             value={timeoutMs}
-            onChange={(event) => setTimeoutMs(event.target.value)}
+            onChange={(event) => {
+              setTimeoutMs(event.target.value);
+              clearFieldError("timeoutMs");
+            }}
+            aria-invalid={Boolean(fieldErrors.timeoutMs)}
           />
+          <FieldError message={fieldErrors.timeoutMs} />
         </div>
 
         <div className="space-y-3 rounded-md border bg-muted/30 p-3">
@@ -213,6 +310,11 @@ export function ProcessorBackendForm({
       </ResponsiveSheet.Footer>
     </form>
   );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 function Toggle({

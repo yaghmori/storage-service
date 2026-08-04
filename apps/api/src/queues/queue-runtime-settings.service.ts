@@ -25,9 +25,16 @@ import {
   METADATA_EXTRACTION_QUEUE,
   NOTIFY_WEBHOOK_QUEUE,
   VIDEO_PROCESSING_QUEUE,
+  VIRUS_SCAN_QUEUE,
 } from './queue-names';
 
 export const DEFAULT_QUEUE_SETTINGS: QueueRuntimeSettingsMap = {
+  [VIRUS_SCAN_QUEUE]: {
+    concurrency: 2,
+    rateMax: 4,
+    rateDurationMs: 60_000,
+    paused: false,
+  },
   [METADATA_EXTRACTION_QUEUE]: {
     concurrency: 3,
     rateMax: null,

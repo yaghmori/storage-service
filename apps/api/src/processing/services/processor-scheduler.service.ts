@@ -61,6 +61,25 @@ export class ProcessorSchedulerService {
           continue;
         }
 
+        if (proc.processorKey === ProcessorKey.SECURITY_VIRUS_SCAN) {
+          await this.queues.enqueueProcessorJob({
+            processorKey: proc.processorKey,
+            fileId: input.fileId,
+            orgId: input.orgId,
+            backendId: proc.backendId,
+            parameters: settings,
+            data: {
+              fileId: input.fileId,
+              orgId: input.orgId,
+              backendId: proc.backendId,
+              settings,
+            },
+            priority: 0,
+          });
+          scheduled.push(proc.processorKey);
+          continue;
+        }
+
         if (proc.processorKey === ProcessorKey.IMAGE_VARIANTS) {
           const { variants, formats } =
             this.orgProcessors.getImageVariantSlots(settings);

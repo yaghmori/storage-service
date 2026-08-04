@@ -13,6 +13,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "db:generate": "pnpm --filter @yaghmori/storage-service-server db:generate",
     "db:migrate": "pnpm --filter @yaghmori/storage-service-server db:migrate",
+    "migrate": "pnpm --filter @yaghmori/storage-service-server migrate",
     "db:push": "pnpm --filter @yaghmori/storage-service-server db:push",
     "db:seed": "pnpm --filter @yaghmori/storage-service-server db:seed",
     "docker:dev": "pnpm --filter @yaghmori/storage-service-server docker:dev",

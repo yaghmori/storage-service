@@ -30,6 +30,13 @@ export const PATTERNS = {
 } as const;
 export const HTTP_PATHS = {
   UPLOAD: "/upload",
+  UPLOAD_INITIATE: "/upload/initiate",
+  UPLOAD_COMPLETE: "/upload/complete",
+  UPLOAD_ABORT: "/upload/abort",
+  UPLOAD_MULTIPART_PART_URL: "/upload/multipart/part-url",
+  UPLOAD_MULTIPART_INITIATE: "/upload/multipart/initiate",
+  UPLOAD_MULTIPART_COMPLETE: "/upload/multipart/complete",
+  UPLOAD_MULTIPART_ABORT: "/upload/multipart/abort",
   GET_FILE: "/files/{id}",
   DELETE_FILE: "/files/{id}",
   DOWNLOAD: "/files/{id}/download",

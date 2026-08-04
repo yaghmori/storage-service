@@ -13,6 +13,10 @@ export const DashboardEndpoints = {
 export const FilesEndpoints = {
   List: "admin/api/files",
   Upload: "admin/api/files/upload",
+  UploadInitiate: "admin/api/files/upload/initiate",
+  UploadPartUrl: "admin/api/files/upload/multipart/part-url",
+  UploadComplete: "admin/api/files/upload/complete",
+  UploadAbort: "admin/api/files/upload/abort",
   Detail: "admin/api/files/{0}",
   Delete: "admin/api/files/{0}",
   HardDelete: "admin/api/files/{0}/hard",

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 /** Registered builtin processor keys (code registry). */
 export const ProcessorKey = {
+  SECURITY_VIRUS_SCAN: "security.virus_scan",
   IMAGE_NORMALIZE: "image.normalize",
   IMAGE_VARIANTS: "image.variants",
   VIDEO_PREVIEW: "video.preview",
@@ -20,6 +21,7 @@ export type ProcessorKey = (typeof ProcessorKey)[keyof typeof ProcessorKey];
 export const processorKeySchema = z.string().min(1).max(128);
 
 export const ProcessorKeyLabels: Record<string, string> = {
+  [ProcessorKey.SECURITY_VIRUS_SCAN]: "Virus scan",
   [ProcessorKey.IMAGE_NORMALIZE]: "Image normalize",
   [ProcessorKey.IMAGE_VARIANTS]: "Image variants",
   [ProcessorKey.VIDEO_PREVIEW]: "Video preview",
@@ -34,6 +36,8 @@ export const ProcessorKeyLabels: Record<string, string> = {
 };
 
 export const ProcessorKeyDescriptions: Record<string, string> = {
+  [ProcessorKey.SECURITY_VIRUS_SCAN]:
+    "Scans stored bytes via ClamAV (clamd). Infected files are quarantined (soft-deleted) and blocked from serve.",
   [ProcessorKey.IMAGE_NORMALIZE]:
     "Normalizes HEIC/HEIF and animated GIF into a stable JPEG still for downstream processors.",
   [ProcessorKey.IMAGE_VARIANTS]:
@@ -60,6 +64,7 @@ export const ProcessorKeyDescriptions: Record<string, string> = {
 
 export const ProcessorBackendKind = {
   OPENAI_COMPATIBLE: "openai_compatible",
+  CLAMAV: "clamav",
   INTERNAL: "internal",
 } as const;
 
@@ -68,11 +73,13 @@ export type ProcessorBackendKind =
 
 export const processorBackendKindSchema = z.enum([
   ProcessorBackendKind.OPENAI_COMPATIBLE,
+  ProcessorBackendKind.CLAMAV,
   ProcessorBackendKind.INTERNAL,
 ]);
 
 export const ProcessorBackendKindLabels: Record<string, string> = {
   [ProcessorBackendKind.OPENAI_COMPATIBLE]: "OpenAI-compatible (Ollama, etc.)",
+  [ProcessorBackendKind.CLAMAV]: "ClamAV (clamd)",
   [ProcessorBackendKind.INTERNAL]: "Internal",
 };
 

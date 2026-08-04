@@ -35,6 +35,22 @@ export class OrgLimitsService {
     return mergeLimitsSettings(this.getPlatformDefaults(), fromOrg);
   }
 
+  /**
+   * Limits for direct/presigned uploads. Uses DIRECT_UPLOAD_MAX_FILE_SIZE as
+   * the platform ceiling so org max can exceed the Multer MAX_FILE_SIZE.
+   */
+  async resolveForDirectUpload(orgId: string): Promise<ResolvedOrgLimits> {
+    const org = await this.organizations.getById(orgId);
+    const fromOrg = extractLimitsFromMetadata(org?.metadata);
+    return mergeLimitsSettings(
+      {
+        maxFileSizeBytes: this.storageConfig.directUploadMaxFileSize,
+        allowedMimeTypes: this.storageConfig.allowedMimeTypes,
+      },
+      fromOrg,
+    );
+  }
+
   async getForOrg(orgId: string): Promise<
     OrgLimitsSettings & {
       defaults: {

@@ -304,6 +304,74 @@ export class ProcessorBackendsService {
     };
   }
 
+  /**
+   * Resolve ClamAV/clamd endpoint: explicit backendId → org default clamav → null.
+   * Config shape: { host, port, timeoutMs } or { baseUrl: "host:port" }.
+   */
+  async resolveClamav(
+    orgId: string,
+    backendId?: string | null,
+  ): Promise<{ host: string; port: number; timeoutMs: number } | null> {
+    let row: schema.ProcessorBackend | null = null;
+    if (backendId) {
+      row = await this.getById(backendId, orgId);
+      if (row && row.kind !== 'clamav') row = null;
+    }
+    if (!row) {
+      const [def] = await this.db
+        .select()
+        .from(schema.processorBackends)
+        .where(
+          and(
+            eq(schema.processorBackends.orgId, orgId),
+            eq(schema.processorBackends.kind, 'clamav'),
+            eq(schema.processorBackends.isActive, true),
+            eq(schema.processorBackends.isDefault, true),
+          ),
+        )
+        .limit(1);
+      row = def ?? null;
+    }
+    if (!row) {
+      const [anyActive] = await this.db
+        .select()
+        .from(schema.processorBackends)
+        .where(
+          and(
+            eq(schema.processorBackends.orgId, orgId),
+            eq(schema.processorBackends.kind, 'clamav'),
+            eq(schema.processorBackends.isActive, true),
+          ),
+        )
+        .limit(1);
+      row = anyActive ?? null;
+    }
+    if (!row) return null;
+
+    const config = (row.config ?? {}) as Record<string, unknown>;
+    let host =
+      typeof config.host === 'string' ? config.host.trim() : '';
+    let port =
+      typeof config.port === 'number'
+        ? config.port
+        : parseInt(String(config.port ?? ''), 10);
+    if (!host && typeof config.baseUrl === 'string') {
+      const raw = config.baseUrl.trim().replace(/^https?:\/\//i, '');
+      const [h, p] = raw.split(':');
+      host = h || '';
+      if (p && /^\d+$/.test(p)) port = parseInt(p, 10);
+    }
+    if (!host) return null;
+    return {
+      host,
+      port: Number.isFinite(port) && port > 0 ? port : 3310,
+      timeoutMs:
+        typeof config.timeoutMs === 'number' && config.timeoutMs > 0
+          ? config.timeoutMs
+          : 120_000,
+    };
+  }
+
   async listModels(
     orgId: string,
     backendId: string,

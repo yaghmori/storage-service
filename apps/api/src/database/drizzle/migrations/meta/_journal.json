@@ -71,6 +71,13 @@
       "when": 1785711600000,
       "tag": "0009_rename_admin_users_to_users",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785715200000,
+      "tag": "0010_upload_sessions",
+      "breakpoints": true
     }
   ]
 }

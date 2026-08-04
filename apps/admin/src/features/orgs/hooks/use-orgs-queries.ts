@@ -139,6 +139,8 @@ export interface OrgProcessingSettings {
   enableDedupePhash?: boolean;
   phashThresholdBits?: number;
   enableIntegrityVerify?: boolean;
+  enableVirusScan?: boolean;
+  virusScanBackendId?: string | null;
   enableDocumentPreview?: boolean;
   enableDocumentText?: boolean;
   enableDocumentOcr?: boolean;

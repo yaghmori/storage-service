@@ -59,6 +59,7 @@ import { QueuesService } from '../../queues/queues.service';
 import { SignedUrlService } from '../../serving/services/signed-url.service';
 import { ServingService } from '../../serving/services/serving.service';
 import { platformMulterFileLimits } from '../../upload/multer-limits';
+import { DirectUploadService } from '../../upload/services/direct-upload.service';
 import { UploadService } from '../../upload/services/upload.service';
 import { VariantType } from '../../variants/repositories/variants.repository';
 import { VariantsService } from '../../variants/services/variants.service';
@@ -191,6 +192,7 @@ export class FilesController {
     @Inject('DRIZZLE_DB')
     private readonly db: NodePgDatabase<typeof schema>,
     private readonly uploadService: UploadService,
+    private readonly directUpload: DirectUploadService,
     private readonly signedUrlService: SignedUrlService,
     private readonly servingService: ServingService,
     private readonly fileDeletionService: FileDeletionService,
@@ -223,6 +225,105 @@ export class FilesController {
       admin?.adminId,
       storageKey?.trim() || undefined,
     );
+  }
+
+  @Post('upload/initiate')
+  @HttpCode(HttpStatus.CREATED)
+  async initiateDirectUpload(
+    @Body()
+    body: {
+      filename?: string;
+      mimeType?: string;
+      size?: number;
+      storageProviderId?: string;
+      storageKey?: string;
+      skipProcessing?: boolean;
+      multipart?: boolean;
+      orgId?: string;
+    },
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+    @CurrentAdmin() admin?: AdminRequestUser,
+  ) {
+    const orgId = requireOrgId(queryOrgId || body.orgId, headerOrgId);
+    if (!body.filename || body.size == null || !body.mimeType) {
+      throw new BadRequestException('filename, mimeType, and size are required');
+    }
+    return this.directUpload.initiate(
+      orgId,
+      {
+        filename: body.filename,
+        mimeType: body.mimeType,
+        size: Number(body.size),
+        storageProviderId: body.storageProviderId,
+        storageKey: body.storageKey,
+        skipProcessing: body.skipProcessing,
+        multipart: body.multipart,
+      },
+      admin?.adminId,
+    );
+  }
+
+  @Post('upload/multipart/part-url')
+  @HttpCode(HttpStatus.OK)
+  async directUploadPartUrl(
+    @Body() body: { fileId?: string; partNumber?: number; orgId?: string },
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId || body.orgId, headerOrgId);
+    if (!body.fileId || body.partNumber == null) {
+      throw new BadRequestException('fileId and partNumber are required');
+    }
+    return this.directUpload.getPartUrl(orgId, {
+      fileId: body.fileId,
+      partNumber: Number(body.partNumber),
+    });
+  }
+
+  @Post('upload/complete')
+  @HttpCode(HttpStatus.CREATED)
+  async completeDirectUpload(
+    @Body()
+    body: {
+      fileId?: string;
+      sha256Hash?: string;
+      skipProcessing?: boolean;
+      parts?: Array<{ partNumber: number; etag: string }>;
+      orgId?: string;
+    },
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+    @CurrentAdmin() admin?: AdminRequestUser,
+  ) {
+    const orgId = requireOrgId(queryOrgId || body.orgId, headerOrgId);
+    if (!body.fileId || !body.sha256Hash) {
+      throw new BadRequestException('fileId and sha256Hash are required');
+    }
+    return this.directUpload.complete(
+      orgId,
+      {
+        fileId: body.fileId,
+        sha256Hash: body.sha256Hash,
+        skipProcessing: body.skipProcessing,
+        parts: body.parts,
+      },
+      admin?.adminId,
+    );
+  }
+
+  @Post('upload/abort')
+  @HttpCode(HttpStatus.OK)
+  async abortDirectUpload(
+    @Body() body: { fileId?: string; orgId?: string },
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId || body.orgId, headerOrgId);
+    if (!body.fileId) {
+      throw new BadRequestException('fileId is required');
+    }
+    return this.directUpload.abort(orgId, body.fileId);
   }
 
   @Get()

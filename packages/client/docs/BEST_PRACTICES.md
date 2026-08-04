@@ -37,6 +37,22 @@ in `STORAGE_SERVICE_URL` for clarity.
 
 ## Uploads
 
-- Prefer multipart HTTP (`POST /upload`) over TCP for binaries.
+- Prefer multipart HTTP (`POST /upload`) over TCP for binaries (files within `MAX_FILE_SIZE`, default 100MB).
+- **Large files:** use `uploadLarge()` / `POST /upload/initiate` → PUT to MinIO/S3 → `POST /upload/complete` (same response shape as `POST /upload`). Do not raise Multer limits to multi-GB.
+- Align reverse-proxy `client_max_body_size` and timeouts with `MAX_FILE_SIZE` for the small path.
+- Set `DIRECT_UPLOAD_MAX_FILE_SIZE` (default 5GB) for the direct path org ceiling.
 - Retry 408/429/5xx with backoff; do not retry non-idempotent uploads without hash awareness.
 - Short-lived signed URLs for browsers/CDN.
+
+## Rate limits & migration
+
+- Default HTTP throttle: `RATE_LIMIT_MAX` / `RATE_LIMIT_TTL_MS` (120 / 60s).
+- Exempt migrate keys via `RATE_LIMIT_EXEMPT_SERVICE_NAMES` (default includes `migration`) or API key `permissions: { "migration": true }`.
+- Bulk migrate with `skipProcessing=true` (or `x-skip-processing: true`), then enable processors (including virus scan) after cutover.
+- Set `RATE_LIMIT_DISABLED=true` only on trusted networks during cutover if needed.
+
+## Virus scan (ClamAV)
+
+- Run `clamav/clamav` on the internal Docker network; workers use `CLAMAV_HOST=clamav` / `CLAMAV_PORT=3310`.
+- Create an org processor backend kind `clamav` (baseUrl `clamav:3310` or host/port) and enable `security.virus_scan`.
+- Infected files are soft-deleted (quarantined) and stop serving.

@@ -51,6 +51,11 @@ export class LocalStorageService {
           return false;
         }
       },
+      stat: async (key: string) => {
+        const filePath = join(basePath, key);
+        const info = await fs.stat(filePath);
+        return { size: info.size };
+      },
       getSignedUrl: async (key: string) => {
         // For local storage, return a path that can be served
         return `/files/${key}`;
@@ -58,6 +63,7 @@ export class LocalStorageService {
       getPublicUrl: async (key: string) => {
         return `/files/${key}`;
       },
+      // Direct/presigned uploads are not supported for local disk — use POST /upload.
     };
   }
 }

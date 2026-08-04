@@ -1,6 +1,11 @@
 #!/bin/sh
 # Combined storage-service runtime: Nest API + Next admin in one container.
+# If arguments are passed (e.g. `pnpm migrate`), run them instead of starting servers.
 set -eu
+
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
 
 API_PORT="${PORT:-6100}"
 ADMIN_LISTEN="${ADMIN_PORT:-6200}"
