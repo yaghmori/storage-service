@@ -59,15 +59,15 @@ export class SeedService {
     const password = process.env.ADMIN_PASSWORD || 'admin';
     const [existing] = await this.db
       .select()
-      .from(schema.adminUsers)
-      .where(eq(schema.adminUsers.email, email))
+      .from(schema.users)
+      .where(eq(schema.users.email, email))
       .limit(1);
     if (existing) {
       this.logger.log(`Admin user "${email}" already exists`);
       return;
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    await this.db.insert(schema.adminUsers).values({
+    await this.db.insert(schema.users).values({
       email,
       passwordHash,
       role: 'admin',

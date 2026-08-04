@@ -146,9 +146,9 @@ export class AdminUsersController {
   private async ensureNotLastActiveAdmin(targetId: string) {
     const [activeAdmins] = await this.db
       .select({ value: count() })
-      .from(schema.adminUsers)
+      .from(schema.users)
       .where(
-        and(eq(schema.adminUsers.isActive, true), eq(schema.adminUsers.role, 'admin')),
+        and(eq(schema.users.isActive, true), eq(schema.users.role, 'admin')),
       );
     const target = await this.users.findById(targetId);
     if (

@@ -81,18 +81,53 @@ export function useFilesQuery(params?: {
   page?: number;
   limit?: number;
   search?: string;
-  fileType?: FilesFileTypeFilter;
-  processingStatus?: FilesProcessingStatusFilter;
+  fileType?: FilesFileTypeFilter | FilesFileTypeFilter[] | string;
+  processingStatus?:
+    | FilesProcessingStatusFilter
+    | FilesProcessingStatusFilter[]
+    | string;
   minSize?: number;
   maxSize?: number;
   includeDeleted?: boolean;
   deletedOnly?: boolean;
   orgId?: string;
 }) {
+  const fileTypeParam = Array.isArray(params?.fileType)
+    ? params.fileType.filter(Boolean).join(",")
+    : params?.fileType;
+  const processingStatusParam = Array.isArray(params?.processingStatus)
+    ? params.processingStatus.filter(Boolean).join(",")
+    : params?.processingStatus;
   return useQuery({
-    queryKey: fileKeys.list(params as Record<string, unknown> | undefined),
+    queryKey: fileKeys.list({
+      page: params?.page,
+      limit: params?.limit,
+      search: params?.search,
+      fileType: fileTypeParam,
+      processingStatus: processingStatusParam,
+      minSize: params?.minSize,
+      maxSize: params?.maxSize,
+      includeDeleted: params?.includeDeleted,
+      deletedOnly: params?.deletedOnly,
+      orgId: params?.orgId,
+    } as Record<string, unknown> | undefined),
     queryFn: async () => {
-      const response = await upstream.get(FilesEndpoints.List, { params });
+      const response = await upstream.get(FilesEndpoints.List, {
+        params: {
+          orgId: params?.orgId,
+          page: params?.page,
+          limit: params?.limit,
+          ...(params?.search?.trim() ? { search: params.search.trim() } : {}),
+          ...(fileTypeParam ? { fileType: fileTypeParam } : {}),
+          ...(processingStatusParam
+            ? { processingStatus: processingStatusParam }
+            : {}),
+          ...(params?.minSize != null ? { minSize: params.minSize } : {}),
+          ...(params?.maxSize != null ? { maxSize: params.maxSize } : {}),
+          ...(params?.includeDeleted ? { includeDeleted: true } : {}),
+          ...(params?.deletedOnly ? { deletedOnly: true } : {}),
+        },
+      });
       const payload = unwrapApiData<FilesListResponse>(response.data);
       const limit = Number(payload.limit) || params?.limit || 20;
       const page = Number(payload.page) || params?.page || 1;

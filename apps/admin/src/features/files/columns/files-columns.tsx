@@ -93,7 +93,7 @@ export function createFilesColumns(
       meta: {
         variant: "text",
         label: "Search",
-        placeholder: "Search filename or mime…",
+        placeholder: "Search filename, mime, or ID…",
       },
     },
     {
@@ -152,7 +152,7 @@ export function createFilesColumns(
       enableHiding: false,
       filterFn: () => true,
       meta: {
-        variant: "select",
+        variant: "multiSelect",
         label: "File type",
         options: [
           { value: "images", label: "Images" },
@@ -199,7 +199,7 @@ export function createFilesColumns(
       ),
       enableColumnFilter: true,
       meta: {
-        variant: "select",
+        variant: "multiSelect",
         label: "Status",
         options: [
           { value: "pending", label: "Pending" },

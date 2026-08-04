@@ -101,29 +101,47 @@ export function groupJobsByFile(jobs: JobRow[]): JobFileGroup[] {
 export function useJobsQuery(params?: {
   page?: number;
   limit?: number;
-  status?: JobStatus | string;
-  processorKey?: ProcessorKey | string;
+  status?: JobStatus | string | string[];
+  processorKey?: ProcessorKey | string | string[];
   fileId?: string;
   search?: string;
+  createdFrom?: string;
+  createdTo?: string;
   orgId?: string;
   enabled?: boolean;
 }) {
   const { enabled: enabledParam, ...queryParams } = params ?? {};
+  const statusParam = Array.isArray(queryParams.status)
+    ? queryParams.status.filter(Boolean).join(",")
+    : queryParams.status;
+  const processorKeyParam = Array.isArray(queryParams.processorKey)
+    ? queryParams.processorKey.filter(Boolean).join(",")
+    : queryParams.processorKey;
   return useQuery({
-    queryKey: jobKeys.list(queryParams as Record<string, unknown>),
+    queryKey: jobKeys.list({
+      ...queryParams,
+      status: statusParam,
+      processorKey: processorKeyParam,
+    } as Record<string, unknown>),
     queryFn: async () => {
       const response = await upstream.get(JobsEndpoints.List, {
         params: {
           orgId: queryParams.orgId,
           page: queryParams.page,
           limit: queryParams.limit,
-          ...(queryParams.status ? { status: queryParams.status } : {}),
-          ...(queryParams.processorKey
-            ? { processorKey: queryParams.processorKey }
+          ...(statusParam ? { status: statusParam } : {}),
+          ...(processorKeyParam
+            ? { processorKey: processorKeyParam }
             : {}),
           ...(queryParams.fileId ? { fileId: queryParams.fileId } : {}),
           ...(queryParams.search?.trim()
             ? { search: queryParams.search.trim() }
+            : {}),
+          ...(queryParams.createdFrom
+            ? { createdFrom: queryParams.createdFrom }
+            : {}),
+          ...(queryParams.createdTo
+            ? { createdTo: queryParams.createdTo }
             : {}),
         },
       });
@@ -233,6 +251,47 @@ export function useRetryJobMutation(orgId?: string) {
           queryKey: fileKeys.detail(orgId, updated.fileId),
         });
       }
+    },
+  });
+}
+
+export type BulkJobsResult = {
+  cancelled?: number;
+  retried?: number;
+  skipped: number;
+  errors?: string[];
+};
+
+export function useBulkCancelJobsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const response = await upstream.post(
+        JobsEndpoints.BulkCancel,
+        { ids },
+        { params: { orgId } },
+      );
+      return unwrapApiData<BulkJobsResult>(response.data);
+    },
+    onSuccess: () => {
+      invalidateJobs(queryClient);
+    },
+  });
+}
+
+export function useBulkRetryJobsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const response = await upstream.post(
+        JobsEndpoints.BulkRetry,
+        { ids },
+        { params: { orgId } },
+      );
+      return unwrapApiData<BulkJobsResult>(response.data);
+    },
+    onSuccess: () => {
+      invalidateJobs(queryClient);
     },
   });
 }

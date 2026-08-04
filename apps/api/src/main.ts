@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { appRole } from './config/app-role';
 import { resolveListenPorts } from './config/listen-ports';
 
 async function bootstrap() {
@@ -14,21 +15,35 @@ async function bootstrap() {
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
 
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.TCP,
-    options: {
-      host: tcpHost,
-      port: tcpPort,
-      retryAttempts: 5,
-      retryDelay: 3000,
-    },
-  });
+  if (appRole.enableTcp) {
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.TCP,
+      options: {
+        host: tcpHost,
+        port: tcpPort,
+        retryAttempts: 5,
+        retryDelay: 3000,
+      },
+    });
+    await app.startAllMicroservices();
+    Logger.log(`TCP microservice listening on ${tcpHost}:${tcpPort}`);
+  }
 
-  await app.startAllMicroservices();
-  await app.listen(httpPort, httpHost);
+  if (appRole.enableHttp) {
+    await app.listen(httpPort, httpHost);
+    Logger.log(
+      `HTTP server listening on http://${httpHost}:${httpPort}/${globalPrefix}`,
+    );
+  } else {
+    await app.init();
+    Logger.log(
+      `HTTP disabled (ENABLE_HTTP=false); workers=${appRole.enableWorkers} crons=${appRole.enableCrons}`,
+    );
+  }
 
-  Logger.log(`HTTP server listening on http://${httpHost}:${httpPort}/${globalPrefix}`);
-  Logger.log(`TCP microservice listening on ${tcpHost}:${tcpPort}`);
+  Logger.log(
+    `Role flags: HTTP=${appRole.enableHttp} TCP=${appRole.enableTcp} WORKERS=${appRole.enableWorkers} CRONS=${appRole.enableCrons}`,
+  );
 }
 
 bootstrap();

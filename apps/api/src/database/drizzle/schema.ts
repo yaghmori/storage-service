@@ -91,8 +91,8 @@ export const organizations = pgTable(
   }),
 );
 
-export const adminUsers = pgTable(
-  'admin_users',
+export const users = pgTable(
+  'users',
   {
     id: uuid('id').defaultRandom().primaryKey(),
     email: varchar('email', { length: 255 }).notNull().unique(),
@@ -104,8 +104,8 @@ export const adminUsers = pgTable(
     lastLoginAt: timestamp('last_login_at'),
   },
   (table) => ({
-    emailIdx: index('admin_users_email_idx').on(table.email),
-    emailActiveIdx: index('admin_users_email_active_idx').on(table.email, table.isActive),
+    emailIdx: index('users_email_idx').on(table.email),
+    emailActiveIdx: index('users_email_active_idx').on(table.email, table.isActive),
   }),
 );
 
@@ -597,8 +597,8 @@ export const fileProcessorResultsRelations = relations(fileProcessorResults, ({ 
 
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
-export type AdminUser = typeof adminUsers.$inferSelect;
-export type NewAdminUser = typeof adminUsers.$inferInsert;
+export type AdminUser = typeof users.$inferSelect;
+export type NewAdminUser = typeof users.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type ProcessorBackend = typeof processorBackends.$inferSelect;

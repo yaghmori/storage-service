@@ -84,6 +84,10 @@ type FormState = {
   enableNotifyWebhook: boolean;
   notifyWebhookUrl: string;
   notifyWebhookSecret: string;
+  processorCapacity: Record<
+    string,
+    { concurrency: number; rateMax: number | null; rateDurationMs: number | null }
+  >;
 };
 
 type EnabledKey = keyof Pick<
@@ -261,6 +265,7 @@ function toForm(settings: OrgProcessingSettings): FormState {
     enableNotifyWebhook: settings.enableNotifyWebhook ?? false,
     notifyWebhookUrl: settings.notifyWebhookUrl ?? "",
     notifyWebhookSecret: settings.notifyWebhookSecret ?? "",
+    processorCapacity: settings.processorCapacity ?? {},
   };
 }
 
@@ -414,6 +419,24 @@ export function OrgProcessingSettingsForm({ orgId }: { orgId: string }) {
                         </p>
                       ) : (
                         <div className="space-y-3 border-t pt-3">
+                          <ProcessorCapacityFields
+                            processorKey={processor.key}
+                            capacity={
+                              form.processorCapacity[processor.key] ?? {
+                                concurrency: 1,
+                                rateMax: null,
+                                rateDurationMs: null,
+                              }
+                            }
+                            onChange={(next) =>
+                              patch({
+                                processorCapacity: {
+                                  ...form.processorCapacity,
+                                  [processor.key]: next,
+                                },
+                              })
+                            }
+                          />
                           <ProcessorTabOptions
                             orgId={orgId}
                             processorKey={processor.key}
@@ -956,6 +979,7 @@ function saveForm(
       enableNotifyWebhook: form.enableNotifyWebhook,
       notifyWebhookUrl: form.notifyWebhookUrl,
       notifyWebhookSecret: form.notifyWebhookSecret,
+      processorCapacity: form.processorCapacity,
     },
     {
       onSuccess: () => toast.success("Processing settings saved"),
@@ -1078,6 +1102,82 @@ function BackendPickerField({
           </Command>
         </PopoverContent>
       </Popover>
+    </div>
+  );
+}
+
+function ProcessorCapacityFields({
+  processorKey,
+  capacity,
+  onChange,
+}: {
+  processorKey: string;
+  capacity: {
+    concurrency: number;
+    rateMax: number | null;
+    rateDurationMs: number | null;
+  };
+  onChange: (next: {
+    concurrency: number;
+    rateMax: number | null;
+    rateDurationMs: number | null;
+  }) => void;
+}) {
+  return (
+    <div className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-3">
+      <div className="space-y-1.5">
+        <Label htmlFor={`${processorKey}-concurrency`}>Concurrency</Label>
+        <Input
+          id={`${processorKey}-concurrency`}
+          type="number"
+          min={1}
+          max={32}
+          className="h-8"
+          value={capacity.concurrency}
+          onChange={(e) =>
+            onChange({
+              ...capacity,
+              concurrency: Math.min(32, Math.max(1, Number(e.target.value) || 1)),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${processorKey}-rate-max`}>Rate max</Label>
+        <Input
+          id={`${processorKey}-rate-max`}
+          type="number"
+          min={0}
+          className="h-8"
+          placeholder="∞"
+          value={capacity.rateMax ?? ""}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            onChange({
+              ...capacity,
+              rateMax: v === "" ? null : Math.max(1, Number(v) || 1),
+            });
+          }}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${processorKey}-rate-window`}>Rate window (ms)</Label>
+        <Input
+          id={`${processorKey}-rate-window`}
+          type="number"
+          min={0}
+          className="h-8"
+          placeholder="—"
+          value={capacity.rateDurationMs ?? ""}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            onChange({
+              ...capacity,
+              rateDurationMs: v === "" ? null : Math.max(1000, Number(v) || 1000),
+            });
+          }}
+        />
+      </div>
     </div>
   );
 }

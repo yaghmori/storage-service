@@ -34,6 +34,7 @@ export class UploadController {
     @Body('storageProviderId') storageProviderId?: string,
     @Body('storageKey') storageKey?: string,
     @Body('orgId') bodyOrgId?: string,
+    @Body('skipProcessing') skipProcessingRaw?: string | boolean,
     @CurrentUser() user?: { id?: string; orgId?: string },
     @Req() req?: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
@@ -46,12 +47,23 @@ export class UploadController {
         'orgId is required (bound API key, AUTH_DEFAULT_ORG_ID, or x-org-id)',
       );
     }
+
+    const headerSkip = req?.headers?.['x-skip-processing'];
+    const headerSkipValue = Array.isArray(headerSkip) ? headerSkip[0] : headerSkip;
+    const skipProcessing =
+      skipProcessingRaw === true ||
+      skipProcessingRaw === 'true' ||
+      skipProcessingRaw === '1' ||
+      headerSkipValue === 'true' ||
+      headerSkipValue === '1';
+
     return await this.uploadService.uploadFile(
       file,
       orgId,
       storageProviderId,
       user?.id,
       storageKey,
+      { skipProcessing },
     );
   }
 

@@ -63,7 +63,7 @@ export const orgSettingsNavItems: OrgSettingsNavItem[] = [
   {
     title: "Processing",
     description:
-      "Enable upload processors and configure what each handler does.",
+      "Enable processors, options, and per-processor concurrency / rate limits.",
     section: "processing",
     icon: Cpu,
     href: PAGE_ROUTES.settingsProcessing,

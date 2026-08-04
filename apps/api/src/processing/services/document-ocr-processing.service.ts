@@ -56,19 +56,30 @@ export class DocumentOcrProcessingService {
         ? ((extracted.data as Record<string, unknown>).text as string)
         : '';
     if (extractedText.trim().length >= minChars) {
-      return this.skip(input, 'Text extraction already produced sufficient text');
+      return this.skip(
+        input,
+        `Skipped OCR: document.text already has ≥${minChars} characters`,
+      );
     }
 
     const file = await this.files.findById(input.fileId, input.orgId);
     const jpeg = await this.loadOcrJpeg(input.fileId, file.mimeType, input.jobId);
     if (!jpeg) {
-      return this.skip(input, 'No page image is available for OCR');
+      return this.skip(
+        input,
+        file.mimeType.toLowerCase() === 'application/pdf'
+          ? 'Skipped OCR: no page image — PDF preview (pdftoppm) must succeed first'
+          : 'Skipped OCR: no raster image available for this file',
+      );
     }
 
     if (engine === 'tesseract') {
       const text = await this.runTesseract(jpeg);
       if (text == null) {
-        return this.skip(input, 'tesseract binary is not available');
+        return this.skip(
+          input,
+          'Skipped OCR: tesseract binary is not available on this worker',
+        );
       }
       return this.complete(input, {
         text,
@@ -95,7 +106,10 @@ export class DocumentOcrProcessingService {
           engine: 'tesseract',
         });
       }
-      return this.skip(input, 'No OpenAI-compatible backend configured');
+      return this.skip(
+        input,
+        'Skipped OCR: no OpenAI-compatible vision backend and tesseract is not available',
+      );
     }
 
     const model = this.backends.resolveModel({

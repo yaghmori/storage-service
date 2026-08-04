@@ -33,7 +33,7 @@ import { VariantsModule } from './variants/variants.module';
     StorageProvidersModule,
     FilesModule,
     UploadModule,
-    ProcessingModule,
+    ProcessingModule.forRoot(),
     VariantsModule,
     ServingModule,
     AnalyticsModule,

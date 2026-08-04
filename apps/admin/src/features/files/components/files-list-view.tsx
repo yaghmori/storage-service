@@ -81,6 +81,16 @@ function firstStringFilter(value: unknown): string | undefined {
   return undefined;
 }
 
+function stringArrayFilter(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (v): v is string => typeof v === "string" && v.trim().length > 0,
+    );
+  }
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
 const SIZE_FILTER_MAX_MB = 1024;
 
 function sizeRangeFilter(
@@ -195,24 +205,16 @@ export function FilesListView() {
     firstStringFilter(columnFilters.find((f) => f.id === "search")?.value) ??
     "";
 
-  const fileTypeRaw = firstStringFilter(
+  const fileType = stringArrayFilter(
     columnFilters.find((f) => f.id === "fileType")?.value,
+  ).filter((v): v is FilesFileTypeFilter =>
+    FILE_TYPE_VALUES.has(v as FilesFileTypeFilter),
   );
-  const fileType =
-    fileTypeRaw && FILE_TYPE_VALUES.has(fileTypeRaw as FilesFileTypeFilter)
-      ? (fileTypeRaw as FilesFileTypeFilter)
-      : undefined;
-
-  const processingStatusRaw = firstStringFilter(
+  const processingStatus = stringArrayFilter(
     columnFilters.find((f) => f.id === "processingStatus")?.value,
+  ).filter((v): v is FilesProcessingStatusFilter =>
+    PROCESSING_STATUS_VALUES.has(v as FilesProcessingStatusFilter),
   );
-  const processingStatus =
-    processingStatusRaw &&
-    PROCESSING_STATUS_VALUES.has(
-      processingStatusRaw as FilesProcessingStatusFilter,
-    )
-      ? (processingStatusRaw as FilesProcessingStatusFilter)
-      : undefined;
 
   const sizeFilter = sizeRangeFilter(
     columnFilters.find((f) => f.id === "size")?.value,
@@ -224,8 +226,8 @@ export function FilesListView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- table is stable
   }, [
     searchTerm,
-    fileType,
-    processingStatus,
+    fileType.join(","),
+    processingStatus.join(","),
     sizeFilter?.minSize,
     sizeFilter?.maxSize,
     visibility,
@@ -236,8 +238,8 @@ export function FilesListView() {
     page: pagination.pageIndex + 1,
     limit: pagination.pageSize,
     search: searchTerm.trim() || undefined,
-    fileType,
-    processingStatus,
+    fileType: fileType.length > 0 ? fileType : undefined,
+    processingStatus: processingStatus.length > 0 ? processingStatus : undefined,
     minSize: sizeFilter?.minSize,
     maxSize: sizeFilter?.maxSize,
     orgId: activeOrg?.id,
@@ -267,8 +269,8 @@ export function FilesListView() {
     searchTerm,
     activeOrg?.id,
     visibility,
-    fileType,
-    processingStatus,
+    fileType.join(","),
+    processingStatus.join(","),
     sizeFilter?.minSize,
     sizeFilter?.maxSize,
   ]);

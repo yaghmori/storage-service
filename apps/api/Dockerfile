@@ -31,7 +31,18 @@ RUN pnpm install --filter @yaghmori/storage-service-server... --filter @workspac
 FROM node:20-alpine AS production
 
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
- && apk add --no-cache netcat-openbsd ffmpeg poppler-utils tesseract-ocr libheif
+ && set -eux; \
+  i=1; \
+  while [ "$i" -le 5 ]; do \
+    if apk update && apk add --no-cache netcat-openbsd ffmpeg poppler-utils tesseract-ocr libheif; then \
+      break; \
+    fi; \
+    echo "apk attempt $i failed; retrying in 5s..."; \
+    i=$((i + 1)); \
+    sleep 5; \
+  done; \
+  command -v pdftoppm; \
+  command -v tesseract
 
 ENV HOST=0.0.0.0
 ENV PORT=4000
@@ -62,6 +73,6 @@ USER nestjs
 EXPOSE 4000 4002
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD-SHELL nc -z localhost $${PORT:-4000} || exit 1
+  CMD-SHELL if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-4000} || exit 1; fi
 
 CMD ["node", "dist/main.js"]

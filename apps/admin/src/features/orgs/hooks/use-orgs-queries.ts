@@ -146,6 +146,14 @@ export interface OrgProcessingSettings {
   enableNotifyWebhook?: boolean;
   notifyWebhookUrl?: string;
   notifyWebhookSecret?: string;
+  processorCapacity?: Record<
+    string,
+    {
+      concurrency: number;
+      rateMax: number | null;
+      rateDurationMs: number | null;
+    }
+  >;
   defaults?: OrgProcessingSettings;
 }
 

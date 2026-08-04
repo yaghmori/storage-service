@@ -1,14 +1,16 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { ProcessorKey } from '@workspace/validation';
-import { Job } from 'bullmq';
+import { DelayedError, Job } from 'bullmq';
 import { IMAGE_PROCESSING_QUEUE } from '../../queues/queue-names';
+import { processorWorkerOptions } from '../../queues/queue-runtime-settings.service';
 import { ImageProcessingJobData } from '../../queues/queues.service';
 import { ProcessingJobsRepository } from '../repositories/processing-jobs.repository';
 import { FileProcessingRollupService } from '../services/file-processing-rollup.service';
 import { ImageProcessingService } from '../services/image-processing.service';
+import { OrgProcessorCapacityService } from '../services/org-processor-capacity.service';
 
-@Processor(IMAGE_PROCESSING_QUEUE, { concurrency: 2 })
+@Processor(IMAGE_PROCESSING_QUEUE, processorWorkerOptions(IMAGE_PROCESSING_QUEUE))
 export class ImageProcessingProcessor extends WorkerHost {
   private readonly logger = new Logger(ImageProcessingProcessor.name);
 
@@ -16,11 +18,14 @@ export class ImageProcessingProcessor extends WorkerHost {
     private readonly imageProcessingService: ImageProcessingService,
     private readonly jobsRepository: ProcessingJobsRepository,
     private readonly rollup: FileProcessingRollupService,
+    @Optional() private readonly capacity?: OrgProcessorCapacityService,
   ) {
     super();
   }
 
   async process(job: Job<ImageProcessingJobData>) {
+    await this.capacity?.assertOrDelay(job, ProcessorKey.IMAGE_VARIANTS);
+
     const fileId =
       typeof job.data.fileId === 'number'
         ? String(job.data.fileId)
@@ -82,6 +87,7 @@ export class ImageProcessingProcessor extends WorkerHost {
       if (orgId) await this.rollup.refresh(fileId, orgId);
       return { success: true, variants };
     } catch (error) {
+      if (error instanceof DelayedError) throw error;
       this.logger.error(
         `Image processing failed for file ${fileId}: ${(error as Error).message}`,
         (error as Error).stack,

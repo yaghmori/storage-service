@@ -13,7 +13,7 @@
     "dev:debug": "node -r reflect-metadata -r ts-node/register/transpile-only --inspect=9229 src/main.ts",
     "docker:dev": "docker compose -f docker-compose.dev.yml up -d --build",
     "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
-    "docker:dev:logs": "docker compose -f docker-compose.dev.yml logs -f api",
+    "docker:dev:logs": "docker compose -f docker-compose.dev.yml logs -f api worker",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "build": "tsup",

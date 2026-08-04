@@ -45,7 +45,7 @@ export class FilesService {
     fileHash: string;
     uploadedBy?: string;
     tags?: string;
-  }): Promise<FileResponse> {
+  }): Promise<{ file: FileResponse; created: boolean }> {
     // Check for existing files with the same hash BEFORE inserting
     // The unique constraint on fileHash prevents inserting duplicates
     const existingFiles = await this.duplicationService.detectDuplicatesByHash(data.fileHash, data.orgId);
@@ -62,31 +62,44 @@ export class FilesService {
       this.logger.log(
         `Duplicate detected: File with hash ${data.fileHash} already exists. Using original file ${original.id}. Reference count: ${updated?.referenceCount}`,
       );
-      return toFileResponse(updated || original);
+      return { file: toFileResponse(updated || original)!, created: false };
     }
 
     // No duplicate found, create new file record
-    // This will succeed because no file with this hash exists
     try {
       const newFile = await this.repository.create(data);
-      return toFileResponse(newFile);
+      return { file: toFileResponse(newFile)!, created: true };
     } catch (error) {
-      // Handle race condition: if another request inserted the same file between our check and insert
-      if (error instanceof Error && error.message.includes('unique') && error.message.includes('hash')) {
-        this.logger.warn(
-          `Race condition detected: File with hash ${data.fileHash} was inserted by another process. Retrying...`,
-        );
-        // Retry: find the existing file
-        const existingFiles = await this.duplicationService.detectDuplicatesByHash(data.fileHash, data.orgId);
-        if (existingFiles.length > 0) {
-          const original = existingFiles.sort(
-            (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-          )[0];
-          const updated = await this.repository.incrementReferenceCount(original.id);
-          return toFileResponse(updated || original);
-        }
+      // Concurrent uploads can race on org+hash or storage_key+provider uniques.
+      if (!isUniqueViolation(error)) {
+        throw error;
       }
-      // Re-throw if it's not a unique constraint violation
+
+      this.logger.warn(
+        `Unique constraint race on createFile (hash=${data.fileHash}, key=${data.storageKey}). Recovering…`,
+      );
+
+      const byHash = await this.duplicationService.detectDuplicatesByHash(
+        data.fileHash,
+        data.orgId,
+      );
+      if (byHash.length > 0) {
+        const original = byHash.sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+        )[0];
+        const updated = await this.repository.incrementReferenceCount(original.id);
+        return { file: toFileResponse(updated || original)!, created: false };
+      }
+
+      const byKey = await this.repository.findByKeyAndProvider(
+        data.storageKey,
+        data.storageProviderId,
+      );
+      if (byKey) {
+        const updated = await this.repository.incrementReferenceCount(byKey.id);
+        return { file: toFileResponse(updated || byKey)!, created: false };
+      }
+
       throw error;
     }
   }
@@ -228,6 +241,36 @@ export class FilesService {
     const updated = await this.repository.incrementReferenceCount(id);
     return updated ? toFileResponse(updated) : null;
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const walk = (value: unknown, depth = 0): boolean => {
+    if (!value || depth > 4) return false;
+    if (typeof value !== 'object') {
+      return /unique|duplicate key|23505/i.test(String(value));
+    }
+    const rec = value as {
+      code?: string;
+      cause?: unknown;
+      message?: string;
+      detail?: string;
+    };
+    if (rec.code === '23505') return true;
+    if (
+      typeof rec.message === 'string' &&
+      /unique|duplicate key|23505/i.test(rec.message)
+    ) {
+      return true;
+    }
+    if (
+      typeof rec.detail === 'string' &&
+      /unique|duplicate key|23505/i.test(rec.detail)
+    ) {
+      return true;
+    }
+    return walk(rec.cause, depth + 1);
+  };
+  return walk(error);
 }
 
 

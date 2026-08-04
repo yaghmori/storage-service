@@ -1,3 +1,25 @@
+# Standalone stack: postgres + redis + minio + 1 API + 1 worker.
+# Scale workers when backlog needs it:
+#   docker compose up -d --scale worker=2
+
+x-storage-env: &storage-env
+  NODE_ENV: development
+  HOST: ${HOST:-0.0.0.0}
+  PORT: ${PORT:-6100}
+  TCP_HOST: ${TCP_HOST:-0.0.0.0}
+  TCP_PORT: ${TCP_PORT:-6001}
+  DATABASE_URL: postgresql://storage:storage@postgres:5432/storage_service
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  UPLOAD_PATH: /app/uploads
+  MINIO_ENDPOINT: minio
+  MINIO_PORT: "9000"
+  MINIO_PUBLIC_ENDPOINT: http://localhost:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: storage
+  MINIO_USE_SSL: "false"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -37,7 +59,7 @@ services:
     volumes:
       - storage_minio:/data
 
-  storage-service:
+  api:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
@@ -45,22 +67,31 @@ services:
       - "${PORT:-6100}:${PORT:-6100}"
       - "${TCP_PORT:-6001}:${TCP_PORT:-6001}"
     environment:
-      NODE_ENV: development
-      HOST: ${HOST:-0.0.0.0}
-      PORT: ${PORT:-6100}
-      TCP_HOST: ${TCP_HOST:-0.0.0.0}
-      TCP_PORT: ${TCP_PORT:-6001}
-      DATABASE_URL: postgresql://storage:storage@postgres:5432/storage_service
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      UPLOAD_PATH: /app/uploads
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: "9000"
-      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: storage
-      MINIO_USE_SSL: "false"
+      <<: *storage-env
+      ENABLE_HTTP: "true"
+      ENABLE_TCP: "true"
+      ENABLE_WORKERS: "false"
+      ENABLE_CRONS: "false"
+    volumes:
+      - storage_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      <<: *storage-env
+      ENABLE_HTTP: "false"
+      ENABLE_TCP: "false"
+      ENABLE_WORKERS: "true"
+      ENABLE_CRONS: "true"
     volumes:
       - storage_uploads:/app/uploads
     depends_on:

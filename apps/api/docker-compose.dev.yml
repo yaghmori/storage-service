@@ -1,22 +1,66 @@
-# API-only local development (hot-reload).
+# API + worker local development (hot-reload).
 # Joins docker-services network `internal` (postgres, redis, minio).
 #
 #   pnpm docker:dev        → up -d --build (detached, hot-reload)
-#   pnpm docker:dev:logs   → follow API logs
+#   pnpm docker:dev:logs   → follow API + worker logs
 #   pnpm docker:dev:down
+#
+# Scale workers only when backlog needs it (same Redis; BullMQ shares work):
+#   docker compose -f docker-compose.dev.yml up -d --scale worker=2
 #
 # This compose does NOT run the admin UI. Start admin on the host:
 #   pnpm dev   → http://localhost:6200 → API http://localhost:6100
 #
-# Published ports: HTTP 6100, Nest TCP 6001, debug 6300.
-# (HTTP 6000 is blocked by Node fetch / undici — do not use it.)
+# Published ports: HTTP 6100, Nest TCP 6001, debug 6300 (API only).
+# Worker has no public ports; includes poppler-utils / tesseract via Dockerfile.dev.
 
 name: storage-service-dev
+
+x-api-env: &api-env
+  NODE_ENV: development
+  HOST: 0.0.0.0
+  PORT: "6100"
+  TCP_HOST: 0.0.0.0
+  TCP_PORT: "6001"
+  DEBUG_PORT: "6300"
+  DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/storage_service}
+  REDIS_HOST: ${DOCKER_REDIS_HOST:-redis}
+  REDIS_PORT: ${DOCKER_REDIS_PORT:-6379}
+  KAFKA_BROKERS: ${DOCKER_KAFKA_BROKERS:-}
+  JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
+  JWT_ISSUER: ${JWT_ISSUER:-storage-service}
+  ADMIN_JWT_EXPIRES_IN: ${ADMIN_JWT_EXPIRES_IN:-365d}
+  AUTH_API_KEYS: ${AUTH_API_KEYS:-dev-local-key}
+  AUTH_DEFAULT_ORG_ID: ${AUTH_DEFAULT_ORG_ID:-97150c02-e312-45e9-bf7e-1aa5ca26450d}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+  STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+  UPLOAD_PATH: ${UPLOAD_PATH:-/tmp/storage-uploads}
+  MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT:-minio}
+  MINIO_PORT: ${DOCKER_MINIO_PORT:-9000}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+  MINIO_BUCKET: ${MINIO_BUCKET:-storage}
+  MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+  PROCESSOR_CREDENTIALS_ENCRYPTION_KEY: ${PROCESSOR_CREDENTIALS_ENCRYPTION_KEY:-change-me-32chars-min-dev-only}
+  PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL:-}
+  PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY:-}
+  PROCESSOR_BACKEND_OPENAI_COMPATIBLE_VISION_MODEL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_VISION_MODEL:-llava}
+  CHOKIDAR_USEPOLLING: "true"
+  CHOKIDAR_INTERVAL: "1000"
+
+x-api-volumes: &api-volumes
+  - ./src:/app/apps/api/src
+  - ./nodemon.json:/app/apps/api/nodemon.json:ro
+  - ./tsconfig.json:/app/apps/api/tsconfig.json:ro
+  - ./tsconfig.app.json:/app/apps/api/tsconfig.app.json:ro
+  - ./drizzle.config.ts:/app/apps/api/drizzle.config.ts:ro
+  - ../../packages/validation/src:/app/packages/validation/src:ro
+  - storage-uploads:/tmp/storage-uploads
 
 services:
   api:
     build:
-      # Monorepo root so @workspace/validation is available
       context: ../..
       dockerfile: apps/api/Dockerfile.dev
       target: development
@@ -26,46 +70,29 @@ services:
       - "6001:6001"
       - "6300:6300"
     environment:
-      NODE_ENV: development
-      HOST: 0.0.0.0
-      PORT: "6100"
-      TCP_HOST: 0.0.0.0
-      TCP_PORT: "6001"
-      DEBUG_PORT: "6300"
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/storage_service}
-      REDIS_HOST: ${DOCKER_REDIS_HOST:-redis}
-      REDIS_PORT: ${DOCKER_REDIS_PORT:-6379}
-      KAFKA_BROKERS: ${DOCKER_KAFKA_BROKERS:-}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
-      JWT_ISSUER: ${JWT_ISSUER:-storage-service}
-      ADMIN_JWT_EXPIRES_IN: ${ADMIN_JWT_EXPIRES_IN:-365d}
-      AUTH_API_KEYS: ${AUTH_API_KEYS:-dev-local-key}
-      AUTH_DEFAULT_ORG_ID: ${AUTH_DEFAULT_ORG_ID:-97150c02-e312-45e9-bf7e-1aa5ca26450d}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
-      UPLOAD_PATH: ${UPLOAD_PATH:-/tmp/storage-uploads}
-      MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT:-minio}
-      MINIO_PORT: ${DOCKER_MINIO_PORT:-9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-storage}
-      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
-      PROCESSOR_CREDENTIALS_ENCRYPTION_KEY: ${PROCESSOR_CREDENTIALS_ENCRYPTION_KEY:-change-me-32chars-min-dev-only}
-      PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL:-}
-      PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY:-}
-      PROCESSOR_BACKEND_OPENAI_COMPATIBLE_VISION_MODEL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_VISION_MODEL:-llava}
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "1000"
-    volumes:
-      - ./src:/app/apps/api/src
-      - ./nodemon.json:/app/apps/api/nodemon.json:ro
-      - ./tsconfig.json:/app/apps/api/tsconfig.json:ro
-      - ./tsconfig.app.json:/app/apps/api/tsconfig.app.json:ro
-      - ./drizzle.config.ts:/app/apps/api/drizzle.config.ts:ro
-      # Hot-reload shared validation source; rebuild on container start if needed
-      - ../../packages/validation/src:/app/packages/validation/src:ro
-      - storage-uploads:/tmp/storage-uploads
+      <<: *api-env
+      ENABLE_HTTP: "true"
+      ENABLE_TCP: "true"
+      ENABLE_WORKERS: "false"
+      ENABLE_CRONS: "false"
+    volumes: *api-volumes
+    networks:
+      - internal
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.dev
+      target: development
+    # No container_name — allows --scale worker=N
+    environment:
+      <<: *api-env
+      ENABLE_HTTP: "false"
+      ENABLE_TCP: "false"
+      ENABLE_WORKERS: "true"
+      ENABLE_CRONS: "true"
+    volumes: *api-volumes
     networks:
       - internal
     restart: unless-stopped

@@ -15,8 +15,8 @@ export class AdminUserService {
     const normalized = email.trim().toLowerCase();
     const [user] = await this.db
       .select()
-      .from(schema.adminUsers)
-      .where(eq(schema.adminUsers.email, normalized))
+      .from(schema.users)
+      .where(eq(schema.users.email, normalized))
       .limit(1);
 
     return user || null;
@@ -25,21 +25,21 @@ export class AdminUserService {
   async findById(id: string): Promise<schema.AdminUser | null> {
     const [user] = await this.db
       .select()
-      .from(schema.adminUsers)
-      .where(eq(schema.adminUsers.id, id))
+      .from(schema.users)
+      .where(eq(schema.users.id, id))
       .limit(1);
 
     return user || null;
   }
 
   async list(): Promise<schema.AdminUser[]> {
-    return this.db.select().from(schema.adminUsers);
+    return this.db.select().from(schema.users);
   }
 
   async delete(id: string): Promise<boolean> {
     const result = await this.db
-      .delete(schema.adminUsers)
-      .where(eq(schema.adminUsers.id, id))
+      .delete(schema.users)
+      .where(eq(schema.users.id, id))
       .returning();
     return result.length > 0;
   }
@@ -52,13 +52,13 @@ export class AdminUserService {
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     const [user] = await this.db
-      .insert(schema.adminUsers)
+      .insert(schema.users)
       .values({
         email: data.email.trim().toLowerCase(),
         passwordHash,
         role: data.role || 'admin',
         isActive: true,
-      } as typeof schema.adminUsers.$inferInsert)
+      } as typeof schema.users.$inferInsert)
       .returning();
 
     return user;
@@ -70,9 +70,9 @@ export class AdminUserService {
 
   async updateLastLogin(id: string): Promise<void> {
     await this.db
-      .update(schema.adminUsers)
-      .set({ lastLoginAt: new Date(), updatedAt: new Date() } as Partial<typeof schema.adminUsers.$inferInsert>)
-      .where(eq(schema.adminUsers.id, id));
+      .update(schema.users)
+      .set({ lastLoginAt: new Date(), updatedAt: new Date() } as Partial<typeof schema.users.$inferInsert>)
+      .where(eq(schema.users.id, id));
   }
 
   async update(id: string, data: Partial<{
@@ -99,9 +99,9 @@ export class AdminUserService {
     }
 
     const [user] = await this.db
-      .update(schema.adminUsers)
+      .update(schema.users)
       .set(updateData)
-      .where(eq(schema.adminUsers.id, id))
+      .where(eq(schema.users.id, id))
       .returning();
 
     return user || null;

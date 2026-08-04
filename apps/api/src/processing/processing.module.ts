@@ -1,5 +1,13 @@
-import { Module, forwardRef } from '@nestjs/common';
+import {
+  Module,
+  DynamicModule,
+  forwardRef,
+  Provider,
+  Type,
+  Global,
+} from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { appRole } from '../config/app-role';
 import { DatabaseModule } from '../database/database.module';
 import { EventsModule } from '../events/events.module';
 import { FilesModule } from '../files/files.module';
@@ -32,6 +40,7 @@ import { IntegrityVerifySweepService } from './services/integrity-verify-sweep.s
 import { MetadataExtractionService } from './services/metadata-extraction.service';
 import { NotifyWebhookProcessingService } from './services/notify-webhook-processing.service';
 import { OpenaiCompatibleClient } from './services/openai-compatible.client';
+import { OrgProcessorCapacityService } from './services/org-processor-capacity.service';
 import { OrgProcessorsService } from './services/org-processors.service';
 import { ProcessingService } from './services/processing.service';
 import { ProcessingSettingsService } from './services/processing-settings.service';
@@ -39,6 +48,64 @@ import { ProcessorBackendsService } from './services/processor-backends.service'
 import { ProcessorSchedulerService } from './services/processor-scheduler.service';
 import { VideoProcessingService } from './services/video-processing.service';
 
+const CORE_PROVIDERS: Provider[] = [
+  ProcessingService,
+  ProcessingSettingsService,
+  OrgProcessorsService,
+  OrgProcessorCapacityService,
+  ProcessorBackendsService,
+  ProcessorSchedulerService,
+  FileProcessingRollupService,
+  OpenaiCompatibleClient,
+  ImageNormalizeProcessingService,
+  ImageProcessingService,
+  VideoProcessingService,
+  MetadataExtractionService,
+  AiVisionProcessingService,
+  DedupePhashProcessingService,
+  IntegrityVerifyProcessingService,
+  DocumentPreviewProcessingService,
+  DocumentTextProcessingService,
+  DocumentOcrProcessingService,
+  NotifyWebhookProcessingService,
+  ProcessingJobsRepository,
+  FileProcessorResultsRepository,
+];
+
+const WORKER_PROVIDERS: Type[] = [
+  ImageNormalizeProcessingProcessor,
+  ImageProcessingProcessor,
+  VideoProcessingProcessor,
+  MetadataExtractionProcessor,
+  AiVisionProcessingProcessor,
+  DedupePhashProcessingProcessor,
+  IntegrityVerifyProcessingProcessor,
+  DocumentPreviewProcessingProcessor,
+  DocumentTextProcessingProcessor,
+  DocumentOcrProcessingProcessor,
+  NotifyWebhookProcessingProcessor,
+];
+
+const CORE_EXPORTS = [
+  ProcessingService,
+  ProcessingSettingsService,
+  OrgProcessorsService,
+  ProcessorBackendsService,
+  ProcessorSchedulerService,
+  FileProcessingRollupService,
+  ImageProcessingService,
+  VideoProcessingService,
+  MetadataExtractionService,
+  AiVisionProcessingService,
+  ProcessingJobsRepository,
+  FileProcessorResultsRepository,
+];
+
+/**
+ * Core processing (scheduler, settings, services) is always registered.
+ * BullMQ processors / crons are added only when ENABLE_WORKERS / ENABLE_CRONS.
+ */
+@Global()
 @Module({
   imports: [
     FilesModule,
@@ -46,56 +113,29 @@ import { VideoProcessingService } from './services/video-processing.service';
     StorageProvidersModule,
     DatabaseModule,
     EventsModule,
-    ScheduleModule.forRoot(),
     forwardRef(() => QueuesModule),
   ],
-  providers: [
-    ProcessingService,
-    ProcessingSettingsService,
-    OrgProcessorsService,
-    ProcessorBackendsService,
-    ProcessorSchedulerService,
-    FileProcessingRollupService,
-    IntegrityVerifySweepService,
-    OpenaiCompatibleClient,
-    ImageNormalizeProcessingService,
-    ImageProcessingService,
-    VideoProcessingService,
-    MetadataExtractionService,
-    AiVisionProcessingService,
-    DedupePhashProcessingService,
-    IntegrityVerifyProcessingService,
-    DocumentPreviewProcessingService,
-    DocumentTextProcessingService,
-    DocumentOcrProcessingService,
-    NotifyWebhookProcessingService,
-    ImageNormalizeProcessingProcessor,
-    ImageProcessingProcessor,
-    VideoProcessingProcessor,
-    MetadataExtractionProcessor,
-    AiVisionProcessingProcessor,
-    DedupePhashProcessingProcessor,
-    IntegrityVerifyProcessingProcessor,
-    DocumentPreviewProcessingProcessor,
-    DocumentTextProcessingProcessor,
-    DocumentOcrProcessingProcessor,
-    NotifyWebhookProcessingProcessor,
-    ProcessingJobsRepository,
-    FileProcessorResultsRepository,
-  ],
-  exports: [
-    ProcessingService,
-    ProcessingSettingsService,
-    OrgProcessorsService,
-    ProcessorBackendsService,
-    ProcessorSchedulerService,
-    FileProcessingRollupService,
-    ImageProcessingService,
-    VideoProcessingService,
-    MetadataExtractionService,
-    AiVisionProcessingService,
-    ProcessingJobsRepository,
-    FileProcessorResultsRepository,
-  ],
+  providers: CORE_PROVIDERS,
+  exports: CORE_EXPORTS,
 })
-export class ProcessingModule {}
+export class ProcessingModule {
+  static forRoot(): DynamicModule {
+    const enableWorkers = appRole.enableWorkers;
+    const enableCrons = appRole.enableCrons;
+
+    const providers: Provider[] = [];
+    if (enableWorkers) {
+      providers.push(...WORKER_PROVIDERS);
+    }
+    if (enableCrons) {
+      providers.push(IntegrityVerifySweepService);
+    }
+
+    return {
+      module: ProcessingModule,
+      imports: enableCrons ? [ScheduleModule.forRoot()] : [],
+      providers,
+      exports: CORE_EXPORTS,
+    };
+  }
+}
