@@ -124,8 +124,13 @@ export interface OrgProcessingSettings {
   nsfwThreshold: number;
   aiBackendId: string | null;
   aiVisionModel?: string | null;
+  aiSystemPrompt?: string;
+  aiUserPrompt?: string;
   documentOcrBackendId?: string | null;
   documentOcrVisionModel?: string | null;
+  documentOcrSystemPrompt?: string;
+  documentOcrUserPrompt?: string;
+  documentOcrTesseractLang?: string;
   imageVariants: {
     thumbnail: { enabled: boolean; maxEdge: number };
     medium: { enabled: boolean; maxEdge: number };
@@ -148,6 +153,12 @@ export interface OrgProcessingSettings {
   enableNotifyWebhook?: boolean;
   notifyWebhookUrl?: string;
   notifyWebhookSecret?: string;
+  notifyWebhookBearerToken?: string;
+  notifyWebhookHeaders?: Array<{ name: string; value: string }>;
+  notifyWebhookEvents?: Array<
+    "processing.completed" | "processing.failed" | "processing.partial"
+  >;
+  notifyWebhookIncludeDownloadUrl?: boolean;
   processorCapacity?: Record<
     string,
     {
@@ -184,6 +195,33 @@ export function useUpdateOrgProcessingSettingsMutation(orgId?: string) {
         orgId,
         processingSettings: true,
       });
+    },
+  });
+}
+
+export type TestWebhookResult = {
+  ok: boolean;
+  statusCode: number;
+  url: string;
+  event: string;
+  responsePreview: string;
+  payload: Record<string, unknown>;
+};
+
+export function useTestNotifyWebhookMutation(orgId?: string) {
+  return useMutation({
+    mutationFn: async (input: {
+      url?: string;
+      secret?: string;
+      bearerToken?: string;
+      headers?: Array<{ name: string; value: string }>;
+      event?: "processing.completed" | "processing.failed" | "processing.partial";
+      includeDownloadUrl?: boolean;
+      fileId?: string;
+    }) => {
+      const path = replacePathParams(OrgsEndpoints.TestWebhook, orgId!);
+      const response = await upstream.post(path, input);
+      return unwrapApiData<TestWebhookResult>(response.data);
     },
   });
 }

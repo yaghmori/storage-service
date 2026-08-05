@@ -142,7 +142,12 @@ export function FileUploadDialog({
     const trimmed = storageKey.trim().replace(/^\/+|\/+$/g, "");
     if (!trimmed) return undefined;
     if (pendingCount === 1) return trimmed;
-    return `${trimmed}/${file.name}`;
+    // Storage keys must be ASCII-only; keep Persian in originalFileName only.
+    const ext = file.name.includes(".")
+      ? file.name.slice(file.name.lastIndexOf(".")).replace(/[^a-zA-Z0-9._-]/g, "")
+      : "";
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+    return `${trimmed}/${suffix}`;
   };
 
   const startUpload = async () => {
@@ -375,7 +380,10 @@ export function FileUploadDialog({
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
+                            <p
+                              className="truncate text-sm font-medium"
+                              dir="auto"
+                            >
                               {item.file.name}
                             </p>
                             <p className="text-xs text-muted-foreground">

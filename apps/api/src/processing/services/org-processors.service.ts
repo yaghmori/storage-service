@@ -2,6 +2,10 @@ import { Inject, Injectable, Logger, BadRequestException } from '@nestjs/common'
 import {
   BUILTIN_ORG_PROCESSOR_DEFAULTS,
   DEFAULT_AI_VISION_SETTINGS,
+  DEFAULT_AI_VISION_SYSTEM_PROMPT,
+  DEFAULT_AI_VISION_USER_PROMPT,
+  DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+  DEFAULT_DOCUMENT_OCR_USER_PROMPT,
   DEFAULT_IMAGE_VARIANTS_SETTINGS,
   DEFAULT_VIDEO_PREVIEW_SETTINGS,
   ProcessorKey,
@@ -312,11 +316,18 @@ export class OrgProcessorsService {
     const phashSettings = (phash?.settings ?? {}) as { thresholdBits?: number };
     const docOcrSettings = (docOcr?.settings ?? {}) as {
       engine?: 'openai_compatible' | 'tesseract';
+      tesseractLang?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
       models?: { vision?: string };
     };
     const notifySettings = (notify?.settings ?? {}) as {
       url?: string;
       secret?: string;
+      bearerToken?: string;
+      headers?: Array<{ name: string; value: string }>;
+      events?: string[];
+      includeDownloadUrl?: boolean;
     };
     // Keep disabled slots' maxEdge from saved settings (not only enabled job slots).
     const variants = normalizeImageVariants(
@@ -333,10 +344,20 @@ export class OrgProcessorsService {
       enableAiTags: aiSettings.enableTags ?? true,
       enableAiNsfw: aiSettings.enableNsfw ?? true,
       nsfwThreshold: aiSettings.nsfwThreshold ?? 0.7,
+      aiSystemPrompt:
+        aiSettings.systemPrompt?.trim() || DEFAULT_AI_VISION_SYSTEM_PROMPT,
+      aiUserPrompt:
+        aiSettings.userPrompt?.trim() || DEFAULT_AI_VISION_USER_PROMPT,
       aiBackendId: ai?.backendId ?? null,
       aiVisionModel: aiSettings.models?.vision?.trim() || null,
       documentOcrBackendId: docOcr?.backendId ?? null,
       documentOcrVisionModel: docOcrSettings.models?.vision?.trim() || null,
+      documentOcrSystemPrompt:
+        docOcrSettings.systemPrompt?.trim() ||
+        DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+      documentOcrUserPrompt:
+        docOcrSettings.userPrompt?.trim() || DEFAULT_DOCUMENT_OCR_USER_PROMPT,
+      documentOcrTesseractLang: docOcrSettings.tesseractLang?.trim() || 'eng',
       imageVariants: variants,
       imageSizes: imageSizesFromVariants(variants),
       imageFormats: imageSettings.formats,
@@ -357,6 +378,31 @@ export class OrgProcessorsService {
       enableNotifyWebhook: notify?.enabled ?? false,
       notifyWebhookUrl: notifySettings.url ?? '',
       notifyWebhookSecret: notifySettings.secret ?? '',
+      notifyWebhookBearerToken: notifySettings.bearerToken ?? '',
+      notifyWebhookHeaders: Array.isArray(notifySettings.headers)
+        ? notifySettings.headers
+            .filter(
+              (h) =>
+                h &&
+                typeof h.name === 'string' &&
+                typeof h.value === 'string',
+            )
+            .map((h) => ({ name: h.name, value: h.value }))
+        : [],
+      notifyWebhookEvents: Array.isArray(notifySettings.events)
+        ? notifySettings.events.filter(
+            (e): e is 'processing.completed' | 'processing.failed' | 'processing.partial' =>
+              e === 'processing.completed' ||
+              e === 'processing.failed' ||
+              e === 'processing.partial',
+          )
+        : [
+            'processing.completed',
+            'processing.failed',
+            'processing.partial',
+          ],
+      notifyWebhookIncludeDownloadUrl:
+        notifySettings.includeDownloadUrl !== false,
       processorCapacity: this.capacityMapFromRows(rows),
     };
   }
@@ -536,6 +582,16 @@ export class OrgProcessorsService {
               typeof body.nsfwThreshold === 'number'
                 ? body.nsfwThreshold
                 : legacy.nsfwThreshold,
+            systemPrompt:
+              typeof body.aiSystemPrompt === 'string'
+                ? body.aiSystemPrompt
+                : (legacy as { aiSystemPrompt?: string }).aiSystemPrompt ||
+                  undefined,
+            userPrompt:
+              typeof body.aiUserPrompt === 'string'
+                ? body.aiUserPrompt
+                : (legacy as { aiUserPrompt?: string }).aiUserPrompt ||
+                  undefined,
             models: {
               vision:
                 body.aiVisionModel === undefined
@@ -628,6 +684,24 @@ export class OrgProcessorsService {
                     'tesseract'
                   ? 'tesseract'
                   : 'openai_compatible',
+            tesseractLang:
+              typeof body.documentOcrTesseractLang === 'string'
+                ? body.documentOcrTesseractLang.trim() || 'eng'
+                : (
+                    legacy as { documentOcrTesseractLang?: string }
+                  ).documentOcrTesseractLang?.trim() || 'eng',
+            systemPrompt:
+              typeof body.documentOcrSystemPrompt === 'string'
+                ? body.documentOcrSystemPrompt
+                : (
+                    legacy as { documentOcrSystemPrompt?: string }
+                  ).documentOcrSystemPrompt || undefined,
+            userPrompt:
+              typeof body.documentOcrUserPrompt === 'string'
+                ? body.documentOcrUserPrompt
+                : (
+                    legacy as { documentOcrUserPrompt?: string }
+                  ).documentOcrUserPrompt || undefined,
             models: {
               vision:
                 body.documentOcrVisionModel === undefined
@@ -661,11 +735,49 @@ export class OrgProcessorsService {
                 ? body.notifyWebhookSecret
                 : (legacy as { notifyWebhookSecret?: string })
                     .notifyWebhookSecret ?? '',
-            events: [
-              'processing.completed',
-              'processing.failed',
-              'processing.partial',
-            ],
+            bearerToken:
+              typeof body.notifyWebhookBearerToken === 'string'
+                ? body.notifyWebhookBearerToken
+                : (legacy as { notifyWebhookBearerToken?: string })
+                    .notifyWebhookBearerToken ?? '',
+            headers: Array.isArray(body.notifyWebhookHeaders)
+              ? (body.notifyWebhookHeaders as Array<{
+                  name: string;
+                  value: string;
+                }>)
+                  .filter(
+                    (h) =>
+                      h &&
+                      typeof h.name === 'string' &&
+                      h.name.trim() &&
+                      typeof h.value === 'string',
+                  )
+                  .map((h) => ({
+                    name: h.name.trim(),
+                    value: h.value,
+                  }))
+                  .slice(0, 20)
+              : (legacy as {
+                  notifyWebhookHeaders?: Array<{ name: string; value: string }>;
+                }).notifyWebhookHeaders ?? [],
+            events: Array.isArray(body.notifyWebhookEvents)
+              ? (body.notifyWebhookEvents as string[]).filter(
+                  (e) =>
+                    e === 'processing.completed' ||
+                    e === 'processing.failed' ||
+                    e === 'processing.partial',
+                )
+              : (legacy as { notifyWebhookEvents?: string[] })
+                  .notifyWebhookEvents ?? [
+                  'processing.completed',
+                  'processing.failed',
+                  'processing.partial',
+                ],
+            includeDownloadUrl:
+              typeof body.notifyWebhookIncludeDownloadUrl === 'boolean'
+                ? body.notifyWebhookIncludeDownloadUrl
+                : (legacy as { notifyWebhookIncludeDownloadUrl?: boolean })
+                    .notifyWebhookIncludeDownloadUrl !== false,
           },
           capacityFor('notify.webhook'),
         ),

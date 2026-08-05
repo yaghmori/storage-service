@@ -17,7 +17,7 @@ export type OrgSettingsSection =
   | "providers"
   | "processor-backends"
   | "processing"
-  | "tokens"
+  | "api-keys"
   | "retention"
   | "danger";
 
@@ -69,11 +69,11 @@ export const orgSettingsNavItems: OrgSettingsNavItem[] = [
     href: PAGE_ROUTES.settingsProcessing,
   },
   {
-    title: "Tokens",
-    description: "API keys and service credentials for this organization.",
-    section: "tokens",
+    title: "API keys",
+    description: "Service credentials for programmatic access to this organization.",
+    section: "api-keys",
     icon: KeyRound,
-    href: PAGE_ROUTES.settingsTokens,
+    href: PAGE_ROUTES.settingsApiKeys,
   },
   {
     title: "Retention",

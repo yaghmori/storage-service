@@ -50,6 +50,12 @@ export type OrgProcessingSettings = {
   enableNotifyWebhook: boolean;
   notifyWebhookUrl: string;
   notifyWebhookSecret: string;
+  notifyWebhookBearerToken: string;
+  notifyWebhookHeaders: Array<{ name: string; value: string }>;
+  notifyWebhookEvents: Array<
+    'processing.completed' | 'processing.failed' | 'processing.partial'
+  >;
+  notifyWebhookIncludeDownloadUrl: boolean;
 };
 
 /** Optional per-upload overrides (partial). */
@@ -96,6 +102,14 @@ export const PLATFORM_PROCESSING_DEFAULTS: OrgProcessingSettings = {
   enableNotifyWebhook: false,
   notifyWebhookUrl: '',
   notifyWebhookSecret: '',
+  notifyWebhookBearerToken: '',
+  notifyWebhookHeaders: [],
+  notifyWebhookEvents: [
+    'processing.completed',
+    'processing.failed',
+    'processing.partial',
+  ],
+  notifyWebhookIncludeDownloadUrl: true,
 };
 
 const METADATA_KEY = 'processing';
@@ -420,6 +434,28 @@ export function mergeProcessingSettings(
         typeof layer.notifyWebhookSecret === 'string'
           ? layer.notifyWebhookSecret
           : base.notifyWebhookSecret;
+    }
+    if (layer.notifyWebhookBearerToken !== undefined) {
+      base.notifyWebhookBearerToken =
+        typeof layer.notifyWebhookBearerToken === 'string'
+          ? layer.notifyWebhookBearerToken
+          : base.notifyWebhookBearerToken;
+    }
+    if (layer.notifyWebhookHeaders !== undefined) {
+      base.notifyWebhookHeaders = Array.isArray(layer.notifyWebhookHeaders)
+        ? (layer.notifyWebhookHeaders as Array<{ name: string; value: string }>)
+        : base.notifyWebhookHeaders;
+    }
+    if (layer.notifyWebhookEvents !== undefined) {
+      base.notifyWebhookEvents = Array.isArray(layer.notifyWebhookEvents)
+        ? (layer.notifyWebhookEvents as OrgProcessingSettings['notifyWebhookEvents'])
+        : base.notifyWebhookEvents;
+    }
+    if (layer.notifyWebhookIncludeDownloadUrl !== undefined) {
+      base.notifyWebhookIncludeDownloadUrl = asBool(
+        layer.notifyWebhookIncludeDownloadUrl,
+        base.notifyWebhookIncludeDownloadUrl,
+      );
     }
   }
 

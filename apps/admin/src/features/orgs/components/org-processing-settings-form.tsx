@@ -33,19 +33,27 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components";
+import { Textarea } from "@workspace/ui/components/textarea";
 import { cn } from "@workspace/ui/lib/utils";
 import {
+  DEFAULT_AI_VISION_SYSTEM_PROMPT,
+  DEFAULT_AI_VISION_USER_PROMPT,
+  DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+  DEFAULT_DOCUMENT_OCR_USER_PROMPT,
+  NOTIFY_WEBHOOK_EVENTS,
   ProcessorKey,
   ProcessorKeyDescriptions,
   ProcessorKeyLabels,
+  type NotifyWebhookEvent,
 } from "@workspace/validation";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   type OrgProcessingSettings,
   useOrgProcessingSettingsQuery,
+  useTestNotifyWebhookMutation,
   useUpdateOrgProcessingSettingsMutation,
 } from "../hooks/use-orgs-queries";
 
@@ -63,8 +71,13 @@ type FormState = {
   nsfwThreshold: number;
   aiBackendId: string;
   aiVisionModel: string;
+  aiSystemPrompt: string;
+  aiUserPrompt: string;
   documentOcrBackendId: string;
   documentOcrVisionModel: string;
+  documentOcrSystemPrompt: string;
+  documentOcrUserPrompt: string;
+  documentOcrTesseractLang: string;
   thumbnailEnabled: boolean;
   thumbnailMaxEdge: number;
   mediumEnabled: boolean;
@@ -86,6 +99,10 @@ type FormState = {
   enableNotifyWebhook: boolean;
   notifyWebhookUrl: string;
   notifyWebhookSecret: string;
+  notifyWebhookBearerToken: string;
+  notifyWebhookHeaders: Array<{ name: string; value: string }>;
+  notifyWebhookEvents: NotifyWebhookEvent[];
+  notifyWebhookIncludeDownloadUrl: boolean;
   processorCapacity: Record<
     string,
     { concurrency: number; rateMax: number | null; rateDurationMs: number | null }
@@ -257,8 +274,29 @@ function toForm(settings: OrgProcessingSettings): FormState {
     nsfwThreshold: settings.nsfwThreshold,
     aiBackendId: settings.aiBackendId ?? NONE_BACKEND_VALUE,
     aiVisionModel: settings.aiVisionModel ?? "",
+    aiSystemPrompt:
+      (typeof settings.aiSystemPrompt === "string" &&
+        settings.aiSystemPrompt.trim()) ||
+      DEFAULT_AI_VISION_SYSTEM_PROMPT ||
+      "",
+    aiUserPrompt:
+      (typeof settings.aiUserPrompt === "string" &&
+        settings.aiUserPrompt.trim()) ||
+      DEFAULT_AI_VISION_USER_PROMPT ||
+      "Analyze this image. Include description. Include tags (3-10). Include nsfwScore and isNsfw.",
     documentOcrBackendId: settings.documentOcrBackendId ?? NONE_BACKEND_VALUE,
     documentOcrVisionModel: settings.documentOcrVisionModel ?? "",
+    documentOcrSystemPrompt:
+      (typeof settings.documentOcrSystemPrompt === "string" &&
+        settings.documentOcrSystemPrompt.trim()) ||
+      DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT ||
+      "",
+    documentOcrUserPrompt:
+      (typeof settings.documentOcrUserPrompt === "string" &&
+        settings.documentOcrUserPrompt.trim()) ||
+      DEFAULT_DOCUMENT_OCR_USER_PROMPT ||
+      "OCR this image. Extract every readable character.",
+    documentOcrTesseractLang: settings.documentOcrTesseractLang ?? "eng",
     thumbnailEnabled: variants.thumbnail.enabled,
     thumbnailMaxEdge: variants.thumbnail.maxEdge,
     mediumEnabled: variants.medium.enabled,
@@ -283,6 +321,22 @@ function toForm(settings: OrgProcessingSettings): FormState {
     enableNotifyWebhook: settings.enableNotifyWebhook ?? false,
     notifyWebhookUrl: settings.notifyWebhookUrl ?? "",
     notifyWebhookSecret: settings.notifyWebhookSecret ?? "",
+    notifyWebhookBearerToken: settings.notifyWebhookBearerToken ?? "",
+    notifyWebhookHeaders: Array.isArray(settings.notifyWebhookHeaders)
+      ? settings.notifyWebhookHeaders.map((h) => ({
+          name: h.name ?? "",
+          value: h.value ?? "",
+        }))
+      : [],
+    notifyWebhookEvents:
+      Array.isArray(settings.notifyWebhookEvents) &&
+      settings.notifyWebhookEvents.length > 0
+        ? settings.notifyWebhookEvents.filter((e): e is NotifyWebhookEvent =>
+            (NOTIFY_WEBHOOK_EVENTS as readonly string[]).includes(e),
+          )
+        : [...NOTIFY_WEBHOOK_EVENTS],
+    notifyWebhookIncludeDownloadUrl:
+      settings.notifyWebhookIncludeDownloadUrl !== false,
     processorCapacity: settings.processorCapacity ?? {},
   };
 }
@@ -710,7 +764,8 @@ function ProcessorTabOptions({
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Runs when native text is missing or too short. For PDFs, enable
-          Document preview so a page image exists to OCR.
+          Document preview so a page image exists to OCR. Portraits/photos with
+          little or no text often return empty — that is expected.
         </p>
         <div className="space-y-2">
           <Label>OCR engine</Label>
@@ -736,8 +791,10 @@ function ProcessorTabOptions({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            OpenAI-compatible uses its own processor backend below. Tesseract
-            needs the binary on the worker image.
+            Tesseract is <strong>not</strong> a processor backend row — pick it
+            here as the engine. The worker image already includes{" "}
+            <code className="rounded bg-muted px-1">tesseract-ocr</code>. No
+            base URL or API key is required.
           </p>
         </div>
         {usesRemoteEngine ? (
@@ -772,8 +829,58 @@ function ProcessorTabOptions({
               description="Model used for document page OCR on this processor."
               placeholder="llava"
             />
+            <div className="space-y-3 rounded-xl border bg-muted/15 p-3 sm:p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">OCR prompts</p>
+                <p className="text-xs text-muted-foreground">
+                  Sent to the vision model with each page image. Edit freely —
+                  Reset restores the built-in defaults.
+                </p>
+              </div>
+              <PromptEditor
+                id="ocr-system-prompt"
+                label="System prompt"
+                description="Instructions and expected JSON shape for the model."
+                value={form.documentOcrSystemPrompt}
+                defaultValue={DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT}
+                rows={5}
+                onChange={(documentOcrSystemPrompt) =>
+                  patch({ documentOcrSystemPrompt })
+                }
+              />
+              <PromptEditor
+                id="ocr-user-prompt"
+                label="User prompt"
+                description="Short instruction paired with the image."
+                value={form.documentOcrUserPrompt}
+                defaultValue={DEFAULT_DOCUMENT_OCR_USER_PROMPT}
+                rows={3}
+                onChange={(documentOcrUserPrompt) =>
+                  patch({ documentOcrUserPrompt })
+                }
+              />
+            </div>
           </>
-        ) : null}
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="ocr-tesseract-lang">Tesseract languages</Label>
+            <p className="text-xs text-muted-foreground">
+              Passed as <code className="rounded bg-muted px-1">-l</code>. Use{" "}
+              <code className="rounded bg-muted px-1">eng</code> or combine
+              packs like <code className="rounded bg-muted px-1">eng+fas</code>.
+              Extra language packs must be installed on the worker image.
+            </p>
+            <Input
+              id="ocr-tesseract-lang"
+              className="max-w-sm font-mono text-sm"
+              value={form.documentOcrTesseractLang}
+              placeholder="eng"
+              onChange={(e) =>
+                patch({ documentOcrTesseractLang: e.target.value })
+              }
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -885,43 +992,309 @@ function ProcessorTabOptions({
             }
           />
         </div>
+
+        <div className="space-y-3 rounded-xl border bg-muted/15 p-3 sm:p-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Vision prompts</p>
+            <p className="text-xs text-muted-foreground">
+              Full prompts sent with each image. Edit to change caption/tag
+              style or fix empty / placeholder model replies.
+            </p>
+          </div>
+          <PromptEditor
+            id="ai-system-prompt"
+            label="System prompt"
+            description="Role, JSON schema, and scoring rules for the vision model."
+            value={form.aiSystemPrompt}
+            defaultValue={DEFAULT_AI_VISION_SYSTEM_PROMPT}
+            rows={8}
+            onChange={(aiSystemPrompt) => patch({ aiSystemPrompt })}
+          />
+          <PromptEditor
+            id="ai-user-prompt"
+            label="User prompt"
+            description="Per-image instruction. Replaces the auto-built caption/tags/NSFW text."
+            value={form.aiUserPrompt}
+            defaultValue={DEFAULT_AI_VISION_USER_PROMPT}
+            rows={3}
+            onChange={(aiUserPrompt) => patch({ aiUserPrompt })}
+          />
+        </div>
       </div>
     );
   }
 
   if (processorKey === ProcessorKey.NOTIFY_WEBHOOK) {
     return (
-      <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          External HTTP endpoint for this processor. Configure the target URL
-          (and optional HMAC secret) here — fired from the processing rollup
-          (completed / failed / partial), not as a MIME-scheduled job.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="webhook-url">Webhook URL</Label>
-            <Input
-              id="webhook-url"
-              value={form.notifyWebhookUrl}
-              onChange={(e) => patch({ notifyWebhookUrl: e.target.value })}
-              placeholder="https://example.com/hooks/storage"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="webhook-secret">HMAC secret</Label>
-            <Input
-              id="webhook-secret"
-              value={form.notifyWebhookSecret}
-              onChange={(e) => patch({ notifyWebhookSecret: e.target.value })}
-              placeholder="optional signing secret"
-            />
-          </div>
-        </div>
-      </div>
+      <NotifyWebhookOptions orgId={orgId} form={form} patch={patch} />
     );
   }
 
   return null;
+}
+
+function NotifyWebhookOptions({
+  orgId,
+  form,
+  patch,
+}: {
+  orgId: string;
+  form: FormState;
+  patch: (partial: Partial<FormState>) => void;
+}) {
+  const testMutation = useTestNotifyWebhookMutation(orgId);
+  const eventLabels: Record<NotifyWebhookEvent, string> = {
+    "processing.completed": "Completed",
+    "processing.failed": "Failed",
+    "processing.partial": "Partial",
+  };
+
+  const toggleEvent = (event: NotifyWebhookEvent, checked: boolean) => {
+    const current = form.notifyWebhookEvents;
+    if (checked) {
+      if (current.includes(event)) return;
+      patch({ notifyWebhookEvents: [...current, event] });
+      return;
+    }
+    const next = current.filter((e) => e !== event);
+    patch({
+      notifyWebhookEvents:
+        next.length > 0 ? next : (["processing.completed"] as NotifyWebhookEvent[]),
+    });
+  };
+
+  const updateHeader = (
+    index: number,
+    key: "name" | "value",
+    value: string,
+  ) => {
+    const next = form.notifyWebhookHeaders.map((header, i) =>
+      i === index ? { ...header, [key]: value } : header,
+    );
+    patch({ notifyWebhookHeaders: next });
+  };
+
+  const removeHeader = (index: number) => {
+    patch({
+      notifyWebhookHeaders: form.notifyWebhookHeaders.filter(
+        (_, i) => i !== index,
+      ),
+    });
+  };
+
+  const runTest = () => {
+    if (!form.notifyWebhookUrl.trim()) {
+      toast.error("Enter a webhook URL first");
+      return;
+    }
+    testMutation.mutate(
+      {
+        url: form.notifyWebhookUrl.trim(),
+        secret: form.notifyWebhookSecret,
+        bearerToken: form.notifyWebhookBearerToken,
+        headers: form.notifyWebhookHeaders.filter((h) => h.name.trim()),
+        event: form.notifyWebhookEvents[0] ?? "processing.completed",
+        includeDownloadUrl: form.notifyWebhookIncludeDownloadUrl,
+      },
+      {
+        onSuccess: (result) => {
+          if (result.ok) {
+            toast.success(`Sample sent · HTTP ${result.statusCode}`);
+          } else {
+            toast.error(
+              `Webhook returned HTTP ${result.statusCode}${
+                result.responsePreview
+                  ? `: ${result.responsePreview.slice(0, 120)}`
+                  : ""
+              }`,
+            );
+          }
+        },
+        onError: (err) =>
+          toast.error(extractApiErrorMessage(err, "Test webhook failed")),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        POSTs a JSON completion event to your URL (n8n Webhook, Zapier, custom
+        API). Fired when file processing becomes completed, failed, or partial —
+        not as a MIME-scheduled job.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="webhook-url">Webhook URL</Label>
+        <Input
+          id="webhook-url"
+          value={form.notifyWebhookUrl}
+          onChange={(e) => patch({ notifyWebhookUrl: e.target.value })}
+          placeholder="https://n8n.example.com/webhook/storage-done"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Events to send</Label>
+        <div className="flex flex-wrap gap-2">
+          {(NOTIFY_WEBHOOK_EVENTS as readonly NotifyWebhookEvent[]).map(
+            (event) => {
+              const checked = form.notifyWebhookEvents.includes(event);
+              return (
+                <label
+                  key={event}
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs",
+                    checked
+                      ? "border-primary/40 bg-primary/5"
+                      : "bg-muted/20 text-muted-foreground",
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(value) =>
+                      toggleEvent(event, value === true)
+                    }
+                  />
+                  <span className="font-medium text-foreground">
+                    {eventLabels[event]}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {event}
+                  </span>
+                </label>
+              );
+            },
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="webhook-secret">HMAC secret</Label>
+          <Input
+            id="webhook-secret"
+            value={form.notifyWebhookSecret}
+            onChange={(e) => patch({ notifyWebhookSecret: e.target.value })}
+            placeholder="optional · X-Storage-Signature"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            HMAC-SHA256 hex of the raw JSON body.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="webhook-bearer">Bearer token</Label>
+          <Input
+            id="webhook-bearer"
+            type="password"
+            autoComplete="off"
+            value={form.notifyWebhookBearerToken}
+            onChange={(e) =>
+              patch({ notifyWebhookBearerToken: e.target.value })
+            }
+            placeholder="optional · Authorization: Bearer …"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Custom headers</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={form.notifyWebhookHeaders.length >= 20}
+            onClick={() =>
+              patch({
+                notifyWebhookHeaders: [
+                  ...form.notifyWebhookHeaders,
+                  { name: "", value: "" },
+                ],
+              })
+            }
+          >
+            <Plus className="mr-1 size-3" />
+            Add header
+          </Button>
+        </div>
+        {form.notifyWebhookHeaders.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No custom headers. Use for n8n auth headers or API gateways.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {form.notifyWebhookHeaders.map((header, index) => (
+              <div key={index} className="flex items-start gap-2">
+                <Input
+                  className="font-mono text-xs"
+                  placeholder="Header-Name"
+                  value={header.name}
+                  onChange={(e) => updateHeader(index, "name", e.target.value)}
+                />
+                <Input
+                  className="font-mono text-xs"
+                  placeholder="value"
+                  value={header.value}
+                  onChange={(e) =>
+                    updateHeader(index, "value", e.target.value)
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0"
+                  onClick={() => removeHeader(index)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <label className="flex items-start gap-3 rounded-md border bg-muted/20 p-3">
+        <Checkbox
+          checked={form.notifyWebhookIncludeDownloadUrl}
+          onCheckedChange={(checked) =>
+            patch({ notifyWebhookIncludeDownloadUrl: checked === true })
+          }
+        />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">Include download URL</p>
+          <p className="text-xs text-muted-foreground">
+            Adds a short-lived signed URL plus filename, mime, and size in the{" "}
+            <code className="rounded bg-muted px-1">file</code> object.
+          </p>
+        </div>
+      </label>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/15 p-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={testMutation.isPending || !form.notifyWebhookUrl.trim()}
+          onClick={runTest}
+        >
+          {testMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 size-3.5 animate-spin" />
+              Sending…
+            </>
+          ) : (
+            "Send sample"
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Posts a sample payload with the settings above (save not required).
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function saveForm(
@@ -1007,6 +1380,13 @@ function saveForm(
   }
   if (
     form.enableNotifyWebhook &&
+    form.notifyWebhookEvents.length === 0
+  ) {
+    toast.error("Select at least one webhook event");
+    return;
+  }
+  if (
+    form.enableNotifyWebhook &&
     form.notifyWebhookUrl.trim().length === 0
   ) {
     toast.error("Webhook URL is required when the completion webhook is on");
@@ -1028,12 +1408,30 @@ function saveForm(
           ? form.aiBackendId
           : null,
       aiVisionModel: form.aiVisionModel.trim() || null,
+      aiSystemPrompt:
+        form.aiSystemPrompt?.trim() ||
+        DEFAULT_AI_VISION_SYSTEM_PROMPT ||
+        "",
+      aiUserPrompt:
+        form.aiUserPrompt?.trim() ||
+        DEFAULT_AI_VISION_USER_PROMPT ||
+        "Analyze this image. Include description. Include tags (3-10). Include nsfwScore and isNsfw.",
       documentOcrBackendId:
         form.documentOcrBackendId &&
         form.documentOcrBackendId !== NONE_BACKEND_VALUE
           ? form.documentOcrBackendId
           : null,
       documentOcrVisionModel: form.documentOcrVisionModel.trim() || null,
+      documentOcrSystemPrompt:
+        form.documentOcrSystemPrompt?.trim() ||
+        DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT ||
+        "",
+      documentOcrUserPrompt:
+        form.documentOcrUserPrompt?.trim() ||
+        DEFAULT_DOCUMENT_OCR_USER_PROMPT ||
+        "OCR this image. Extract every readable character.",
+      documentOcrTesseractLang:
+        form.documentOcrTesseractLang.trim() || "eng",
       imageVariants: {
         thumbnail: {
           enabled: form.thumbnailEnabled,
@@ -1064,6 +1462,15 @@ function saveForm(
       enableNotifyWebhook: form.enableNotifyWebhook,
       notifyWebhookUrl: form.notifyWebhookUrl,
       notifyWebhookSecret: form.notifyWebhookSecret,
+      notifyWebhookBearerToken: form.notifyWebhookBearerToken,
+      notifyWebhookHeaders: form.notifyWebhookHeaders.filter((h) =>
+        h.name.trim(),
+      ),
+      notifyWebhookEvents:
+        form.notifyWebhookEvents.length > 0
+          ? form.notifyWebhookEvents
+          : [...NOTIFY_WEBHOOK_EVENTS],
+      notifyWebhookIncludeDownloadUrl: form.notifyWebhookIncludeDownloadUrl,
       processorCapacity: form.processorCapacity,
     },
     {
@@ -1071,6 +1478,78 @@ function saveForm(
       onError: (err) =>
         toast.error(extractApiErrorMessage(err, "Save failed")),
     },
+  );
+}
+
+function PromptEditor({
+  id,
+  label,
+  description,
+  value,
+  defaultValue,
+  onChange,
+  rows = 5,
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  value?: string | null;
+  defaultValue?: string | null;
+  onChange: (next: string) => void;
+  rows?: number;
+}) {
+  const safeDefault = defaultValue ?? "";
+  const safeValue = value ?? safeDefault;
+  const isModified = safeValue.trim() !== safeDefault.trim();
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/80 bg-background shadow-xs">
+      <div className="flex items-start justify-between gap-3 border-b bg-muted/35 px-3 py-2.5">
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor={id} className="text-sm font-medium">
+              {label}
+            </Label>
+            <Badge
+              variant={isModified ? "secondary" : "outline"}
+              className="h-5 px-1.5 text-[10px] font-normal"
+            >
+              {isModified ? "Custom" : "Default"}
+            </Badge>
+          </div>
+          {description ? (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 shrink-0 gap-1.5 px-2 text-xs"
+          disabled={!isModified}
+          onClick={() => onChange(safeDefault)}
+        >
+          <RotateCcw className="size-3" />
+          Reset
+        </Button>
+      </div>
+      <Textarea
+        id={id}
+        value={safeValue}
+        rows={rows}
+        spellCheck={false}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-0 rounded-none border-0 bg-transparent px-3 py-3 font-mono text-xs leading-relaxed shadow-none focus-visible:ring-0"
+      />
+      <div className="flex items-center justify-between border-t bg-muted/20 px-3 py-1.5">
+        <p className="text-[11px] text-muted-foreground">
+          Editable · saved with processing settings
+        </p>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {safeValue.length.toLocaleString()} chars
+        </span>
+      </div>
+    </div>
   );
 }
 

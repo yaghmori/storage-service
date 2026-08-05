@@ -12,6 +12,7 @@ import { DatabaseModule } from '../database/database.module';
 import { EventsModule } from '../events/events.module';
 import { FilesModule } from '../files/files.module';
 import { QueuesModule } from '../queues/queues.module';
+import { ServingModule } from '../serving/serving.module';
 import { StorageProvidersModule } from '../storage-providers/storage-providers.module';
 import { VariantsModule } from '../variants/variants.module';
 import { AiVisionProcessingProcessor } from './processors/ai-vision-processing.processor';
@@ -101,6 +102,7 @@ const CORE_EXPORTS = [
   VideoProcessingService,
   MetadataExtractionService,
   AiVisionProcessingService,
+  NotifyWebhookProcessingService,
   ProcessingJobsRepository,
   FileProcessorResultsRepository,
 ];
@@ -115,6 +117,7 @@ const CORE_EXPORTS = [
     FilesModule,
     VariantsModule,
     StorageProvidersModule,
+    ServingModule,
     DatabaseModule,
     EventsModule,
     forwardRef(() => QueuesModule),

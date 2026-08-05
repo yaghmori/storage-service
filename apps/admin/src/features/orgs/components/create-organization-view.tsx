@@ -172,7 +172,7 @@ export function CreateOrganizationView() {
                         </HoverCardTrigger>
                         <HoverCardContent>
                           This will be your workspace where you can manage files,
-                          storage providers, and API tokens. The URL slug is
+                          storage providers, and API keys. The URL slug is
                           generated from the name.
                         </HoverCardContent>
                       </HoverCard>

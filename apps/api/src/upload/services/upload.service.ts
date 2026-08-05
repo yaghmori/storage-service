@@ -20,6 +20,7 @@ import { OrgLimitsService } from '../../organizations/services/org-limits.servic
 import { OrgUsageService } from '../../organizations/services/org-usage.service';
 import { ProcessorSchedulerService } from '../../processing/services/processor-scheduler.service';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
+import { decodeMulterFilename } from '../utils/decode-multer-filename';
 
 @Injectable()
 export class UploadService {
@@ -49,6 +50,9 @@ export class UploadService {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
+
+    const originalName = decodeMulterFilename(file.originalname);
+    file = { ...file, originalname: originalName };
     if (!orgId) {
       throw new BadRequestException('orgId is required');
     }

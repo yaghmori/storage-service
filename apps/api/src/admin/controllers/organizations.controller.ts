@@ -39,6 +39,7 @@ import { OrgLimitsService } from '../../organizations/services/org-limits.servic
 import { OrgRetentionService } from '../../organizations/services/org-retention.service';
 import { OrgUsageService } from '../../organizations/services/org-usage.service';
 import { OrgProcessorsService } from '../../processing/services/org-processors.service';
+import { NotifyWebhookProcessingService } from '../../processing/services/notify-webhook-processing.service';
 import { PLATFORM_PROCESSING_DEFAULTS } from '../../processing/types/processing-settings';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
 
@@ -265,6 +266,16 @@ export class UpdateProcessingSettingsDto {
   aiVisionModel?: string | null;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  aiSystemPrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  aiUserPrompt?: string;
+
+  @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== undefined && v !== '')
   @IsUUID()
   documentOcrBackendId?: string | null;
@@ -274,6 +285,21 @@ export class UpdateProcessingSettingsDto {
   @IsString()
   @MaxLength(255)
   documentOcrVisionModel?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  documentOcrSystemPrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  documentOcrUserPrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  documentOcrTesseractLang?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -331,6 +357,29 @@ export class UpdateProcessingSettingsDto {
   @IsString()
   notifyWebhookSecret?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  notifyWebhookBearerToken?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  notifyWebhookHeaders?: Array<{ name: string; value: string }>;
+
+  @IsOptional()
+  @IsArray()
+  @IsIn(['processing.completed', 'processing.failed', 'processing.partial'], {
+    each: true,
+  })
+  notifyWebhookEvents?: Array<
+    'processing.completed' | 'processing.failed' | 'processing.partial'
+  >;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyWebhookIncludeDownloadUrl?: boolean;
+
   /** Per-processor concurrency / rate limits (org-scoped). */
   @IsOptional()
   @IsObject()
@@ -342,6 +391,38 @@ export class UpdateProcessingSettingsDto {
       rateDurationMs?: number | null;
     }
   >;
+}
+
+export class TestNotifyWebhookDto {
+  @IsOptional()
+  @IsString()
+  url?: string;
+
+  @IsOptional()
+  @IsString()
+  secret?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  bearerToken?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  headers?: Array<{ name: string; value: string }>;
+
+  @IsOptional()
+  @IsIn(['processing.completed', 'processing.failed', 'processing.partial'])
+  event?: 'processing.completed' | 'processing.failed' | 'processing.partial';
+
+  @IsOptional()
+  @IsBoolean()
+  includeDownloadUrl?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  fileId?: string;
 }
 
 export class UpdateOrgLimitsDto {
@@ -392,6 +473,7 @@ export class OrganizationsController {
     private readonly limitsService: OrgLimitsService,
     private readonly retentionService: OrgRetentionService,
     private readonly usageService: OrgUsageService,
+    private readonly notifyWebhook: NotifyWebhookProcessingService,
   ) {}
 
   @Get()
@@ -444,6 +526,28 @@ export class OrganizationsController {
   ) {
     return this.orgProcessors.updateFromLegacySettings(id, {
       ...body,
+    });
+  }
+
+  @Post(':id/processing-settings/test-webhook')
+  @HttpCode(HttpStatus.OK)
+  async testNotifyWebhook(
+    @Param('id') id: string,
+    @Body() body: TestNotifyWebhookDto,
+  ) {
+    const org = await this.organizations.getById(id);
+    if (!org) throw new NotFoundException('Organization not found');
+    return this.notifyWebhook.sendTest({
+      orgId: id,
+      fileId: body.fileId,
+      overrides: {
+        url: body.url,
+        secret: body.secret,
+        bearerToken: body.bearerToken,
+        headers: body.headers,
+        includeDownloadUrl: body.includeDownloadUrl,
+        event: body.event,
+      },
     });
   }
 

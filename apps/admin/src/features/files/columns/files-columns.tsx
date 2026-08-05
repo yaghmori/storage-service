@@ -130,6 +130,7 @@ export function createFilesColumns(
           <button
             type="button"
             className="max-w-[240px] truncate text-left font-medium hover:underline"
+            dir="auto"
             onClick={() => onView?.(row.original)}
           >
             {row.original.originalFileName}

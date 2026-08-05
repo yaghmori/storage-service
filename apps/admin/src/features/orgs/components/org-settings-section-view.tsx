@@ -118,7 +118,7 @@ export function OrgSettingsSectionView({ section }: Props) {
         <OrgProcessingSettingsForm orgId={activeOrg.id} />
       ) : null}
 
-      {section === "tokens" ? <ApiKeysListView hideHeading /> : null}
+      {section === "api-keys" ? <ApiKeysListView hideHeading /> : null}
 
       {section === "retention" ? (
         <OrgRetentionSettingsForm orgId={activeOrg.id} />

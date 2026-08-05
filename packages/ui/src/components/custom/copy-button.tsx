@@ -37,6 +37,8 @@ const copyButtonVariants = cva(
 type CopyButtonProps = Omit<HTMLMotionProps<"button">, "children" | "onCopy"> &
   VariantProps<typeof copyButtonVariants> & {
     content?: string;
+    /** Alias for `content` (common mistake / older call sites). */
+    value?: string;
     delay?: number;
     onCopy?: (content: string) => void;
     isCopied?: boolean;
@@ -44,6 +46,7 @@ type CopyButtonProps = Omit<HTMLMotionProps<"button">, "children" | "onCopy"> &
   };
 function CopyButton({
   content,
+  value,
   className,
   size,
   variant,
@@ -54,6 +57,7 @@ function CopyButton({
   onCopyChange,
   ...props
 }: CopyButtonProps) {
+  const text = content ?? value;
   const [localIsCopied, setLocalIsCopied] = React.useState(isCopied ?? false);
   const Icon = localIsCopied ? CheckIcon : CopyIcon;
   React.useEffect(() => {
@@ -69,13 +73,13 @@ function CopyButton({
   const handleCopy = React.useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       if (isCopied) return;
-      if (content) {
+      if (text) {
         navigator.clipboard
-          .writeText(content)
+          .writeText(text)
           .then(() => {
             handleIsCopied(true);
             setTimeout(() => handleIsCopied(false), delay);
-            onCopy?.(content);
+            onCopy?.(text);
           })
           .catch((error) => {
             console.error("Error copying command", error);
@@ -83,7 +87,7 @@ function CopyButton({
       }
       onClick?.(e);
     },
-    [isCopied, content, delay, onClick, onCopy, handleIsCopied]
+    [isCopied, text, delay, onClick, onCopy, handleIsCopied]
   );
   return (
     <motion.button
