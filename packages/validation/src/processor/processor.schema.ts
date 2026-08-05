@@ -119,11 +119,35 @@ export const videoPreviewProcessorSettingsSchema = z.object({
 
 export const metadataExifProcessorSettingsSchema = z.object({}).passthrough();
 
+export const DEFAULT_AI_VISION_SYSTEM_PROMPT = `You are a vision analysis assistant for a file storage service.
+Respond with a single JSON object only (no markdown) using this shape:
+{
+  "description": "concise caption of the image",
+  "tags": ["short", "tags"],
+  "nsfwScore": 0.0,
+  "isNsfw": false
+}
+nsfwScore must be between 0 and 1. isNsfw should be true when the image is sexually explicit or pornographic.`;
+
+export const DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT =
+  'Extract all visible text from the image exactly as written. If there is no readable text, return {"text":""}. Return only JSON: {"text":"..."}';
+
+export const DEFAULT_DOCUMENT_OCR_USER_PROMPT =
+  "OCR this image. Extract every readable character.";
+
+/** Default user instruction when caption/tags/NSFW are all enabled. */
+export const DEFAULT_AI_VISION_USER_PROMPT =
+  "Analyze this image. Include description. Include tags (3-10). Include nsfwScore and isNsfw.";
+
 export const aiVisionProcessorSettingsSchema = z.object({
   enableCaption: z.boolean().optional(),
   enableTags: z.boolean().optional(),
   enableNsfw: z.boolean().optional(),
   nsfwThreshold: z.number().min(0).max(1).optional(),
+  /** Override system prompt sent to the vision model. Empty = built-in default. */
+  systemPrompt: z.string().max(8_000).optional(),
+  /** Override user text prompt. Empty = auto-built from caption/tags/NSFW toggles. */
+  userPrompt: z.string().max(4_000).optional(),
   models: z
     .object({
       vision: optionalTrimmed.max(255).optional(),
@@ -157,6 +181,12 @@ export const documentTextProcessorSettingsSchema = z.object({
 export const documentOcrProcessorSettingsSchema = z.object({
   minCharsBeforeSkip: z.number().int().min(0).max(10_000).optional(),
   engine: z.enum(["openai_compatible", "tesseract"]).optional(),
+  /** Tesseract `-l` language codes, e.g. `eng` or `eng+fas`. Ignored for OpenAI OCR. */
+  tesseractLang: optionalTrimmed.max(64).optional(),
+  /** Override system prompt for OpenAI-compatible OCR. Empty = built-in default. */
+  systemPrompt: z.string().max(8_000).optional(),
+  /** Override user prompt for OpenAI-compatible OCR. Empty = built-in default. */
+  userPrompt: z.string().max(4_000).optional(),
   models: z
     .object({
       vision: optionalTrimmed.max(255).optional(),
@@ -164,7 +194,43 @@ export const documentOcrProcessorSettingsSchema = z.object({
     .optional(),
 });
 
-export const notifyWebhookProcessorSettingsSchema = z.object({
+export type DocumentOcrProcessorSettings = z.infer<
+  typeof documentOcrProcessorSettingsSchema
+>;
+
+export const NOTIFY_WEBHOOK_EVENTS = [
+  "processing.completed",
+  "processing.failed",
+  "processing.partial",
+] as const;
+
+export type NotifyWebhookEvent = (typeof NOTIFY_WEBHOOK_EVENTS)[number];
+
+export const notifyWebhookHeaderSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Header name is required")
+    .max(128)
+    .regex(/^[A-Za-z0-9-]+$/, "Header name must be alphanumeric or hyphen"),
+  value: z.string().max(2_048),
+});
+
+/** Empty → undefined; otherwise int seconds in [60, 7d] for signed download URLs. */
+const optionalDownloadUrlExpiresInSchema = z.preprocess(
+  (v) => (v === "" || v === null || v === undefined ? undefined : v),
+  z
+    .number()
+    .int("Must be a whole number")
+    .min(60, "Minimum 60 seconds")
+    .max(604_800, "Maximum 7 days (604800 seconds)")
+    .optional(),
+);
+
+export const notifyWebhookDestinationSchema = z.object({
+  id: z.string().trim().min(1).max(64).optional(),
+  name: z.string().trim().max(128).optional().or(z.literal("")),
+  enabled: z.boolean().optional(),
   url: z
     .string()
     .trim()
@@ -172,14 +238,91 @@ export const notifyWebhookProcessorSettingsSchema = z.object({
     .optional()
     .or(z.literal("")),
   secret: z.string().max(512).optional().or(z.literal("")),
-  events: z
-    .array(z.enum(["processing.completed", "processing.failed", "processing.partial"]))
-    .optional(),
+  bearerToken: z.string().max(2_048).optional().or(z.literal("")),
+  headers: z.array(notifyWebhookHeaderSchema).max(20).optional(),
+  events: z.array(z.enum(NOTIFY_WEBHOOK_EVENTS)).optional(),
+  includeDownloadUrl: z.boolean().optional(),
+  /** Signed download URL TTL in seconds. Empty = provider default (or 1h). */
+  downloadUrlExpiresIn: optionalDownloadUrlExpiresInSchema,
+});
+
+export type NotifyWebhookDestination = z.infer<
+  typeof notifyWebhookDestinationSchema
+>;
+
+export const notifyWebhookProcessorSettingsSchema = z.object({
+  /** Preferred: one or more webhook destinations (n8n, Slack, custom). */
+  destinations: z.array(notifyWebhookDestinationSchema).max(20).optional(),
+  /**
+   * Legacy single-destination fields (still accepted).
+   * Normalized into `destinations` at runtime when destinations is empty.
+   */
+  url: z
+    .string()
+    .trim()
+    .url()
+    .optional()
+    .or(z.literal("")),
+  secret: z.string().max(512).optional().or(z.literal("")),
+  bearerToken: z.string().max(2_048).optional().or(z.literal("")),
+  headers: z.array(notifyWebhookHeaderSchema).max(20).optional(),
+  events: z.array(z.enum(NOTIFY_WEBHOOK_EVENTS)).optional(),
+  includeDownloadUrl: z.boolean().optional(),
+  downloadUrlExpiresIn: optionalDownloadUrlExpiresInSchema,
 });
 
 export type NotifyWebhookProcessorSettings = z.infer<
   typeof notifyWebhookProcessorSettingsSchema
 >;
+
+/** Resolve destinations, migrating legacy flat url/secret/… when needed. */
+export function normalizeNotifyWebhookDestinations(
+  settings: NotifyWebhookProcessorSettings | Record<string, unknown> | null | undefined,
+): Array<NotifyWebhookDestination & { id: string }> {
+  const raw = (settings ?? {}) as NotifyWebhookProcessorSettings;
+  if (Array.isArray(raw.destinations) && raw.destinations.length > 0) {
+    return raw.destinations.map((dest, index) => ({
+      ...dest,
+      id: dest.id?.trim() || `dest-${index + 1}`,
+      enabled: dest.enabled !== false,
+    }));
+  }
+
+  const legacyUrl =
+    typeof raw.url === "string" && raw.url.trim() ? raw.url.trim() : "";
+  if (!legacyUrl) return [];
+
+  return [
+    {
+      id: "legacy-default",
+      name: "Default",
+      enabled: true,
+      url: legacyUrl,
+      secret: typeof raw.secret === "string" ? raw.secret : "",
+      bearerToken: typeof raw.bearerToken === "string" ? raw.bearerToken : "",
+      headers: Array.isArray(raw.headers) ? raw.headers : [],
+      events: Array.isArray(raw.events) ? raw.events : [...NOTIFY_WEBHOOK_EVENTS],
+      includeDownloadUrl: raw.includeDownloadUrl !== false,
+      downloadUrlExpiresIn: raw.downloadUrlExpiresIn,
+    },
+  ];
+}
+
+/** Coerce a destination/provider TTL override; invalid → undefined (use default). */
+export function resolveNotifyWebhookDownloadUrlExpiresIn(
+  value: unknown,
+): number | undefined {
+  const n =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value)
+        : NaN;
+  if (typeof n !== "number" || isNaN(n)) return undefined;
+  const seconds = Math.floor(n);
+  if (seconds < 60 || seconds > 604_800) return undefined;
+  return seconds;
+}
 
 export const orgProcessorUpsertSchema = z.object({
   processorKey: z.string().min(1).max(128),
@@ -212,6 +355,8 @@ export const DEFAULT_AI_VISION_SETTINGS: AiVisionProcessorSettings = {
   enableTags: true,
   enableNsfw: true,
   nsfwThreshold: 0.7,
+  systemPrompt: DEFAULT_AI_VISION_SYSTEM_PROMPT,
+  userPrompt: DEFAULT_AI_VISION_USER_PROMPT,
 };
 
 export const DEFAULT_IMAGE_NORMALIZE_SETTINGS = {
@@ -231,15 +376,23 @@ export const DEFAULT_DOCUMENT_TEXT_SETTINGS = {
   maxChars: 524_288,
 };
 
-export const DEFAULT_DOCUMENT_OCR_SETTINGS = {
+export const DEFAULT_DOCUMENT_OCR_SETTINGS: DocumentOcrProcessorSettings = {
   minCharsBeforeSkip: 40,
-  engine: "openai_compatible" as const,
+  engine: "openai_compatible",
+  tesseractLang: "eng",
+  systemPrompt: DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+  userPrompt: DEFAULT_DOCUMENT_OCR_USER_PROMPT,
 };
 
 export const DEFAULT_NOTIFY_WEBHOOK_SETTINGS: NotifyWebhookProcessorSettings = {
+  destinations: [],
   url: "",
   secret: "",
+  bearerToken: "",
+  headers: [],
   events: ["processing.completed", "processing.failed", "processing.partial"],
+  includeDownloadUrl: true,
+  downloadUrlExpiresIn: undefined,
 };
 
 export const BUILTIN_ORG_PROCESSOR_DEFAULTS: Array<{

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   ProcessorKey,
   type AiVisionProcessorSettings,
+  DEFAULT_AI_VISION_SYSTEM_PROMPT,
 } from '@workspace/validation';
 import { FilesService } from '../../files/services/files.service';
 import { VariantsService } from '../../variants/services/variants.service';
@@ -14,16 +15,6 @@ const AI_VISION_SCHEMA_VERSION = 1;
 const VISION_MAX_EDGE = 1280;
 
 type SharpModule = typeof import('sharp');
-
-const SYSTEM_PROMPT = `You are a vision analysis assistant for a file storage service.
-Respond with a single JSON object only (no markdown) using this shape:
-{
-  "description": "concise caption of the image",
-  "tags": ["short", "tags"],
-  "nsfwScore": 0.0,
-  "isNsfw": false
-}
-nsfwScore must be between 0 and 1. isNsfw should be true when the image is sexually explicit or pornographic.`;
 
 @Injectable()
 export class AiVisionProcessingService {
@@ -105,14 +96,23 @@ export class AiVisionProcessingService {
       nsfw: input.settings.enableNsfw !== false,
     };
 
-    const userText = [
-      'Analyze this image.',
-      wants.caption ? 'Include description.' : 'Set description to empty string.',
-      wants.tags ? 'Include tags (3-10).' : 'Set tags to [].',
-      wants.nsfw
-        ? 'Include nsfwScore and isNsfw.'
-        : 'Set nsfwScore to null and isNsfw to false.',
-    ].join(' ');
+    const customUser = input.settings.userPrompt?.trim();
+    const userText =
+      customUser && customUser.length > 0
+        ? customUser
+        : [
+            'Analyze this image.',
+            wants.caption
+              ? 'Include description.'
+              : 'Set description to empty string.',
+            wants.tags ? 'Include tags (3-10).' : 'Set tags to [].',
+            wants.nsfw
+              ? 'Include nsfwScore and isNsfw.'
+              : 'Set nsfwScore to null and isNsfw to false.',
+          ].join(' ');
+
+    const systemPrompt =
+      input.settings.systemPrompt?.trim() || DEFAULT_AI_VISION_SYSTEM_PROMPT;
 
     const model = this.backends.resolveModel({
       role: 'vision',
@@ -135,7 +135,7 @@ export class AiVisionProcessingService {
       timeoutMs: resolved.timeoutMs,
       responseFormatJson: false,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: [

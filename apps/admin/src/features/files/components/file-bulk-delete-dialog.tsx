@@ -79,7 +79,11 @@ export function FileBulkDeleteDialog({
                 </p>
                 <ul className="max-h-32 list-disc space-y-1 overflow-y-auto pl-5">
                   {previewFiles.map((file) => (
-                    <li key={file.id} className="truncate text-foreground">
+                    <li
+                      key={file.id}
+                      className="truncate text-foreground"
+                      dir="auto"
+                    >
                       {file.originalFileName}
                     </li>
                   ))}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import { formatJobElapsed } from "@/lib/format-job-elapsed";
 import {
   Badge,
   Button,
@@ -129,7 +130,9 @@ export function createJobsColumns(
       meta: { label: "File", skeleton: <Skeleton className="h-4 w-36" /> },
       cell: ({ row }) => (
         <div className="min-w-0 max-w-[240px]">
-          <p className="truncate font-medium">{row.original.fileName ?? "—"}</p>
+          <p className="truncate font-medium" dir="auto">
+            {row.original.fileName ?? "—"}
+          </p>
           <p className="truncate font-mono text-[11px] text-muted-foreground">
             {row.original.fileId}
           </p>
@@ -181,6 +184,28 @@ export function createJobsColumns(
       cell: ({ row }) => (
         <DateDisplay date={row.original.createdAt} format="relative" />
       ),
+    },
+    {
+      id: "elapsed",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Elapsed" />
+      ),
+      enableSorting: false,
+      meta: {
+        label: "Elapsed",
+        skeleton: <Skeleton className="h-4 w-14" />,
+      },
+      cell: ({ row }) => {
+        const elapsed = formatJobElapsed(
+          row.original.startedAt,
+          row.original.completedAt,
+        );
+        return (
+          <span className="tabular-nums text-muted-foreground">
+            {elapsed ?? "—"}
+          </span>
+        );
+      },
     },
     {
       id: "actions",

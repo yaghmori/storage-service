@@ -95,6 +95,7 @@ export const OrgsEndpoints = {
   Update: "admin/api/orgs/{0}",
   Delete: "admin/api/orgs/{0}",
   ProcessingSettings: "admin/api/orgs/{0}/processing-settings",
+  TestWebhook: "admin/api/orgs/{0}/processing-settings/test-webhook",
   Limits: "admin/api/orgs/{0}/limits",
   Retention: "admin/api/orgs/{0}/retention",
   Usage: "admin/api/orgs/{0}/usage",

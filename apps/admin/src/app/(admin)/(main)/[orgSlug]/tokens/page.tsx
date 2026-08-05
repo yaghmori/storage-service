@@ -7,5 +7,5 @@ export default async function TokensPage({
   params: Promise<{ orgSlug: string }>;
 }) {
   const { orgSlug } = await params;
-  redirect(PAGE_ROUTES.settingsTokens(orgSlug));
+  redirect(PAGE_ROUTES.settingsApiKeys(orgSlug));
 }

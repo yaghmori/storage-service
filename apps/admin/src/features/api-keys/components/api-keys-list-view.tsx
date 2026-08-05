@@ -127,7 +127,7 @@ export function ApiKeysListView({
             <code className="break-all rounded bg-background px-2 py-1">
               {createdKey}
             </code>
-            <CopyButton value={createdKey} />
+            <CopyButton content={createdKey} />
           </div>
         </div>
       )}

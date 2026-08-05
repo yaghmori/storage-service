@@ -7,6 +7,7 @@ import {
   useRetryJobMutation,
 } from "@/features/jobs/hooks/use-jobs-queries";
 import { fileContentUrl } from "@/lib/constants/endpoints";
+import { formatJobElapsed } from "@/lib/format-job-elapsed";
 import { useActiveOrg } from "@/provider/org-provider";
 import {
   Badge,
@@ -200,8 +201,8 @@ function TruncatedText({
   }
 
   const spanClass = cn(
-    "block max-w-full text-right",
-    lines > 1 ? "wrap-break-word" : "truncate",
+    "block max-w-full text-start",
+    lines > 1 ? "break-words" : "truncate",
     lines === 2 && "line-clamp-2",
     lines >= 3 && "line-clamp-3",
     mono && "font-mono text-xs tracking-tight",
@@ -211,12 +212,17 @@ function TruncatedText({
   return (
     <Tooltip open={truncated ? open : false} onOpenChange={setOpen}>
       <TooltipTrigger asChild>
-        <span ref={ref} className={spanClass}>
+        <span ref={ref} className={spanClass} dir="auto">
           {text}
         </span>
       </TooltipTrigger>
       {truncated ? (
-        <TooltipContent side="top" align="end" className="max-w-xs break-all">
+        <TooltipContent
+          side="top"
+          align="end"
+          className="max-w-xs break-words"
+          dir="auto"
+        >
           {text}
         </TooltipContent>
       ) : null}
@@ -1075,7 +1081,7 @@ function DuplicateCompareCard({
           </div>
         )}
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="truncate text-sm font-medium">
+          <p className="truncate text-sm font-medium" dir="auto">
             {fileName ?? "Unknown file"}
           </p>
           <p className="font-mono text-[11px] text-muted-foreground">
@@ -1694,10 +1700,25 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                   <span>Created</span>
                   <DateDisplay date={job.createdAt} format="datetime" />
                 </div>
+                {job.startedAt ? (
+                  <div className="flex justify-between gap-2">
+                    <span>Started</span>
+                    <DateDisplay date={job.startedAt} format="datetime" />
+                  </div>
+                ) : null}
                 {job.completedAt ? (
                   <div className="flex justify-between gap-2">
                     <span>Completed</span>
                     <DateDisplay date={job.completedAt} format="datetime" />
+                  </div>
+                ) : null}
+                {formatJobElapsed(job.startedAt, job.completedAt) ? (
+                  <div className="flex justify-between gap-2">
+                    <span>Elapsed</span>
+                    <span className="tabular-nums">
+                      {formatJobElapsed(job.startedAt, job.completedAt)}
+                      {!job.completedAt ? " (running)" : ""}
+                    </span>
                   </div>
                 ) : null}
                 {job.retryCount > 0 ? (

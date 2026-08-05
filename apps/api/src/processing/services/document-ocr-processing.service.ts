@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProcessorKey } from '@workspace/validation';
+import {
+  DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+  DEFAULT_DOCUMENT_OCR_USER_PROMPT,
+  ProcessorKey,
+} from '@workspace/validation';
 import { execFile } from 'child_process';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -39,6 +43,9 @@ export class DocumentOcrProcessingService {
     settings?: {
       minCharsBeforeSkip?: number;
       engine?: 'openai_compatible' | 'tesseract';
+      tesseractLang?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
       models?: { vision?: string };
       model?: string;
     };
@@ -74,7 +81,10 @@ export class DocumentOcrProcessingService {
     }
 
     if (engine === 'tesseract') {
-      const text = await this.runTesseract(jpeg);
+      const text = await this.runTesseract(
+        jpeg,
+        input.settings?.tesseractLang,
+      );
       if (text == null) {
         return this.skip(
           input,
@@ -96,7 +106,10 @@ export class DocumentOcrProcessingService {
     );
     if (!backend) {
       // Fall back to local tesseract when no vision backend is configured
-      const text = await this.runTesseract(jpeg);
+      const text = await this.runTesseract(
+        jpeg,
+        input.settings?.tesseractLang,
+      );
       if (text != null) {
         return this.complete(input, {
           text,
@@ -128,6 +141,12 @@ export class DocumentOcrProcessingService {
       `OCR vision payload ${(jpeg.length / 1024).toFixed(1)} KB JPEG via ${model}`,
     );
 
+    const systemPrompt =
+      input.settings?.systemPrompt?.trim() ||
+      DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT;
+    const userPrompt =
+      input.settings?.userPrompt?.trim() || DEFAULT_DOCUMENT_OCR_USER_PROMPT;
+
     const raw = await this.openai.chatCompletions({
       baseUrl: backend.baseUrl,
       apiKey: backend.apiKey,
@@ -137,13 +156,12 @@ export class DocumentOcrProcessingService {
       messages: [
         {
           role: 'system',
-          content:
-            'Extract all visible text from the document image. Return only JSON: {"text":"..."}',
+          content: systemPrompt,
         },
         {
           role: 'user',
           content: [
-            { type: 'text', text: 'OCR this document page.' },
+            { type: 'text', text: userPrompt },
             {
               type: 'image_url',
               image_url: {
@@ -267,15 +285,19 @@ export class DocumentOcrProcessingService {
     }
   }
 
-  private async runTesseract(image: Buffer): Promise<string | null> {
+  private async runTesseract(
+    image: Buffer,
+    lang?: string,
+  ): Promise<string | null> {
     const dir = await mkdtemp(join(tmpdir(), 'document-ocr-'));
     const imagePath = join(dir, 'page.jpg');
+    const language = lang?.trim() || 'eng';
     try {
       await writeFile(imagePath, image);
       try {
         const { stdout } = await execFileAsync(
           'tesseract',
-          [imagePath, 'stdout', '-l', 'eng'],
+          [imagePath, 'stdout', '-l', language],
           { maxBuffer: 16 * 1024 * 1024 },
         );
         return stdout;

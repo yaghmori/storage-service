@@ -35,7 +35,8 @@ function pageTitle(pathname: string): string {
       jobs: "Jobs",
       analytics: "Analytics",
       providers: "Providers",
-      tokens: "Tokens",
+      tokens: "API keys",
+      "api-keys": "API keys",
       settings: "Organization settings",
     }[leaf] ?? "Admin"
   );

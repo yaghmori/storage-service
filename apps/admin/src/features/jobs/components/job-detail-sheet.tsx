@@ -1,6 +1,7 @@
 "use client";
 
 import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
+import { formatJobElapsed } from "@/lib/format-job-elapsed";
 import { useActiveOrg } from "@/provider/org-provider";
 import {
   Badge,
@@ -149,7 +150,7 @@ export function JobDetailSheet({
                 size="md"
               />
               <div className="min-w-0 space-y-1">
-                <p className="break-words font-medium">
+                <p className="break-words font-medium" dir="auto">
                   {data.fileName ?? data.fileId}
                 </p>
                 <p className="break-all font-mono text-xs text-muted-foreground">
@@ -241,6 +242,17 @@ export function JobDetailSheet({
                   ) : (
                     "—"
                   )}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Elapsed</dt>
+                <dd className="tabular-nums">
+                  {formatJobElapsed(data.startedAt, data.completedAt) ?? "—"}
+                  {data.startedAt && !data.completedAt ? (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      (running)
+                    </span>
+                  ) : null}
                 </dd>
               </div>
             </dl>

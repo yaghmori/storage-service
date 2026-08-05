@@ -8,6 +8,7 @@ import * as schema from '../../database/drizzle/schema';
 import { FilesService } from '../../files/services/files.service';
 import { VariantType } from '../../variants/repositories/variants.repository';
 import { VariantsService } from '../../variants/services/variants.service';
+import { buildContentDisposition } from '../utils/content-disposition';
 
 @Injectable()
 export class ServingService {
@@ -82,17 +83,14 @@ export class ServingService {
       return provider.download(key);
     }
 
-    const safeName = (file.originalFilename || 'file').replace(
-      /["\r\n]/g,
-      '_',
-    );
+    const safeName = file.originalFilename || 'file';
     response.setHeader('Content-Type', contentType);
     if (Number.isFinite(contentLength) && (contentLength as number) >= 0) {
       response.setHeader('Content-Length', String(contentLength));
     }
     response.setHeader(
       'Content-Disposition',
-      `${asDownload ? 'attachment' : 'inline'}; filename="${safeName}"`,
+      buildContentDisposition(safeName, asDownload),
     );
 
     const stream = await provider.openReadStream(key);

@@ -28,8 +28,11 @@ type FileDeleteDialogProps = {
   onConfirm: (options: { deleteFromStorage: boolean }) => void;
 };
 
+const CONFIRM_PHRASE = "DELETE";
+
 /**
  * Soft-delete by default; optional permanent delete removes DB row + storage object/variants.
+ * Confirm by typing DELETE (same as bulk delete).
  */
 export function FileDeleteDialog({
   open,
@@ -41,8 +44,7 @@ export function FileDeleteDialog({
 }: FileDeleteDialogProps) {
   const [value, setValue] = useState("");
   const [deleteFromStorage, setDeleteFromStorage] = useState(forcePermanent);
-  const expected = fileName.trim();
-  const matched = expected.length > 0 && value.trim() === expected;
+  const matched = value.trim() === CONFIRM_PHRASE;
   const permanent = forcePermanent || deleteFromStorage;
 
   useEffect(() => {
@@ -97,7 +99,7 @@ export function FileDeleteDialog({
               <Input
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                placeholder={`Type "${expected}" to confirm`}
+                placeholder={`Type "${CONFIRM_PHRASE}" to confirm`}
                 autoComplete="off"
                 autoFocus
               />
@@ -119,7 +121,7 @@ export function FileDeleteDialog({
           <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
           <Button
             variant="destructive"
-            disabled={!matched || isPending || !expected}
+            disabled={!matched || isPending}
             onClick={() => {
               if (!matched) return;
               onConfirm({ deleteFromStorage: permanent });

@@ -48,8 +48,21 @@ export type OrgProcessingSettings = {
   enableDocumentOcr: boolean;
   documentOcrEngine: 'openai_compatible' | 'tesseract';
   enableNotifyWebhook: boolean;
-  notifyWebhookUrl: string;
-  notifyWebhookSecret: string;
+  notifyWebhookDestinations: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    url: string;
+    secret: string;
+    bearerToken: string;
+    headers: Array<{ name: string; value: string }>;
+    events: Array<
+      'processing.completed' | 'processing.failed' | 'processing.partial'
+    >;
+    includeDownloadUrl: boolean;
+    /** Seconds; omit to use provider default / 1h */
+    downloadUrlExpiresIn?: number;
+  }>;
 };
 
 /** Optional per-upload overrides (partial). */
@@ -94,8 +107,7 @@ export const PLATFORM_PROCESSING_DEFAULTS: OrgProcessingSettings = {
   enableDocumentOcr: false,
   documentOcrEngine: 'openai_compatible',
   enableNotifyWebhook: false,
-  notifyWebhookUrl: '',
-  notifyWebhookSecret: '',
+  notifyWebhookDestinations: [],
 };
 
 const METADATA_KEY = 'processing';
@@ -409,17 +421,12 @@ export function mergeProcessingSettings(
         base.enableNotifyWebhook,
       );
     }
-    if (layer.notifyWebhookUrl !== undefined) {
-      base.notifyWebhookUrl =
-        typeof layer.notifyWebhookUrl === 'string'
-          ? layer.notifyWebhookUrl
-          : base.notifyWebhookUrl;
-    }
-    if (layer.notifyWebhookSecret !== undefined) {
-      base.notifyWebhookSecret =
-        typeof layer.notifyWebhookSecret === 'string'
-          ? layer.notifyWebhookSecret
-          : base.notifyWebhookSecret;
+    if (layer.notifyWebhookDestinations !== undefined) {
+      base.notifyWebhookDestinations = Array.isArray(
+        layer.notifyWebhookDestinations,
+      )
+        ? (layer.notifyWebhookDestinations as OrgProcessingSettings['notifyWebhookDestinations'])
+        : base.notifyWebhookDestinations;
     }
   }
 

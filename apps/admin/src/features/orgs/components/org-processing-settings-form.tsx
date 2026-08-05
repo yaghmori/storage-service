@@ -33,24 +33,53 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components";
+import { Textarea } from "@workspace/ui/components/textarea";
 import { cn } from "@workspace/ui/lib/utils";
 import {
+  DEFAULT_AI_VISION_SYSTEM_PROMPT,
+  DEFAULT_AI_VISION_USER_PROMPT,
+  DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+  DEFAULT_DOCUMENT_OCR_USER_PROMPT,
+  NOTIFY_WEBHOOK_EVENTS,
   ProcessorKey,
   ProcessorKeyDescriptions,
   ProcessorKeyLabels,
+  type NotifyWebhookEvent,
 } from "@workspace/validation";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   type OrgProcessingSettings,
   useOrgProcessingSettingsQuery,
+  useTestNotifyWebhookMutation,
   useUpdateOrgProcessingSettingsMutation,
 } from "../hooks/use-orgs-queries";
 
 /** Sentinel so the combobox stays controlled when no backend is chosen. */
 const NONE_BACKEND_VALUE = "__none__";
+
+type WebhookDestinationForm = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  url: string;
+  secret: string;
+  bearerToken: string;
+  headers: Array<{ name: string; value: string }>;
+  events: NotifyWebhookEvent[];
+  includeDownloadUrl: boolean;
+  /** Empty string = provider default / 1h */
+  downloadUrlExpiresIn: string;
+};
 
 type FormState = {
   enableImageProcessing: boolean;
@@ -63,8 +92,13 @@ type FormState = {
   nsfwThreshold: number;
   aiBackendId: string;
   aiVisionModel: string;
+  aiSystemPrompt: string;
+  aiUserPrompt: string;
   documentOcrBackendId: string;
   documentOcrVisionModel: string;
+  documentOcrSystemPrompt: string;
+  documentOcrUserPrompt: string;
+  documentOcrTesseractLang: string;
   thumbnailEnabled: boolean;
   thumbnailMaxEdge: number;
   mediumEnabled: boolean;
@@ -84,8 +118,7 @@ type FormState = {
   enableDocumentOcr: boolean;
   documentOcrEngine: "openai_compatible" | "tesseract";
   enableNotifyWebhook: boolean;
-  notifyWebhookUrl: string;
-  notifyWebhookSecret: string;
+  notifyWebhookDestinations: WebhookDestinationForm[];
   processorCapacity: Record<
     string,
     { concurrency: number; rateMax: number | null; rateDurationMs: number | null }
@@ -221,9 +254,9 @@ const PROCESSOR_GROUPS: Array<{
     ],
   },
   {
-    id: "notifications",
-    label: "Notifications",
-    description: "Webhook when processing finishes.",
+    id: "webhooks",
+    label: "Webhook",
+    description: "HTTP callbacks when processing finishes.",
     processors: [
       {
         key: ProcessorKey.NOTIFY_WEBHOOK,
@@ -257,8 +290,29 @@ function toForm(settings: OrgProcessingSettings): FormState {
     nsfwThreshold: settings.nsfwThreshold,
     aiBackendId: settings.aiBackendId ?? NONE_BACKEND_VALUE,
     aiVisionModel: settings.aiVisionModel ?? "",
+    aiSystemPrompt:
+      (typeof settings.aiSystemPrompt === "string" &&
+        settings.aiSystemPrompt.trim()) ||
+      DEFAULT_AI_VISION_SYSTEM_PROMPT ||
+      "",
+    aiUserPrompt:
+      (typeof settings.aiUserPrompt === "string" &&
+        settings.aiUserPrompt.trim()) ||
+      DEFAULT_AI_VISION_USER_PROMPT ||
+      "Analyze this image. Include description. Include tags (3-10). Include nsfwScore and isNsfw.",
     documentOcrBackendId: settings.documentOcrBackendId ?? NONE_BACKEND_VALUE,
     documentOcrVisionModel: settings.documentOcrVisionModel ?? "",
+    documentOcrSystemPrompt:
+      (typeof settings.documentOcrSystemPrompt === "string" &&
+        settings.documentOcrSystemPrompt.trim()) ||
+      DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT ||
+      "",
+    documentOcrUserPrompt:
+      (typeof settings.documentOcrUserPrompt === "string" &&
+        settings.documentOcrUserPrompt.trim()) ||
+      DEFAULT_DOCUMENT_OCR_USER_PROMPT ||
+      "OCR this image. Extract every readable character.",
+    documentOcrTesseractLang: settings.documentOcrTesseractLang ?? "eng",
     thumbnailEnabled: variants.thumbnail.enabled,
     thumbnailMaxEdge: variants.thumbnail.maxEdge,
     mediumEnabled: variants.medium.enabled,
@@ -281,10 +335,99 @@ function toForm(settings: OrgProcessingSettings): FormState {
         ? "tesseract"
         : "openai_compatible",
     enableNotifyWebhook: settings.enableNotifyWebhook ?? false,
-    notifyWebhookUrl: settings.notifyWebhookUrl ?? "",
-    notifyWebhookSecret: settings.notifyWebhookSecret ?? "",
+    notifyWebhookDestinations: Array.isArray(settings.notifyWebhookDestinations)
+      ? settings.notifyWebhookDestinations.map((dest, index) =>
+          normalizeDestinationForm(dest, index),
+        )
+      : settings.notifyWebhookUrl
+        ? [
+            normalizeDestinationForm(
+              {
+                id: "legacy-default",
+                name: "Default",
+                enabled: true,
+                url: settings.notifyWebhookUrl,
+                secret: settings.notifyWebhookSecret ?? "",
+                bearerToken: settings.notifyWebhookBearerToken ?? "",
+                headers: settings.notifyWebhookHeaders ?? [],
+                events: settings.notifyWebhookEvents ?? [
+                  ...NOTIFY_WEBHOOK_EVENTS,
+                ],
+                includeDownloadUrl:
+                  settings.notifyWebhookIncludeDownloadUrl !== false,
+              },
+              0,
+            ),
+          ]
+        : [],
     processorCapacity: settings.processorCapacity ?? {},
   };
+}
+
+function normalizeDestinationForm(
+  dest: Omit<Partial<WebhookDestinationForm>, "downloadUrlExpiresIn"> & {
+    id?: string;
+    downloadUrlExpiresIn?: string | number | null;
+  },
+  index: number,
+): WebhookDestinationForm {
+  const events = Array.isArray(dest.events)
+    ? dest.events.filter((e): e is NotifyWebhookEvent =>
+        (NOTIFY_WEBHOOK_EVENTS as readonly string[]).includes(e),
+      )
+    : [...NOTIFY_WEBHOOK_EVENTS];
+  return {
+    id: dest.id?.trim() || `dest-${index + 1}`,
+    name: dest.name ?? "",
+    enabled: dest.enabled !== false,
+    url: dest.url ?? "",
+    secret: dest.secret ?? "",
+    bearerToken: dest.bearerToken ?? "",
+    headers: Array.isArray(dest.headers)
+      ? dest.headers.map((h) => ({
+          name: h.name ?? "",
+          value: h.value ?? "",
+        }))
+      : [],
+    events: events.length > 0 ? events : [...NOTIFY_WEBHOOK_EVENTS],
+    includeDownloadUrl: dest.includeDownloadUrl !== false,
+    downloadUrlExpiresIn:
+      typeof dest.downloadUrlExpiresIn === "number" &&
+      Number.isFinite(dest.downloadUrlExpiresIn)
+        ? String(Math.floor(dest.downloadUrlExpiresIn))
+        : typeof dest.downloadUrlExpiresIn === "string"
+          ? dest.downloadUrlExpiresIn
+          : "",
+  };
+}
+
+function createEmptyDestination(): WebhookDestinationForm {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `dest-${Date.now()}`,
+    name: "",
+    enabled: true,
+    url: "",
+    secret: "",
+    bearerToken: "",
+    headers: [],
+    events: [...NOTIFY_WEBHOOK_EVENTS],
+    includeDownloadUrl: true,
+    downloadUrlExpiresIn: "",
+  };
+}
+
+function parseDownloadUrlExpiresIn(
+  value: string,
+): number | undefined | "invalid" {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return "invalid";
+  if (n < 60 || n > 604_800) return "invalid";
+  return n;
 }
 
 function processorLabel(key: string) {
@@ -710,7 +853,8 @@ function ProcessorTabOptions({
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Runs when native text is missing or too short. For PDFs, enable
-          Document preview so a page image exists to OCR.
+          Document preview so a page image exists to OCR. Portraits/photos with
+          little or no text often return empty — that is expected.
         </p>
         <div className="space-y-2">
           <Label>OCR engine</Label>
@@ -736,8 +880,10 @@ function ProcessorTabOptions({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            OpenAI-compatible uses its own processor backend below. Tesseract
-            needs the binary on the worker image.
+            Tesseract is <strong>not</strong> a processor backend row — pick it
+            here as the engine. The worker image already includes{" "}
+            <code className="rounded bg-muted px-1">tesseract-ocr</code>. No
+            base URL or API key is required.
           </p>
         </div>
         {usesRemoteEngine ? (
@@ -772,8 +918,58 @@ function ProcessorTabOptions({
               description="Model used for document page OCR on this processor."
               placeholder="llava"
             />
+            <div className="space-y-3 rounded-xl border bg-muted/15 p-3 sm:p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">OCR prompts</p>
+                <p className="text-xs text-muted-foreground">
+                  Sent to the vision model with each page image. Edit freely —
+                  Reset restores the built-in defaults.
+                </p>
+              </div>
+              <PromptEditor
+                id="ocr-system-prompt"
+                label="System prompt"
+                description="Instructions and expected JSON shape for the model."
+                value={form.documentOcrSystemPrompt}
+                defaultValue={DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT}
+                rows={5}
+                onChange={(documentOcrSystemPrompt) =>
+                  patch({ documentOcrSystemPrompt })
+                }
+              />
+              <PromptEditor
+                id="ocr-user-prompt"
+                label="User prompt"
+                description="Short instruction paired with the image."
+                value={form.documentOcrUserPrompt}
+                defaultValue={DEFAULT_DOCUMENT_OCR_USER_PROMPT}
+                rows={3}
+                onChange={(documentOcrUserPrompt) =>
+                  patch({ documentOcrUserPrompt })
+                }
+              />
+            </div>
           </>
-        ) : null}
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="ocr-tesseract-lang">Tesseract languages</Label>
+            <p className="text-xs text-muted-foreground">
+              Passed as <code className="rounded bg-muted px-1">-l</code>. Use{" "}
+              <code className="rounded bg-muted px-1">eng</code> or combine
+              packs like <code className="rounded bg-muted px-1">eng+fas</code>.
+              Extra language packs must be installed on the worker image.
+            </p>
+            <Input
+              id="ocr-tesseract-lang"
+              className="max-w-sm font-mono text-sm"
+              value={form.documentOcrTesseractLang}
+              placeholder="eng"
+              onChange={(e) =>
+                patch({ documentOcrTesseractLang: e.target.value })
+              }
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -885,44 +1081,436 @@ function ProcessorTabOptions({
             }
           />
         </div>
+
+        <div className="space-y-3 rounded-xl border bg-muted/15 p-3 sm:p-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Vision prompts</p>
+            <p className="text-xs text-muted-foreground">
+              Full prompts sent with each image. Edit to change caption/tag
+              style or fix empty / placeholder model replies.
+            </p>
+          </div>
+          <PromptEditor
+            id="ai-system-prompt"
+            label="System prompt"
+            description="Role, JSON schema, and scoring rules for the vision model."
+            value={form.aiSystemPrompt}
+            defaultValue={DEFAULT_AI_VISION_SYSTEM_PROMPT}
+            rows={8}
+            onChange={(aiSystemPrompt) => patch({ aiSystemPrompt })}
+          />
+          <PromptEditor
+            id="ai-user-prompt"
+            label="User prompt"
+            description="Per-image instruction. Replaces the auto-built caption/tags/NSFW text."
+            value={form.aiUserPrompt}
+            defaultValue={DEFAULT_AI_VISION_USER_PROMPT}
+            rows={3}
+            onChange={(aiUserPrompt) => patch({ aiUserPrompt })}
+          />
+        </div>
       </div>
     );
   }
 
   if (processorKey === ProcessorKey.NOTIFY_WEBHOOK) {
     return (
-      <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          External HTTP endpoint for this processor. Configure the target URL
-          (and optional HMAC secret) here — fired from the processing rollup
-          (completed / failed / partial), not as a MIME-scheduled job.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="webhook-url">Webhook URL</Label>
-            <Input
-              id="webhook-url"
-              value={form.notifyWebhookUrl}
-              onChange={(e) => patch({ notifyWebhookUrl: e.target.value })}
-              placeholder="https://example.com/hooks/storage"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="webhook-secret">HMAC secret</Label>
-            <Input
-              id="webhook-secret"
-              value={form.notifyWebhookSecret}
-              onChange={(e) => patch({ notifyWebhookSecret: e.target.value })}
-              placeholder="optional signing secret"
-            />
-          </div>
-        </div>
-      </div>
+      <NotifyWebhookOptions orgId={orgId} form={form} patch={patch} />
     );
   }
 
   return null;
 }
+
+function NotifyWebhookOptions({
+  orgId,
+  form,
+  patch,
+}: {
+  orgId: string;
+  form: FormState;
+  patch: (partial: Partial<FormState>) => void;
+}) {
+  const testMutation = useTestNotifyWebhookMutation(orgId);
+  const eventLabels: Record<NotifyWebhookEvent, string> = {
+    "processing.completed": "Completed",
+    "processing.failed": "Failed",
+    "processing.partial": "Partial",
+  };
+  const destinations = form.notifyWebhookDestinations;
+  const testingId = testMutation.isPending
+    ? ((testMutation.variables as { destination?: { id?: string } } | undefined)
+        ?.destination?.id ?? null)
+    : null;
+
+  const setDestinations = (next: WebhookDestinationForm[]) =>
+    patch({ notifyWebhookDestinations: next });
+
+  const updateDestination = (
+    id: string,
+    partial: Partial<WebhookDestinationForm>,
+  ) => {
+    setDestinations(
+      destinations.map((dest) =>
+        dest.id === id ? { ...dest, ...partial } : dest,
+      ),
+    );
+  };
+
+  const removeDestination = (id: string) => {
+    setDestinations(destinations.filter((dest) => dest.id !== id));
+  };
+
+  const runTest = (dest: WebhookDestinationForm) => {
+    if (!dest.url.trim()) {
+      toast.error("Enter a webhook URL first");
+      return;
+    }
+    testMutation.mutate(
+      {
+        destination: {
+          id: dest.id,
+          name: dest.name,
+          url: dest.url.trim(),
+          secret: dest.secret,
+          bearerToken: dest.bearerToken,
+          headers: dest.headers.filter((h) => h.name.trim()),
+          events: dest.events,
+          includeDownloadUrl: dest.includeDownloadUrl,
+          downloadUrlExpiresIn: (() => {
+            const parsed = parseDownloadUrlExpiresIn(dest.downloadUrlExpiresIn);
+            return parsed === "invalid" ? undefined : parsed;
+          })(),
+        },
+        event: dest.events[0] ?? "processing.completed",
+      },
+      {
+        onSuccess: (result) => {
+          const label = result.destinationName ?? (dest.name || "webhook");
+          if (result.ok) {
+            toast.success(`Sample sent to ${label} · HTTP ${result.statusCode}`);
+          } else {
+            toast.error(
+              `Webhook returned HTTP ${result.statusCode}${
+                result.responsePreview
+                  ? `: ${result.responsePreview.slice(0, 120)}`
+                  : ""
+              }`,
+            );
+          }
+        },
+        onError: (err) =>
+          toast.error(extractApiErrorMessage(err, "Test webhook failed")),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-xs text-muted-foreground">
+          Add one or more destinations (n8n, Slack, custom APIs). Each can have
+          its own URL, events, auth, and headers. All matching destinations are
+          notified when processing finishes.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={destinations.length >= 20}
+          onClick={() =>
+            setDestinations([...destinations, createEmptyDestination()])
+          }
+        >
+          <Plus className="mr-1.5 size-3.5" />
+          Add destination
+        </Button>
+      </div>
+
+      {destinations.length === 0 ? (
+        <div className="rounded-lg border border-dashed bg-muted/15 p-6 text-center">
+          <p className="text-sm font-medium">No destinations yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Add an n8n webhook URL (or any HTTP endpoint) to start.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            onClick={() =>
+              setDestinations([...destinations, createEmptyDestination()])
+            }
+          >
+            <Plus className="mr-1.5 size-3.5" />
+            Add destination
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {destinations.map((dest, index) => (
+            <div
+              key={dest.id}
+              className="space-y-3 rounded-xl border bg-muted/10 p-3 sm:p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Checkbox
+                    checked={dest.enabled}
+                    onCheckedChange={(checked) =>
+                      updateDestination(dest.id, { enabled: checked === true })
+                    }
+                  />
+                  <Input
+                    className="h-8 max-w-xs"
+                    placeholder={`Destination ${index + 1}`}
+                    value={dest.name}
+                    onChange={(e) =>
+                      updateDestination(dest.id, { name: e.target.value })
+                    }
+                  />
+                  <Badge variant="outline" className="text-[10px]">
+                    {dest.enabled ? "On" : "Off"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-8"
+                    disabled={
+                      !dest.url.trim() ||
+                      (testMutation.isPending && testingId === dest.id)
+                    }
+                    onClick={() => runTest(dest)}
+                  >
+                    {testMutation.isPending && testingId === dest.id ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        Sending…
+                      </>
+                    ) : (
+                      "Send sample"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => removeDestination(dest.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Webhook URL</Label>
+                <Input
+                  value={dest.url}
+                  onChange={(e) =>
+                    updateDestination(dest.id, { url: e.target.value })
+                  }
+                  placeholder="https://n8n.example.com/webhook/storage-done"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Events</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(NOTIFY_WEBHOOK_EVENTS as readonly NotifyWebhookEvent[]).map(
+                    (event) => {
+                      const checked = dest.events.includes(event);
+                      return (
+                        <label
+                          key={event}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs",
+                            checked
+                              ? "border-primary/40 bg-primary/5"
+                              : "bg-muted/20 text-muted-foreground",
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              const on = value === true;
+                              const next = on
+                                ? dest.events.includes(event)
+                                  ? dest.events
+                                  : [...dest.events, event]
+                                : dest.events.filter((e) => e !== event);
+                              updateDestination(dest.id, {
+                                events:
+                                  next.length > 0
+                                    ? next
+                                    : (["processing.completed"] as NotifyWebhookEvent[]),
+                              });
+                            }}
+                          />
+                          <span className="font-medium text-foreground">
+                            {eventLabels[event]}
+                          </span>
+                        </label>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>HMAC secret</Label>
+                  <Input
+                    value={dest.secret}
+                    onChange={(e) =>
+                      updateDestination(dest.id, { secret: e.target.value })
+                    }
+                    placeholder="optional · X-Storage-Signature"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Bearer token</Label>
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    value={dest.bearerToken}
+                    onChange={(e) =>
+                      updateDestination(dest.id, {
+                        bearerToken: e.target.value,
+                      })
+                    }
+                    placeholder="optional · Authorization: Bearer …"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Custom headers</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={dest.headers.length >= 20}
+                    onClick={() =>
+                      updateDestination(dest.id, {
+                        headers: [...dest.headers, { name: "", value: "" }],
+                      })
+                    }
+                  >
+                    <Plus className="mr-1 size-3" />
+                    Add header
+                  </Button>
+                </div>
+                {dest.headers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No custom headers for this destination.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {dest.headers.map((header, headerIndex) => (
+                      <div key={headerIndex} className="flex items-start gap-2">
+                        <Input
+                          className="font-mono text-xs"
+                          placeholder="Header-Name"
+                          value={header.name}
+                          onChange={(e) => {
+                            const headers = dest.headers.map((h, i) =>
+                              i === headerIndex
+                                ? { ...h, name: e.target.value }
+                                : h,
+                            );
+                            updateDestination(dest.id, { headers });
+                          }}
+                        />
+                        <Input
+                          className="font-mono text-xs"
+                          placeholder="value"
+                          value={header.value}
+                          onChange={(e) => {
+                            const headers = dest.headers.map((h, i) =>
+                              i === headerIndex
+                                ? { ...h, value: e.target.value }
+                                : h,
+                            );
+                            updateDestination(dest.id, { headers });
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-9 shrink-0"
+                          onClick={() =>
+                            updateDestination(dest.id, {
+                              headers: dest.headers.filter(
+                                (_, i) => i !== headerIndex,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-background/60 px-3 py-2">
+                <label className="inline-flex min-w-0 flex-1 items-center gap-2.5">
+                  <Checkbox
+                    checked={dest.includeDownloadUrl}
+                    onCheckedChange={(checked) =>
+                      updateDestination(dest.id, {
+                        includeDownloadUrl: checked === true,
+                      })
+                    }
+                  />
+                  <span className="text-sm font-medium">
+                    Include download URL
+                  </span>
+                </label>
+                {dest.includeDownloadUrl ? (
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor={`webhook-ttl-${dest.id}`}
+                      className="whitespace-nowrap text-xs text-muted-foreground"
+                    >
+                      TTL (sec)
+                    </Label>
+                    <Input
+                      id={`webhook-ttl-${dest.id}`}
+                      type="number"
+                      min={60}
+                      max={604800}
+                      step={1}
+                      className="h-8 w-28"
+                      value={dest.downloadUrlExpiresIn}
+                      onChange={(e) =>
+                        updateDestination(dest.id, {
+                          downloadUrlExpiresIn: e.target.value,
+                        })
+                      }
+                      placeholder="default"
+                      title="60–604800 seconds. Empty = provider default."
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function saveForm(
   form: FormState,
@@ -1007,10 +1595,21 @@ function saveForm(
   }
   if (
     form.enableNotifyWebhook &&
-    form.notifyWebhookUrl.trim().length === 0
+    form.notifyWebhookDestinations.filter((d) => d.enabled && d.url.trim())
+      .length === 0
   ) {
-    toast.error("Webhook URL is required when the completion webhook is on");
+    toast.error("Add at least one enabled webhook destination with a URL");
     return;
+  }
+  for (const dest of form.notifyWebhookDestinations) {
+    if (!dest.url.trim()) continue;
+    const ttl = parseDownloadUrlExpiresIn(dest.downloadUrlExpiresIn);
+    if (ttl === "invalid") {
+      toast.error(
+        `Signed URL TTL for "${dest.name || dest.url}" must be 60–604800 seconds`,
+      );
+      return;
+    }
   }
 
   mutate(
@@ -1028,12 +1627,30 @@ function saveForm(
           ? form.aiBackendId
           : null,
       aiVisionModel: form.aiVisionModel.trim() || null,
+      aiSystemPrompt:
+        form.aiSystemPrompt?.trim() ||
+        DEFAULT_AI_VISION_SYSTEM_PROMPT ||
+        "",
+      aiUserPrompt:
+        form.aiUserPrompt?.trim() ||
+        DEFAULT_AI_VISION_USER_PROMPT ||
+        "Analyze this image. Include description. Include tags (3-10). Include nsfwScore and isNsfw.",
       documentOcrBackendId:
         form.documentOcrBackendId &&
         form.documentOcrBackendId !== NONE_BACKEND_VALUE
           ? form.documentOcrBackendId
           : null,
       documentOcrVisionModel: form.documentOcrVisionModel.trim() || null,
+      documentOcrSystemPrompt:
+        form.documentOcrSystemPrompt?.trim() ||
+        DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT ||
+        "",
+      documentOcrUserPrompt:
+        form.documentOcrUserPrompt?.trim() ||
+        DEFAULT_DOCUMENT_OCR_USER_PROMPT ||
+        "OCR this image. Extract every readable character.",
+      documentOcrTesseractLang:
+        form.documentOcrTesseractLang.trim() || "eng",
       imageVariants: {
         thumbnail: {
           enabled: form.thumbnailEnabled,
@@ -1062,8 +1679,24 @@ function saveForm(
       enableDocumentOcr: form.enableDocumentOcr,
       documentOcrEngine: form.documentOcrEngine,
       enableNotifyWebhook: form.enableNotifyWebhook,
-      notifyWebhookUrl: form.notifyWebhookUrl,
-      notifyWebhookSecret: form.notifyWebhookSecret,
+      notifyWebhookDestinations: form.notifyWebhookDestinations
+        .filter((dest) => dest.url.trim())
+        .map((dest) => ({
+          id: dest.id,
+          name: dest.name,
+          enabled: dest.enabled,
+          url: dest.url.trim(),
+          secret: dest.secret,
+          bearerToken: dest.bearerToken,
+          headers: dest.headers.filter((h) => h.name.trim()),
+          events:
+            dest.events.length > 0 ? dest.events : [...NOTIFY_WEBHOOK_EVENTS],
+          includeDownloadUrl: dest.includeDownloadUrl,
+          downloadUrlExpiresIn: (() => {
+            const parsed = parseDownloadUrlExpiresIn(dest.downloadUrlExpiresIn);
+            return parsed === "invalid" ? undefined : parsed;
+          })(),
+        })),
       processorCapacity: form.processorCapacity,
     },
     {
@@ -1071,6 +1704,78 @@ function saveForm(
       onError: (err) =>
         toast.error(extractApiErrorMessage(err, "Save failed")),
     },
+  );
+}
+
+function PromptEditor({
+  id,
+  label,
+  description,
+  value,
+  defaultValue,
+  onChange,
+  rows = 5,
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  value?: string | null;
+  defaultValue?: string | null;
+  onChange: (next: string) => void;
+  rows?: number;
+}) {
+  const safeDefault = defaultValue ?? "";
+  const safeValue = value ?? safeDefault;
+  const isModified = safeValue.trim() !== safeDefault.trim();
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/80 bg-background shadow-xs">
+      <div className="flex items-start justify-between gap-3 border-b bg-muted/35 px-3 py-2.5">
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor={id} className="text-sm font-medium">
+              {label}
+            </Label>
+            <Badge
+              variant={isModified ? "secondary" : "outline"}
+              className="h-5 px-1.5 text-[10px] font-normal"
+            >
+              {isModified ? "Custom" : "Default"}
+            </Badge>
+          </div>
+          {description ? (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 shrink-0 gap-1.5 px-2 text-xs"
+          disabled={!isModified}
+          onClick={() => onChange(safeDefault)}
+        >
+          <RotateCcw className="size-3" />
+          Reset
+        </Button>
+      </div>
+      <Textarea
+        id={id}
+        value={safeValue}
+        rows={rows}
+        spellCheck={false}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-0 rounded-none border-0 bg-transparent px-3 py-3 font-mono text-xs leading-relaxed shadow-none focus-visible:ring-0"
+      />
+      <div className="flex items-center justify-between border-t bg-muted/20 px-3 py-1.5">
+        <p className="text-[11px] text-muted-foreground">
+          Editable · saved with processing settings
+        </p>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {safeValue.length.toLocaleString()} chars
+        </span>
+      </div>
+    </div>
   );
 }
 

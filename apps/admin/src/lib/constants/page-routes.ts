@@ -31,8 +31,8 @@ export const PAGE_ROUTES = {
   /** @deprecated Prefer settingsProcessorBackends — kept for bookmarks. */
   processorBackends: (slug: string) =>
     orgPath(slug, "settings", "processor-backends"),
-  /** @deprecated Prefer settingsTokens — kept for bookmarks. */
-  tokens: (slug: string) => orgPath(slug, "settings", "tokens"),
+  /** @deprecated Prefer settingsApiKeys — kept for bookmarks. */
+  tokens: (slug: string) => orgPath(slug, "settings", "api-keys"),
   settings: (slug: string) => orgPath(slug, "settings"),
   settingsGeneral: (slug: string) => orgPath(slug, "settings", "general"),
   settingsLimits: (slug: string) => orgPath(slug, "settings", "limits"),
@@ -41,7 +41,9 @@ export const PAGE_ROUTES = {
     orgPath(slug, "settings", "processor-backends"),
   settingsProcessing: (slug: string) =>
     orgPath(slug, "settings", "processing"),
-  settingsTokens: (slug: string) => orgPath(slug, "settings", "tokens"),
+  settingsApiKeys: (slug: string) => orgPath(slug, "settings", "api-keys"),
+  /** @deprecated Prefer settingsApiKeys */
+  settingsTokens: (slug: string) => orgPath(slug, "settings", "api-keys"),
   settingsRetention: (slug: string) => orgPath(slug, "settings", "retention"),
   settingsDanger: (slug: string) => orgPath(slug, "settings", "danger"),
   settingsSection: (
@@ -52,7 +54,7 @@ export const PAGE_ROUTES = {
       | "providers"
       | "processor-backends"
       | "processing"
-      | "tokens"
+      | "api-keys"
       | "retention"
       | "danger",
   ) => orgPath(slug, "settings", section),

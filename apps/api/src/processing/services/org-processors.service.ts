@@ -2,8 +2,15 @@ import { Inject, Injectable, Logger, BadRequestException } from '@nestjs/common'
 import {
   BUILTIN_ORG_PROCESSOR_DEFAULTS,
   DEFAULT_AI_VISION_SETTINGS,
+  DEFAULT_AI_VISION_SYSTEM_PROMPT,
+  DEFAULT_AI_VISION_USER_PROMPT,
+  DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+  DEFAULT_DOCUMENT_OCR_USER_PROMPT,
   DEFAULT_IMAGE_VARIANTS_SETTINGS,
   DEFAULT_VIDEO_PREVIEW_SETTINGS,
+  NOTIFY_WEBHOOK_EVENTS,
+  normalizeNotifyWebhookDestinations,
+  resolveNotifyWebhookDownloadUrlExpiresIn,
   ProcessorKey,
   aiVisionProcessorSettingsSchema,
   imageVariantsProcessorSettingsSchema,
@@ -312,12 +319,13 @@ export class OrgProcessorsService {
     const phashSettings = (phash?.settings ?? {}) as { thresholdBits?: number };
     const docOcrSettings = (docOcr?.settings ?? {}) as {
       engine?: 'openai_compatible' | 'tesseract';
+      tesseractLang?: string;
+      systemPrompt?: string;
+      userPrompt?: string;
       models?: { vision?: string };
     };
-    const notifySettings = (notify?.settings ?? {}) as {
-      url?: string;
-      secret?: string;
-    };
+    const notifySettings = (notify?.settings ?? {}) as Record<string, unknown>;
+    const notifyDestinations = normalizeNotifyWebhookDestinations(notifySettings);
     // Keep disabled slots' maxEdge from saved settings (not only enabled job slots).
     const variants = normalizeImageVariants(
       imageSettings.imageVariants,
@@ -333,10 +341,20 @@ export class OrgProcessorsService {
       enableAiTags: aiSettings.enableTags ?? true,
       enableAiNsfw: aiSettings.enableNsfw ?? true,
       nsfwThreshold: aiSettings.nsfwThreshold ?? 0.7,
+      aiSystemPrompt:
+        aiSettings.systemPrompt?.trim() || DEFAULT_AI_VISION_SYSTEM_PROMPT,
+      aiUserPrompt:
+        aiSettings.userPrompt?.trim() || DEFAULT_AI_VISION_USER_PROMPT,
       aiBackendId: ai?.backendId ?? null,
       aiVisionModel: aiSettings.models?.vision?.trim() || null,
       documentOcrBackendId: docOcr?.backendId ?? null,
       documentOcrVisionModel: docOcrSettings.models?.vision?.trim() || null,
+      documentOcrSystemPrompt:
+        docOcrSettings.systemPrompt?.trim() ||
+        DEFAULT_DOCUMENT_OCR_SYSTEM_PROMPT,
+      documentOcrUserPrompt:
+        docOcrSettings.userPrompt?.trim() || DEFAULT_DOCUMENT_OCR_USER_PROMPT,
+      documentOcrTesseractLang: docOcrSettings.tesseractLang?.trim() || 'eng',
       imageVariants: variants,
       imageSizes: imageSizesFromVariants(variants),
       imageFormats: imageSettings.formats,
@@ -355,8 +373,41 @@ export class OrgProcessorsService {
         ? 'tesseract'
         : 'openai_compatible') as 'openai_compatible' | 'tesseract',
       enableNotifyWebhook: notify?.enabled ?? false,
-      notifyWebhookUrl: notifySettings.url ?? '',
-      notifyWebhookSecret: notifySettings.secret ?? '',
+      notifyWebhookDestinations: notifyDestinations.map((dest) => ({
+        id: dest.id,
+        name: dest.name ?? '',
+        enabled: dest.enabled !== false,
+        url: dest.url ?? '',
+        secret: dest.secret ?? '',
+        bearerToken: dest.bearerToken ?? '',
+        headers: Array.isArray(dest.headers)
+          ? dest.headers
+              .filter(
+                (h) =>
+                  h &&
+                  typeof h.name === 'string' &&
+                  typeof h.value === 'string',
+              )
+              .map((h) => ({ name: h.name, value: h.value }))
+          : [],
+        events: Array.isArray(dest.events)
+          ? dest.events.filter(
+              (
+                e,
+              ): e is
+                | 'processing.completed'
+                | 'processing.failed'
+                | 'processing.partial' =>
+                e === 'processing.completed' ||
+                e === 'processing.failed' ||
+                e === 'processing.partial',
+            )
+          : [...NOTIFY_WEBHOOK_EVENTS],
+        includeDownloadUrl: dest.includeDownloadUrl !== false,
+        downloadUrlExpiresIn: resolveNotifyWebhookDownloadUrlExpiresIn(
+          dest.downloadUrlExpiresIn,
+        ),
+      })),
       processorCapacity: this.capacityMapFromRows(rows),
     };
   }
@@ -536,6 +587,16 @@ export class OrgProcessorsService {
               typeof body.nsfwThreshold === 'number'
                 ? body.nsfwThreshold
                 : legacy.nsfwThreshold,
+            systemPrompt:
+              typeof body.aiSystemPrompt === 'string'
+                ? body.aiSystemPrompt
+                : (legacy as { aiSystemPrompt?: string }).aiSystemPrompt ||
+                  undefined,
+            userPrompt:
+              typeof body.aiUserPrompt === 'string'
+                ? body.aiUserPrompt
+                : (legacy as { aiUserPrompt?: string }).aiUserPrompt ||
+                  undefined,
             models: {
               vision:
                 body.aiVisionModel === undefined
@@ -628,6 +689,24 @@ export class OrgProcessorsService {
                     'tesseract'
                   ? 'tesseract'
                   : 'openai_compatible',
+            tesseractLang:
+              typeof body.documentOcrTesseractLang === 'string'
+                ? body.documentOcrTesseractLang.trim() || 'eng'
+                : (
+                    legacy as { documentOcrTesseractLang?: string }
+                  ).documentOcrTesseractLang?.trim() || 'eng',
+            systemPrompt:
+              typeof body.documentOcrSystemPrompt === 'string'
+                ? body.documentOcrSystemPrompt
+                : (
+                    legacy as { documentOcrSystemPrompt?: string }
+                  ).documentOcrSystemPrompt || undefined,
+            userPrompt:
+              typeof body.documentOcrUserPrompt === 'string'
+                ? body.documentOcrUserPrompt
+                : (
+                    legacy as { documentOcrUserPrompt?: string }
+                  ).documentOcrUserPrompt || undefined,
             models: {
               vision:
                 body.documentOcrVisionModel === undefined
@@ -652,20 +731,91 @@ export class OrgProcessorsService {
         sortOrder: 100,
         settings: withCapacity(
           {
-            url:
-              typeof body.notifyWebhookUrl === 'string'
-                ? body.notifyWebhookUrl
-                : (legacy as { notifyWebhookUrl?: string }).notifyWebhookUrl ?? '',
-            secret:
-              typeof body.notifyWebhookSecret === 'string'
-                ? body.notifyWebhookSecret
-                : (legacy as { notifyWebhookSecret?: string })
-                    .notifyWebhookSecret ?? '',
-            events: [
-              'processing.completed',
-              'processing.failed',
-              'processing.partial',
-            ],
+            destinations: Array.isArray(body.notifyWebhookDestinations)
+              ? (body.notifyWebhookDestinations as Array<Record<string, unknown>>)
+                  .map((dest, index) => {
+                    const events = Array.isArray(dest.events)
+                      ? (dest.events as string[]).filter(
+                          (e) =>
+                            e === 'processing.completed' ||
+                            e === 'processing.failed' ||
+                            e === 'processing.partial',
+                        )
+                      : [...NOTIFY_WEBHOOK_EVENTS];
+                    const headers = Array.isArray(dest.headers)
+                      ? (dest.headers as Array<{ name?: string; value?: string }>)
+                          .filter(
+                            (h) =>
+                              h &&
+                              typeof h.name === 'string' &&
+                              h.name.trim() &&
+                              typeof h.value === 'string',
+                          )
+                          .map((h) => ({
+                            name: String(h.name).trim(),
+                            value: String(h.value),
+                          }))
+                          .slice(0, 20)
+                      : [];
+                    return {
+                      id:
+                        typeof dest.id === 'string' && dest.id.trim()
+                          ? dest.id.trim()
+                          : `dest-${index + 1}`,
+                      name:
+                        typeof dest.name === 'string' ? dest.name.trim() : '',
+                      enabled: dest.enabled !== false,
+                      url: typeof dest.url === 'string' ? dest.url.trim() : '',
+                      secret:
+                        typeof dest.secret === 'string' ? dest.secret : '',
+                      bearerToken:
+                        typeof dest.bearerToken === 'string'
+                          ? dest.bearerToken
+                          : '',
+                      headers,
+                      events:
+                        events.length > 0 ? events : [...NOTIFY_WEBHOOK_EVENTS],
+                      includeDownloadUrl: dest.includeDownloadUrl !== false,
+                      downloadUrlExpiresIn: resolveNotifyWebhookDownloadUrlExpiresIn(
+                        dest.downloadUrlExpiresIn,
+                      ),
+                    };
+                  })
+                  .filter((dest) => dest.url)
+                  .slice(0, 20)
+              : normalizeNotifyWebhookDestinations(
+                  (legacy as { notifyWebhookDestinations?: unknown })
+                    .notifyWebhookDestinations
+                    ? {
+                        destinations: (
+                          legacy as {
+                            notifyWebhookDestinations: unknown[];
+                          }
+                        ).notifyWebhookDestinations as never,
+                      }
+                    : {
+                        url: (legacy as { notifyWebhookUrl?: string })
+                          .notifyWebhookUrl,
+                        secret: (legacy as { notifyWebhookSecret?: string })
+                          .notifyWebhookSecret,
+                        bearerToken: (
+                          legacy as { notifyWebhookBearerToken?: string }
+                        ).notifyWebhookBearerToken,
+                        headers: (
+                          legacy as {
+                            notifyWebhookHeaders?: Array<{
+                              name: string;
+                              value: string;
+                            }>;
+                          }
+                        ).notifyWebhookHeaders,
+                        events: (legacy as { notifyWebhookEvents?: string[] })
+                          .notifyWebhookEvents as never,
+                        includeDownloadUrl: (
+                          legacy as { notifyWebhookIncludeDownloadUrl?: boolean }
+                        ).notifyWebhookIncludeDownloadUrl,
+                      },
+                ),
           },
           capacityFor('notify.webhook'),
         ),

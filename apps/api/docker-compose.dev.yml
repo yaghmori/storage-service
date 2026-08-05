@@ -55,7 +55,10 @@ x-api-volumes: &api-volumes
   - ./tsconfig.json:/app/apps/api/tsconfig.json:ro
   - ./tsconfig.app.json:/app/apps/api/tsconfig.app.json:ro
   - ./drizzle.config.ts:/app/apps/api/drizzle.config.ts:ro
+  # Mount src + dist: Nest loads @workspace/validation from dist. Host
+  # `pnpm --filter @workspace/validation build` then applies without rebuild.
   - ../../packages/validation/src:/app/packages/validation/src:ro
+  - ../../packages/validation/dist:/app/packages/validation/dist
   - storage-uploads:/tmp/storage-uploads
 
 services:
