@@ -6,7 +6,7 @@ import { Consumer, ConsumerConfig, Kafka, KafkaConfig as KafkaJSConfig, logLevel
 import { DLQService } from './dlq.service';
 import { classifyError } from './error-classifier';
 import { validateEvent, validateEventEnvelope, ValidationResult } from './event-validator';
-import { IIdempotencyService } from './idempotency.service';
+import type { IIdempotencyService } from './idempotency.service';
 import { KafkaConfig } from './kafka-config';
 
 /**

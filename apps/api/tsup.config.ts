@@ -17,5 +17,7 @@ export default defineConfig({
   // Workspace packages are not published to the prod image — force them into the bundle.
   // (tsup leaves node_modules external by default even with bundle: true.)
   noExternal: ['@workspace/validation'],
+  // Nest DI needs design:paramtypes — requires @swc/core (see package.json).
+  // Without it, constructor deps without @Inject() become undefined at runtime.
   external: ['sharp', 'pg-native', 'fluent-ffmpeg', 'pg'],
 });
