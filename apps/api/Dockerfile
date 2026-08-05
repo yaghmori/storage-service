@@ -80,7 +80,7 @@ USER nestjs
 EXPOSE 4000 4002
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD-SHELL if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-4000} || exit 1; fi
+  CMD sh -c 'if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-4000} || exit 1; fi'
 
 # Apply schema (any of these):
 #   docker exec <container> pnpm migrate
