@@ -24,7 +24,10 @@ COPY scripts/migrate.sh ./scripts/migrate.sh
 RUN pnpm install --filter @yaghmori/storage-service-server... --filter @workspace/validation... \
  && pnpm --filter @workspace/validation build \
  && pnpm --filter @yaghmori/storage-service-server build \
- && pnpm rebuild sharp || true
+ && pnpm rebuild sharp || true \
+ && test ! -f apps/api/dist/main.js \
+    || ! grep -q "require('@workspace/validation')" apps/api/dist/main.js \
+    || (echo "ERROR: dist/main.js still requires @workspace/validation — fix tsup noExternal" && exit 1)
 
 # ============================================================================
 # Stage 2: Production runtime (tsup already bundled workspace code)
@@ -77,7 +80,7 @@ USER nestjs
 EXPOSE 4000 4002
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD-SHELL if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-4000} || exit 1; fi
+  CMD sh -c 'if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-4000} || exit 1; fi'
 
 # Apply schema (any of these):
 #   docker exec <container> pnpm migrate

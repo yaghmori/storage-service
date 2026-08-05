@@ -20,7 +20,10 @@ RUN pnpm install --frozen-lockfile || pnpm install
 
 RUN pnpm --filter @workspace/validation build \
  && pnpm --filter @yaghmori/storage-service-server build \
- && pnpm --filter admin build
+ && pnpm --filter admin build \
+ && test ! -f apps/api/dist/main.js \
+    || ! grep -q "require('@workspace/validation')" apps/api/dist/main.js \
+    || (echo "ERROR: dist/main.js still requires @workspace/validation — fix tsup noExternal" && exit 1)
 
 FROM node:20-alpine AS api-deps
 
@@ -29,7 +32,7 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
 
 WORKDIR /app/api
 COPY apps/api/package.json ./
-# tsup bundles @workspace/validation — drop workspace protocol for standalone prod install
+# tsup noExternal bundles @workspace/validation — drop workspace protocol for standalone prod install
 RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; p.scripts={...(p.scripts||{}),migrate:'node dist/migrate.js','db:migrate':'node dist/migrate.js','migrate:prod':'node dist/migrate.js'}; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
  && pnpm install --prod --ignore-scripts \
  && pnpm rebuild sharp || true
@@ -72,7 +75,7 @@ USER nestjs
 EXPOSE 6000 6001 6200
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=50s --retries=3 \
-  CMD nc -z localhost $${PORT:-6000} || exit 1
+  CMD sh -c 'if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-6000} || exit 1; fi'
 
 # Schema upgrade (any of these):
 #   docker exec <container> pnpm migrate
