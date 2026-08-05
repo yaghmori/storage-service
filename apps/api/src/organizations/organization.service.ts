@@ -61,7 +61,19 @@ export class OrganizationService {
   }
 
   async getDefault(): Promise<schema.Organization | null> {
-    return this.getBySlug(DEFAULT_ORG_SLUG);
+    const preferredId = process.env.AUTH_DEFAULT_ORG_ID?.trim();
+    if (preferredId) {
+      const byId = await this.getById(preferredId);
+      if (byId) return byId;
+    }
+    const bySlug = await this.getBySlug(DEFAULT_ORG_SLUG);
+    if (bySlug) return bySlug;
+    const [first] = await this.db
+      .select()
+      .from(schema.organizations)
+      .orderBy(asc(schema.organizations.createdAt))
+      .limit(1);
+    return first ?? null;
   }
 
   async resolveOrgRef(input: {
@@ -94,14 +106,28 @@ export class OrganizationService {
     return bySlug.id;
   }
 
+  /**
+   * Create a bootstrap org only when the table is empty.
+   * Does not recreate a deleted seed/"default" org while others exist.
+   */
   async ensureDefault(frontendBaseUrl?: string | null): Promise<schema.Organization> {
     const existing = await this.getDefault();
     if (existing) return existing;
+
+    const [anyOrg] = await this.db
+      .select()
+      .from(schema.organizations)
+      .limit(1);
+    if (anyOrg) return anyOrg;
+
+    const slug =
+      (process.env.SEED_ORG_SLUG || DEFAULT_ORG_SLUG).trim() || DEFAULT_ORG_SLUG;
+    const name = (process.env.SEED_ORG_NAME || 'Default').trim() || 'Default';
     const [row] = await this.db
       .insert(schema.organizations)
       .values({
-        slug: DEFAULT_ORG_SLUG,
-        name: 'Default',
+        slug,
+        name,
         status: 'active',
         frontendBaseUrl: frontendBaseUrl?.trim() || null,
         supportEmail: process.env.SUPPORT_EMAIL || 'support@example.com',
@@ -242,9 +268,6 @@ export class OrganizationService {
   async delete(id: string): Promise<boolean> {
     const existing = await this.getById(id);
     if (!existing) return false;
-    if (existing.slug === DEFAULT_ORG_SLUG) {
-      throw new BadRequestException('Cannot delete the default organization');
-    }
     await this.db.delete(schema.organizations).where(eq(schema.organizations.id, id));
     return true;
   }

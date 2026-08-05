@@ -93,7 +93,13 @@ export function useTestProviderMutation(orgId?: string) {
     mutationFn: async (id: string) => {
       const path = replacePathParams(ProvidersEndpoints.Test, id);
       const response = await upstream.post(path, {}, { params: { orgId } });
-      return unwrapApiData<{ ok: boolean; type: string }>(response.data);
+      return unwrapApiData<{
+        ok: boolean;
+        type: string;
+        latencyMs: number;
+        message: string;
+        details?: Record<string, unknown>;
+      }>(response.data);
     },
   });
 }

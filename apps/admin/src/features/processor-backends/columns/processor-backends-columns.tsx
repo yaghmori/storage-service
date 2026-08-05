@@ -15,7 +15,7 @@ import {
   ProcessorBackendKind,
   ProcessorBackendKindLabels,
 } from "@workspace/validation";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Plug, Trash2 } from "lucide-react";
 import type { ProcessorBackendRow } from "../hooks/use-processor-backends-queries";
 
 const KIND_FILTER_OPTIONS = [
@@ -42,6 +42,7 @@ const multiSelectIncludes: FilterFn<ProcessorBackendRow> = (
 export function createProcessorBackendsColumns(
   onEdit: (row: ProcessorBackendRow) => void,
   onDelete: (row: ProcessorBackendRow) => void,
+  onTest?: (row: ProcessorBackendRow) => void,
 ): ColumnDef<ProcessorBackendRow>[] {
   return [
     {
@@ -144,6 +145,12 @@ export function createProcessorBackendsColumns(
               <Pencil className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
+            {onTest ? (
+              <DropdownMenuItem onClick={() => onTest(row.original)}>
+                <Plug className="mr-2 h-4 w-4" />
+                Test connection
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               onClick={() => onDelete(row.original)}
               className="text-destructive focus:text-destructive"

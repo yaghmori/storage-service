@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq, ne } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { createConnection } from 'net';
 import {
   decryptSecret,
   encryptSecret,
@@ -384,6 +385,119 @@ export class ProcessorBackendsService {
       baseUrl: resolved.baseUrl,
       apiKey: resolved.apiKey,
       timeoutMs: Math.min(resolved.timeoutMs, 30_000),
+    });
+  }
+
+  /**
+   * Live connectivity probe for admin "Test connection".
+   * - openai_compatible: GET /models
+   * - clamav: TCP zPING → PONG
+   */
+  async testConnectivity(
+    orgId: string,
+    backendId: string,
+  ): Promise<{
+    ok: boolean;
+    kind: string;
+    latencyMs: number;
+    message: string;
+    details?: Record<string, unknown>;
+  }> {
+    const started = Date.now();
+    const row = await this.getById(backendId, orgId);
+    if (!row) {
+      throw new NotFoundException('Processor backend not found');
+    }
+
+    try {
+      if (row.kind === 'clamav') {
+        const cfg = await this.resolveClamav(orgId, backendId);
+        if (!cfg) {
+          throw new Error('ClamAV host/port is not configured on this backend');
+        }
+        await this.pingClamav(cfg.host, cfg.port, Math.min(cfg.timeoutMs, 15_000));
+        const latencyMs = Date.now() - started;
+        return {
+          ok: true,
+          kind: row.kind,
+          latencyMs,
+          message: row.isActive
+            ? `ClamAV PONG from ${cfg.host}:${cfg.port} (${latencyMs}ms)`
+            : `ClamAV PONG (${latencyMs}ms) — backend is inactive`,
+          details: { host: cfg.host, port: cfg.port, isActive: row.isActive },
+        };
+      }
+
+      if (row.kind === 'openai_compatible') {
+        const models = await this.listModels(orgId, backendId);
+        const latencyMs = Date.now() - started;
+        return {
+          ok: true,
+          kind: row.kind,
+          latencyMs,
+          message: row.isActive
+            ? `Reached /models (${models.length} model(s), ${latencyMs}ms)`
+            : `Reached /models (${models.length} model(s), ${latencyMs}ms) — backend is inactive`,
+          details: {
+            modelCount: models.length,
+            sample: models.slice(0, 5).map((m) => m.id),
+            isActive: row.isActive,
+          },
+        };
+      }
+
+      throw new Error(`Unsupported backend kind: ${row.kind}`);
+    } catch (error) {
+      return {
+        ok: false,
+        kind: row.kind,
+        latencyMs: Date.now() - started,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private pingClamav(
+    host: string,
+    port: number,
+    timeoutMs: number,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let response = '';
+
+      const finish = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        socket.destroy();
+        if (err) reject(err);
+        else resolve();
+      };
+
+      const timer = setTimeout(
+        () => finish(new Error(`ClamAV ping timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+
+      const socket = createConnection({ host, port }, () => {
+        socket.write('zPING\0');
+      });
+
+      socket.on('data', (chunk: Buffer) => {
+        response += chunk.toString('utf8');
+        if (/PONG/i.test(response.replace(/\0/g, ''))) {
+          finish();
+        }
+      });
+      socket.on('error', (err) => finish(err));
+      socket.on('end', () => {
+        if (/PONG/i.test(response.replace(/\0/g, ''))) finish();
+        else
+          finish(
+            new Error(`Unexpected ClamAV reply: ${response || '(empty)'}`),
+          );
+      });
     });
   }
 

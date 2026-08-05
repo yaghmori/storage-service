@@ -102,6 +102,26 @@ export function useDeleteProcessorBackendMutation(orgId?: string) {
   });
 }
 
+export function useTestProcessorBackendMutation(orgId?: string) {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const path = replacePathParams(
+        ProcessorBackendsEndpoints.Test,
+        orgId!,
+        id,
+      );
+      const response = await upstream.post(path, {});
+      return unwrapApiData<{
+        ok: boolean;
+        kind: string;
+        latencyMs: number;
+        message: string;
+        details?: Record<string, unknown>;
+      }>(response.data);
+    },
+  });
+}
+
 export function useProcessorBackendModelsQuery(
   orgId?: string,
   backendId?: string | null,

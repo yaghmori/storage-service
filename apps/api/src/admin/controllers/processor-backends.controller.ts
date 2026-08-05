@@ -149,6 +149,14 @@ export class ProcessorBackendsController {
     return { items, total: items.length };
   }
 
+  @Post(':id/test')
+  async test(
+    @Param('orgId') orgId: string,
+    @Param('id') id: string,
+  ) {
+    return this.backends.testConnectivity(orgId, id);
+  }
+
   @Get(':id')
   async get(@Param('orgId') orgId: string, @Param('id') id: string) {
     const row = await this.backends.getById(id, orgId);

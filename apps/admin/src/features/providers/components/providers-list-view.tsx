@@ -54,9 +54,10 @@ export function ProvidersListView({
           testMutation.mutate(row.id, {
             onSuccess: (result) =>
               toast[result.ok ? "success" : "error"](
-                result.ok
-                  ? `Provider OK (${result.type})`
-                  : "Provider test failed",
+                result.message ||
+                  (result.ok
+                    ? `Provider OK (${result.type})`
+                    : "Provider test failed"),
               ),
             onError: (err) =>
               toast.error(extractApiErrorMessage(err, "Test failed")),
@@ -181,7 +182,21 @@ export function ProvidersListView({
             initialValues={editing}
             submitLabel="Save changes"
             isSubmitting={updateMutation.isPending}
+            isTesting={testMutation.isPending}
             onCancel={() => setEditing(null)}
+            onTest={() =>
+              testMutation.mutate(editing.id, {
+                onSuccess: (result) =>
+                  toast[result.ok ? "success" : "error"](
+                    result.message ||
+                      (result.ok
+                        ? `Provider OK (${result.type})`
+                        : "Provider test failed"),
+                  ),
+                onError: (err) =>
+                  toast.error(extractApiErrorMessage(err, "Test failed")),
+              })
+            }
             onSubmit={(payload) =>
               updateMutation.mutate(
                 { id: editing.id, input: payload },

@@ -74,6 +74,7 @@ export const ProcessorBackendsEndpoints = {
   List: "admin/api/orgs/{0}/processor-backends",
   Detail: "admin/api/orgs/{0}/processor-backends/{1}",
   Models: "admin/api/orgs/{0}/processor-backends/{1}/models",
+  Test: "admin/api/orgs/{0}/processor-backends/{1}/test",
   Create: "admin/api/orgs/{0}/processor-backends",
   Update: "admin/api/orgs/{0}/processor-backends/{1}",
   Delete: "admin/api/orgs/{0}/processor-backends/{1}",
