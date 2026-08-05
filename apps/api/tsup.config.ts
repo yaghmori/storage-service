@@ -14,5 +14,8 @@ export default defineConfig({
   bundle: true,
   minify: false,
   treeshake: true,
+  // Workspace packages are not published to the prod image — force them into the bundle.
+  // (tsup leaves node_modules external by default even with bundle: true.)
+  noExternal: ['@workspace/validation'],
   external: ['sharp', 'pg-native', 'fluent-ffmpeg', 'pg'],
 });
