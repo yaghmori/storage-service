@@ -365,7 +365,10 @@ function toForm(settings: OrgProcessingSettings): FormState {
 }
 
 function normalizeDestinationForm(
-  dest: Partial<WebhookDestinationForm> & { id?: string },
+  dest: Omit<Partial<WebhookDestinationForm>, "downloadUrlExpiresIn"> & {
+    id?: string;
+    downloadUrlExpiresIn?: string | number | null;
+  },
   index: number,
 ): WebhookDestinationForm {
   const events = Array.isArray(dest.events)
