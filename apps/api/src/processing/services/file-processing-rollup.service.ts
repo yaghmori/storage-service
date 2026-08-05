@@ -19,11 +19,14 @@ export class FileProcessingRollupService {
   constructor(
     @Inject('DRIZZLE_DB')
     private readonly db: NodePgDatabase<typeof schema>,
+    @Inject(OrgProcessorsService)
     private readonly orgProcessors: OrgProcessorsService,
     @Optional()
     @Inject(forwardRef(() => QueuesService))
     private readonly queues?: QueuesService,
-    @Optional() private readonly lifecycleEvents?: StorageLifecycleEventsService,
+    @Optional()
+    @Inject(StorageLifecycleEventsService)
+    private readonly lifecycleEvents?: StorageLifecycleEventsService,
   ) {}
 
   async refresh(fileId: string, orgId: string) {

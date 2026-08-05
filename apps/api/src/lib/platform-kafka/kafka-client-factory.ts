@@ -4,7 +4,8 @@
 import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import Redis from 'ioredis';
 import { DLQService } from './dlq.service';
-import { IdempotencyService, IIdempotencyService, NoOpIdempotencyService } from './idempotency.service';
+import type { IIdempotencyService } from './idempotency.service';
+import { IdempotencyService, NoOpIdempotencyService } from './idempotency.service';
 import { KafkaClient } from './kafka-client';
 import { createKafkaConfigFromEnv, KafkaConfig } from './kafka-config';
 

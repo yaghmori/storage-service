@@ -1,7 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { MESSAGE_PATTERNS } from '../lib/contracts';
-import { HealthCheckRequest, HealthCheckResponse } from '../lib/contracts';
+import type { HealthCheckRequest, HealthCheckResponse } from '../lib/contracts';
 import { HealthService } from './health.service';
 
 /**
