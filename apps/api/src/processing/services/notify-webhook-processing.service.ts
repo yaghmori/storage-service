@@ -7,7 +7,10 @@ import {
 import {
   DEFAULT_NOTIFY_WEBHOOK_SETTINGS,
   NOTIFY_WEBHOOK_EVENTS,
+  normalizeNotifyWebhookDestinations,
+  resolveNotifyWebhookDownloadUrlExpiresIn,
   ProcessorKey,
+  type NotifyWebhookDestination,
   type NotifyWebhookEvent,
   type NotifyWebhookProcessorSettings,
 } from '@workspace/validation';
@@ -20,7 +23,7 @@ import { OrgProcessorsService } from './org-processors.service';
 
 const WEBHOOK_TIMEOUT_MS = 30_000;
 
-type NotifySettings = NotifyWebhookProcessorSettings;
+type Destination = NotifyWebhookDestination & { id: string };
 
 @Injectable()
 export class NotifyWebhookProcessingService {
@@ -42,8 +45,11 @@ export class NotifyWebhookProcessingService {
     jobId?: string;
   }) {
     const settings = await this.loadSettings(input.orgId);
-    const url = settings.url?.trim() ?? '';
-    if (!url) {
+    const destinations = normalizeNotifyWebhookDestinations(settings).filter(
+      (dest) => dest.enabled !== false && !!dest.url?.trim(),
+    );
+
+    if (destinations.length === 0) {
       await this.results.upsert({
         orgId: input.orgId,
         fileId: input.fileId,
@@ -57,14 +63,17 @@ export class NotifyWebhookProcessingService {
     }
 
     const event = `processing.${input.processingStatus}` as NotifyWebhookEvent;
-    const configuredEvents = this.resolveEvents(settings.events);
-    if (configuredEvents.length && !configuredEvents.includes(event)) {
+    const matched = destinations.filter((dest) =>
+      this.resolveEvents(dest.events).includes(event),
+    );
+
+    if (matched.length === 0) {
       await this.results.upsert({
         orgId: input.orgId,
         fileId: input.fileId,
         processorKey: ProcessorKey.NOTIFY_WEBHOOK,
         status: 'skipped',
-        data: { reason: 'event_filtered', event },
+        data: { reason: 'event_filtered', event, destinations: destinations.length },
         jobId: input.jobId ?? null,
         processedAt: new Date(),
       });
@@ -79,39 +88,92 @@ export class NotifyWebhookProcessingService {
         error: result.error,
       }));
 
-    const fileMeta = await this.buildFileMeta(
-      input.fileId,
-      input.orgId,
-      settings.includeDownloadUrl !== false,
-    );
-
-    const payload = {
+    const basePayload = {
       event,
       fileId: input.fileId,
       orgId: input.orgId,
       processingStatus: input.processingStatus,
       processingError: input.processingError ?? null,
-      file: fileMeta,
       processorSummary,
       sentAt: new Date().toISOString(),
     };
 
-    const delivery = await this.deliver(url, settings, payload);
-    await this.log(
-      input.jobId,
-      delivery.ok ? 'info' : 'error',
-      `Webhook response ${delivery.statusCode}: ${delivery.responseText.slice(0, 300)}`,
-    );
+    const deliveries: Array<{
+      id: string;
+      name: string;
+      url: string;
+      ok: boolean;
+      statusCode: number;
+      error?: string;
+    }> = [];
 
-    if (!delivery.ok) {
-      throw new Error(`Webhook failed with HTTP ${delivery.statusCode}`);
+    for (const dest of matched) {
+      const fileMeta = await this.buildFileMeta(
+        input.fileId,
+        input.orgId,
+        dest.includeDownloadUrl !== false,
+        resolveNotifyWebhookDownloadUrlExpiresIn(dest.downloadUrlExpiresIn),
+      );
+      const payload = { ...basePayload, file: fileMeta, destinationId: dest.id };
+      try {
+        const result = await this.deliver(dest.url!.trim(), dest, payload);
+        await this.log(
+          input.jobId,
+          result.ok ? 'info' : 'error',
+          `${dest.name || dest.id} → HTTP ${result.statusCode}: ${result.responseText.slice(0, 200)}`,
+        );
+        deliveries.push({
+          id: dest.id,
+          name: dest.name || dest.id,
+          url: dest.url!.trim(),
+          ok: result.ok,
+          statusCode: result.statusCode,
+          error: result.ok
+            ? undefined
+            : result.responseText.slice(0, 300) || `HTTP ${result.statusCode}`,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await this.log(input.jobId, 'error', `${dest.name || dest.id} → ${message}`);
+        deliveries.push({
+          id: dest.id,
+          name: dest.name || dest.id,
+          url: dest.url!.trim(),
+          ok: false,
+          statusCode: 0,
+          error: message,
+        });
+      }
     }
 
+    const failed = deliveries.filter((d) => !d.ok);
     const data = {
       event,
-      statusCode: delivery.statusCode,
-      url,
+      destinations: deliveries,
+      succeeded: deliveries.length - failed.length,
+      failed: failed.length,
     };
+
+    if (failed.length > 0) {
+      await this.results.upsert({
+        orgId: input.orgId,
+        fileId: input.fileId,
+        processorKey: ProcessorKey.NOTIFY_WEBHOOK,
+        status: 'failed',
+        data,
+        error: failed
+          .map((d) => `${d.name}: ${d.error ?? `HTTP ${d.statusCode}`}`)
+          .join('; ')
+          .slice(0, 1000),
+        jobId: input.jobId ?? null,
+        processedAt: new Date(),
+      });
+      if (input.jobId) await this.jobs.setOutput(input.jobId, data);
+      throw new Error(
+        `Webhook failed for ${failed.length}/${deliveries.length} destination(s)`,
+      );
+    }
+
     await this.results.upsert({
       orgId: input.orgId,
       fileId: input.fileId,
@@ -127,33 +189,49 @@ export class NotifyWebhookProcessingService {
   }
 
   /**
-   * Fire a sample (or real-file) webhook using saved settings and/or overrides.
-   * Used by the admin "Send sample" action — does not create a processing job.
+   * Fire a sample webhook to one destination (by id or inline override).
    */
   async sendTest(input: {
     orgId: string;
-    overrides?: Partial<NotifySettings> & { event?: NotifyWebhookEvent };
+    destinationId?: string | null;
+    destination?: Partial<NotifyWebhookDestination> | null;
+    event?: NotifyWebhookEvent;
     fileId?: string | null;
   }) {
     const saved = await this.loadSettings(input.orgId, { requireEnabled: false });
-    const merged: NotifySettings = {
-      ...DEFAULT_NOTIFY_WEBHOOK_SETTINGS,
-      ...saved,
-      ...Object.fromEntries(
-        Object.entries(input.overrides ?? {}).filter(
-          ([, value]) => value !== undefined,
-        ),
-      ),
-    };
-    const url = merged.url?.trim() ?? '';
-    if (!url) {
-      throw new BadRequestException('Webhook URL is required');
+    const destinations = normalizeNotifyWebhookDestinations(saved);
+
+    let dest: Destination | null = null;
+    if (input.destination?.url?.trim()) {
+      dest = {
+        id: input.destination.id?.trim() || 'test',
+        name: input.destination.name || 'Test',
+        enabled: true,
+        url: input.destination.url.trim(),
+        secret: input.destination.secret ?? '',
+        bearerToken: input.destination.bearerToken ?? '',
+        headers: input.destination.headers ?? [],
+        events: input.destination.events ?? [...NOTIFY_WEBHOOK_EVENTS],
+        includeDownloadUrl: input.destination.includeDownloadUrl !== false,
+        downloadUrlExpiresIn: input.destination.downloadUrlExpiresIn,
+      };
+    } else if (input.destinationId) {
+      dest =
+        destinations.find((d) => d.id === input.destinationId) ?? null;
+    } else if (destinations.length === 1) {
+      dest = destinations[0]!;
+    }
+
+    if (!dest?.url?.trim()) {
+      throw new BadRequestException(
+        'Webhook destination URL is required (pick a destination or pass url)',
+      );
     }
 
     const event =
-      input.overrides?.event &&
-      (NOTIFY_WEBHOOK_EVENTS as readonly string[]).includes(input.overrides.event)
-        ? input.overrides.event
+      input.event &&
+      (NOTIFY_WEBHOOK_EVENTS as readonly string[]).includes(input.event)
+        ? input.event
         : 'processing.completed';
 
     let fileMeta: Record<string, unknown>;
@@ -168,7 +246,8 @@ export class NotifyWebhookProcessingService {
       fileMeta = await this.buildFileMeta(
         fileId,
         input.orgId,
-        merged.includeDownloadUrl !== false,
+        dest.includeDownloadUrl !== false,
+        resolveNotifyWebhookDownloadUrlExpiresIn(dest.downloadUrlExpiresIn),
       );
       processorSummary = (await this.results.findByFileId(fileId))
         .filter((result) => result.processorKey !== ProcessorKey.NOTIFY_WEBHOOK)
@@ -187,11 +266,7 @@ export class NotifyWebhookProcessingService {
         downloadUrlExpiresIn: null,
       };
       processorSummary = [
-        {
-          processorKey: 'metadata.exif',
-          status: 'completed',
-          error: null,
-        },
+        { processorKey: 'metadata.exif', status: 'completed', error: null },
       ];
     }
 
@@ -203,15 +278,18 @@ export class NotifyWebhookProcessingService {
       processingError: null,
       file: fileMeta,
       processorSummary,
+      destinationId: dest.id,
       sample: true,
       sentAt: new Date().toISOString(),
     };
 
-    const delivery = await this.deliver(url, merged, payload);
+    const delivery = await this.deliver(dest.url.trim(), dest, payload);
     return {
       ok: delivery.ok,
       statusCode: delivery.statusCode,
-      url,
+      url: dest.url.trim(),
+      destinationId: dest.id,
+      destinationName: dest.name || dest.id,
       event,
       responsePreview: delivery.responseText.slice(0, 500),
       payload,
@@ -221,7 +299,7 @@ export class NotifyWebhookProcessingService {
   private async loadSettings(
     orgId: string,
     options?: { requireEnabled?: boolean },
-  ): Promise<NotifySettings> {
+  ): Promise<NotifyWebhookProcessorSettings> {
     const requireEnabled = options?.requireEnabled !== false;
     const processor = (await this.orgProcessors.ensureDefaults(orgId)).find(
       (row) =>
@@ -230,11 +308,13 @@ export class NotifyWebhookProcessingService {
     );
     return {
       ...DEFAULT_NOTIFY_WEBHOOK_SETTINGS,
-      ...((processor?.settings ?? {}) as NotifySettings),
+      ...((processor?.settings ?? {}) as NotifyWebhookProcessorSettings),
     };
   }
 
-  private resolveEvents(events: NotifySettings['events']): NotifyWebhookEvent[] {
+  private resolveEvents(
+    events: NotifyWebhookDestination['events'],
+  ): NotifyWebhookEvent[] {
     if (!Array.isArray(events) || events.length === 0) {
       return [...NOTIFY_WEBHOOK_EVENTS];
     }
@@ -247,16 +327,21 @@ export class NotifyWebhookProcessingService {
     fileId: string,
     orgId: string,
     includeDownloadUrl: boolean,
+    downloadUrlExpiresIn?: number,
   ): Promise<Record<string, unknown>> {
     try {
       const file = await this.files.findById(fileId, orgId);
       let downloadUrl: string | null = null;
-      let downloadUrlExpiresIn: number | null = null;
+      let expiresIn: number | null = null;
       if (includeDownloadUrl && this.signedUrls) {
         try {
-          const signed = await this.signedUrls.generateSignedUrl(fileId);
+          const signed = await this.signedUrls.generateSignedUrl(
+            fileId,
+            undefined,
+            downloadUrlExpiresIn,
+          );
           downloadUrl = signed.url;
-          downloadUrlExpiresIn = signed.expiresIn;
+          expiresIn = signed.expiresIn;
         } catch (error) {
           this.logger.warn(
             `Signed URL for webhook failed: ${
@@ -270,7 +355,7 @@ export class NotifyWebhookProcessingService {
         mimeType: file.mimeType,
         size: file.size,
         downloadUrl,
-        downloadUrlExpiresIn,
+        downloadUrlExpiresIn: expiresIn,
       };
     } catch (error) {
       this.logger.warn(
@@ -290,7 +375,7 @@ export class NotifyWebhookProcessingService {
 
   private async deliver(
     url: string,
-    settings: NotifySettings,
+    dest: NotifyWebhookDestination,
     payload: Record<string, unknown>,
   ): Promise<{ ok: boolean; statusCode: number; responseText: string }> {
     const body = JSON.stringify(payload);
@@ -299,30 +384,31 @@ export class NotifyWebhookProcessingService {
       'User-Agent': 'storage-service-notify-webhook',
     };
 
-    if (Array.isArray(settings.headers)) {
-      for (const header of settings.headers) {
+    if (Array.isArray(dest.headers)) {
+      for (const header of dest.headers) {
         const name = header?.name?.trim();
         if (!name) continue;
-        // Don't let custom headers override Content-Type / signature
         if (/^content-type$/i.test(name)) continue;
         headers[name] = String(header.value ?? '');
       }
     }
 
-    const bearer = settings.bearerToken?.trim();
+    const bearer = dest.bearerToken?.trim();
     if (bearer) {
       headers.Authorization = bearer.toLowerCase().startsWith('bearer ')
         ? bearer
         : `Bearer ${bearer}`;
     }
 
-    if (typeof settings.secret === 'string' && settings.secret.trim()) {
-      headers['X-Storage-Signature'] = createHmac('sha256', settings.secret)
+    if (typeof dest.secret === 'string' && dest.secret.trim()) {
+      headers['X-Storage-Signature'] = createHmac('sha256', dest.secret)
         .update(body)
         .digest('hex');
     }
 
-    this.logger.log(`POST ${url} event=${String(payload.event ?? '')}`);
+    this.logger.log(
+      `POST ${url} event=${String(payload.event ?? '')} dest=${dest.id ?? ''}`,
+    );
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
     try {
@@ -339,8 +425,7 @@ export class NotifyWebhookProcessingService {
         responseText,
       };
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Webhook request failed: ${message}`);
     } finally {
       clearTimeout(timer);

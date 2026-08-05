@@ -48,14 +48,21 @@ export type OrgProcessingSettings = {
   enableDocumentOcr: boolean;
   documentOcrEngine: 'openai_compatible' | 'tesseract';
   enableNotifyWebhook: boolean;
-  notifyWebhookUrl: string;
-  notifyWebhookSecret: string;
-  notifyWebhookBearerToken: string;
-  notifyWebhookHeaders: Array<{ name: string; value: string }>;
-  notifyWebhookEvents: Array<
-    'processing.completed' | 'processing.failed' | 'processing.partial'
-  >;
-  notifyWebhookIncludeDownloadUrl: boolean;
+  notifyWebhookDestinations: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    url: string;
+    secret: string;
+    bearerToken: string;
+    headers: Array<{ name: string; value: string }>;
+    events: Array<
+      'processing.completed' | 'processing.failed' | 'processing.partial'
+    >;
+    includeDownloadUrl: boolean;
+    /** Seconds; omit to use provider default / 1h */
+    downloadUrlExpiresIn?: number;
+  }>;
 };
 
 /** Optional per-upload overrides (partial). */
@@ -100,16 +107,7 @@ export const PLATFORM_PROCESSING_DEFAULTS: OrgProcessingSettings = {
   enableDocumentOcr: false,
   documentOcrEngine: 'openai_compatible',
   enableNotifyWebhook: false,
-  notifyWebhookUrl: '',
-  notifyWebhookSecret: '',
-  notifyWebhookBearerToken: '',
-  notifyWebhookHeaders: [],
-  notifyWebhookEvents: [
-    'processing.completed',
-    'processing.failed',
-    'processing.partial',
-  ],
-  notifyWebhookIncludeDownloadUrl: true,
+  notifyWebhookDestinations: [],
 };
 
 const METADATA_KEY = 'processing';
@@ -423,39 +421,12 @@ export function mergeProcessingSettings(
         base.enableNotifyWebhook,
       );
     }
-    if (layer.notifyWebhookUrl !== undefined) {
-      base.notifyWebhookUrl =
-        typeof layer.notifyWebhookUrl === 'string'
-          ? layer.notifyWebhookUrl
-          : base.notifyWebhookUrl;
-    }
-    if (layer.notifyWebhookSecret !== undefined) {
-      base.notifyWebhookSecret =
-        typeof layer.notifyWebhookSecret === 'string'
-          ? layer.notifyWebhookSecret
-          : base.notifyWebhookSecret;
-    }
-    if (layer.notifyWebhookBearerToken !== undefined) {
-      base.notifyWebhookBearerToken =
-        typeof layer.notifyWebhookBearerToken === 'string'
-          ? layer.notifyWebhookBearerToken
-          : base.notifyWebhookBearerToken;
-    }
-    if (layer.notifyWebhookHeaders !== undefined) {
-      base.notifyWebhookHeaders = Array.isArray(layer.notifyWebhookHeaders)
-        ? (layer.notifyWebhookHeaders as Array<{ name: string; value: string }>)
-        : base.notifyWebhookHeaders;
-    }
-    if (layer.notifyWebhookEvents !== undefined) {
-      base.notifyWebhookEvents = Array.isArray(layer.notifyWebhookEvents)
-        ? (layer.notifyWebhookEvents as OrgProcessingSettings['notifyWebhookEvents'])
-        : base.notifyWebhookEvents;
-    }
-    if (layer.notifyWebhookIncludeDownloadUrl !== undefined) {
-      base.notifyWebhookIncludeDownloadUrl = asBool(
-        layer.notifyWebhookIncludeDownloadUrl,
-        base.notifyWebhookIncludeDownloadUrl,
-      );
+    if (layer.notifyWebhookDestinations !== undefined) {
+      base.notifyWebhookDestinations = Array.isArray(
+        layer.notifyWebhookDestinations,
+      )
+        ? (layer.notifyWebhookDestinations as OrgProcessingSettings['notifyWebhookDestinations'])
+        : base.notifyWebhookDestinations;
     }
   }
 

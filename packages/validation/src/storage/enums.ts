@@ -32,7 +32,7 @@ export const ProcessorKeyLabels: Record<string, string> = {
   [ProcessorKey.DOCUMENT_PREVIEW]: "Document preview",
   [ProcessorKey.DOCUMENT_TEXT]: "Document text",
   [ProcessorKey.DOCUMENT_OCR]: "Document OCR",
-  [ProcessorKey.NOTIFY_WEBHOOK]: "Completion webhook",
+  [ProcessorKey.NOTIFY_WEBHOOK]: "Webhook",
 };
 
 export const ProcessorKeyDescriptions: Record<string, string> = {

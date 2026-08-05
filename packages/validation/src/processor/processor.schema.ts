@@ -216,7 +216,21 @@ export const notifyWebhookHeaderSchema = z.object({
   value: z.string().max(2_048),
 });
 
-export const notifyWebhookProcessorSettingsSchema = z.object({
+/** Empty → undefined; otherwise int seconds in [60, 7d] for signed download URLs. */
+const optionalDownloadUrlExpiresInSchema = z.preprocess(
+  (v) => (v === "" || v === null || v === undefined ? undefined : v),
+  z
+    .number()
+    .int("Must be a whole number")
+    .min(60, "Minimum 60 seconds")
+    .max(604_800, "Maximum 7 days (604800 seconds)")
+    .optional(),
+);
+
+export const notifyWebhookDestinationSchema = z.object({
+  id: z.string().trim().min(1).max(64).optional(),
+  name: z.string().trim().max(128).optional().or(z.literal("")),
+  enabled: z.boolean().optional(),
   url: z
     .string()
     .trim()
@@ -224,18 +238,91 @@ export const notifyWebhookProcessorSettingsSchema = z.object({
     .optional()
     .or(z.literal("")),
   secret: z.string().max(512).optional().or(z.literal("")),
-  /** Optional Bearer token → Authorization: Bearer … */
   bearerToken: z.string().max(2_048).optional().or(z.literal("")),
-  /** Extra HTTP headers (e.g. for n8n / API gateways). */
   headers: z.array(notifyWebhookHeaderSchema).max(20).optional(),
   events: z.array(z.enum(NOTIFY_WEBHOOK_EVENTS)).optional(),
-  /** Include a short-lived signed download URL in the payload (default true). */
   includeDownloadUrl: z.boolean().optional(),
+  /** Signed download URL TTL in seconds. Empty = provider default (or 1h). */
+  downloadUrlExpiresIn: optionalDownloadUrlExpiresInSchema,
+});
+
+export type NotifyWebhookDestination = z.infer<
+  typeof notifyWebhookDestinationSchema
+>;
+
+export const notifyWebhookProcessorSettingsSchema = z.object({
+  /** Preferred: one or more webhook destinations (n8n, Slack, custom). */
+  destinations: z.array(notifyWebhookDestinationSchema).max(20).optional(),
+  /**
+   * Legacy single-destination fields (still accepted).
+   * Normalized into `destinations` at runtime when destinations is empty.
+   */
+  url: z
+    .string()
+    .trim()
+    .url()
+    .optional()
+    .or(z.literal("")),
+  secret: z.string().max(512).optional().or(z.literal("")),
+  bearerToken: z.string().max(2_048).optional().or(z.literal("")),
+  headers: z.array(notifyWebhookHeaderSchema).max(20).optional(),
+  events: z.array(z.enum(NOTIFY_WEBHOOK_EVENTS)).optional(),
+  includeDownloadUrl: z.boolean().optional(),
+  downloadUrlExpiresIn: optionalDownloadUrlExpiresInSchema,
 });
 
 export type NotifyWebhookProcessorSettings = z.infer<
   typeof notifyWebhookProcessorSettingsSchema
 >;
+
+/** Resolve destinations, migrating legacy flat url/secret/… when needed. */
+export function normalizeNotifyWebhookDestinations(
+  settings: NotifyWebhookProcessorSettings | Record<string, unknown> | null | undefined,
+): Array<NotifyWebhookDestination & { id: string }> {
+  const raw = (settings ?? {}) as NotifyWebhookProcessorSettings;
+  if (Array.isArray(raw.destinations) && raw.destinations.length > 0) {
+    return raw.destinations.map((dest, index) => ({
+      ...dest,
+      id: dest.id?.trim() || `dest-${index + 1}`,
+      enabled: dest.enabled !== false,
+    }));
+  }
+
+  const legacyUrl =
+    typeof raw.url === "string" && raw.url.trim() ? raw.url.trim() : "";
+  if (!legacyUrl) return [];
+
+  return [
+    {
+      id: "legacy-default",
+      name: "Default",
+      enabled: true,
+      url: legacyUrl,
+      secret: typeof raw.secret === "string" ? raw.secret : "",
+      bearerToken: typeof raw.bearerToken === "string" ? raw.bearerToken : "",
+      headers: Array.isArray(raw.headers) ? raw.headers : [],
+      events: Array.isArray(raw.events) ? raw.events : [...NOTIFY_WEBHOOK_EVENTS],
+      includeDownloadUrl: raw.includeDownloadUrl !== false,
+      downloadUrlExpiresIn: raw.downloadUrlExpiresIn,
+    },
+  ];
+}
+
+/** Coerce a destination/provider TTL override; invalid → undefined (use default). */
+export function resolveNotifyWebhookDownloadUrlExpiresIn(
+  value: unknown,
+): number | undefined {
+  const n =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value)
+        : NaN;
+  if (typeof n !== "number" || isNaN(n)) return undefined;
+  const seconds = Math.floor(n);
+  if (seconds < 60 || seconds > 604_800) return undefined;
+  return seconds;
+}
 
 export const orgProcessorUpsertSchema = z.object({
   processorKey: z.string().min(1).max(128),
@@ -298,12 +385,14 @@ export const DEFAULT_DOCUMENT_OCR_SETTINGS: DocumentOcrProcessorSettings = {
 };
 
 export const DEFAULT_NOTIFY_WEBHOOK_SETTINGS: NotifyWebhookProcessorSettings = {
+  destinations: [],
   url: "",
   secret: "",
   bearerToken: "",
   headers: [],
   events: ["processing.completed", "processing.failed", "processing.partial"],
   includeDownloadUrl: true,
+  downloadUrlExpiresIn: undefined,
 };
 
 export const BUILTIN_ORG_PROCESSOR_DEFAULTS: Array<{

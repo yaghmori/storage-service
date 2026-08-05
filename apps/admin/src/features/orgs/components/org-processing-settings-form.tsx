@@ -46,7 +46,14 @@ import {
   ProcessorKeyLabels,
   type NotifyWebhookEvent,
 } from "@workspace/validation";
-import { Check, ChevronsUpDown, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -59,6 +66,20 @@ import {
 
 /** Sentinel so the combobox stays controlled when no backend is chosen. */
 const NONE_BACKEND_VALUE = "__none__";
+
+type WebhookDestinationForm = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  url: string;
+  secret: string;
+  bearerToken: string;
+  headers: Array<{ name: string; value: string }>;
+  events: NotifyWebhookEvent[];
+  includeDownloadUrl: boolean;
+  /** Empty string = provider default / 1h */
+  downloadUrlExpiresIn: string;
+};
 
 type FormState = {
   enableImageProcessing: boolean;
@@ -97,12 +118,7 @@ type FormState = {
   enableDocumentOcr: boolean;
   documentOcrEngine: "openai_compatible" | "tesseract";
   enableNotifyWebhook: boolean;
-  notifyWebhookUrl: string;
-  notifyWebhookSecret: string;
-  notifyWebhookBearerToken: string;
-  notifyWebhookHeaders: Array<{ name: string; value: string }>;
-  notifyWebhookEvents: NotifyWebhookEvent[];
-  notifyWebhookIncludeDownloadUrl: boolean;
+  notifyWebhookDestinations: WebhookDestinationForm[];
   processorCapacity: Record<
     string,
     { concurrency: number; rateMax: number | null; rateDurationMs: number | null }
@@ -238,9 +254,9 @@ const PROCESSOR_GROUPS: Array<{
     ],
   },
   {
-    id: "notifications",
-    label: "Notifications",
-    description: "Webhook when processing finishes.",
+    id: "webhooks",
+    label: "Webhook",
+    description: "HTTP callbacks when processing finishes.",
     processors: [
       {
         key: ProcessorKey.NOTIFY_WEBHOOK,
@@ -319,26 +335,96 @@ function toForm(settings: OrgProcessingSettings): FormState {
         ? "tesseract"
         : "openai_compatible",
     enableNotifyWebhook: settings.enableNotifyWebhook ?? false,
-    notifyWebhookUrl: settings.notifyWebhookUrl ?? "",
-    notifyWebhookSecret: settings.notifyWebhookSecret ?? "",
-    notifyWebhookBearerToken: settings.notifyWebhookBearerToken ?? "",
-    notifyWebhookHeaders: Array.isArray(settings.notifyWebhookHeaders)
-      ? settings.notifyWebhookHeaders.map((h) => ({
+    notifyWebhookDestinations: Array.isArray(settings.notifyWebhookDestinations)
+      ? settings.notifyWebhookDestinations.map((dest, index) =>
+          normalizeDestinationForm(dest, index),
+        )
+      : settings.notifyWebhookUrl
+        ? [
+            normalizeDestinationForm(
+              {
+                id: "legacy-default",
+                name: "Default",
+                enabled: true,
+                url: settings.notifyWebhookUrl,
+                secret: settings.notifyWebhookSecret ?? "",
+                bearerToken: settings.notifyWebhookBearerToken ?? "",
+                headers: settings.notifyWebhookHeaders ?? [],
+                events: settings.notifyWebhookEvents ?? [
+                  ...NOTIFY_WEBHOOK_EVENTS,
+                ],
+                includeDownloadUrl:
+                  settings.notifyWebhookIncludeDownloadUrl !== false,
+              },
+              0,
+            ),
+          ]
+        : [],
+    processorCapacity: settings.processorCapacity ?? {},
+  };
+}
+
+function normalizeDestinationForm(
+  dest: Partial<WebhookDestinationForm> & { id?: string },
+  index: number,
+): WebhookDestinationForm {
+  const events = Array.isArray(dest.events)
+    ? dest.events.filter((e): e is NotifyWebhookEvent =>
+        (NOTIFY_WEBHOOK_EVENTS as readonly string[]).includes(e),
+      )
+    : [...NOTIFY_WEBHOOK_EVENTS];
+  return {
+    id: dest.id?.trim() || `dest-${index + 1}`,
+    name: dest.name ?? "",
+    enabled: dest.enabled !== false,
+    url: dest.url ?? "",
+    secret: dest.secret ?? "",
+    bearerToken: dest.bearerToken ?? "",
+    headers: Array.isArray(dest.headers)
+      ? dest.headers.map((h) => ({
           name: h.name ?? "",
           value: h.value ?? "",
         }))
       : [],
-    notifyWebhookEvents:
-      Array.isArray(settings.notifyWebhookEvents) &&
-      settings.notifyWebhookEvents.length > 0
-        ? settings.notifyWebhookEvents.filter((e): e is NotifyWebhookEvent =>
-            (NOTIFY_WEBHOOK_EVENTS as readonly string[]).includes(e),
-          )
-        : [...NOTIFY_WEBHOOK_EVENTS],
-    notifyWebhookIncludeDownloadUrl:
-      settings.notifyWebhookIncludeDownloadUrl !== false,
-    processorCapacity: settings.processorCapacity ?? {},
+    events: events.length > 0 ? events : [...NOTIFY_WEBHOOK_EVENTS],
+    includeDownloadUrl: dest.includeDownloadUrl !== false,
+    downloadUrlExpiresIn:
+      typeof dest.downloadUrlExpiresIn === "number" &&
+      Number.isFinite(dest.downloadUrlExpiresIn)
+        ? String(Math.floor(dest.downloadUrlExpiresIn))
+        : typeof dest.downloadUrlExpiresIn === "string"
+          ? dest.downloadUrlExpiresIn
+          : "",
   };
+}
+
+function createEmptyDestination(): WebhookDestinationForm {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `dest-${Date.now()}`,
+    name: "",
+    enabled: true,
+    url: "",
+    secret: "",
+    bearerToken: "",
+    headers: [],
+    events: [...NOTIFY_WEBHOOK_EVENTS],
+    includeDownloadUrl: true,
+    downloadUrlExpiresIn: "",
+  };
+}
+
+function parseDownloadUrlExpiresIn(
+  value: string,
+): number | undefined | "invalid" {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return "invalid";
+  if (n < 60 || n > 604_800) return "invalid";
+  return n;
 }
 
 function processorLabel(key: string) {
@@ -1048,58 +1134,58 @@ function NotifyWebhookOptions({
     "processing.failed": "Failed",
     "processing.partial": "Partial",
   };
+  const destinations = form.notifyWebhookDestinations;
+  const testingId = testMutation.isPending
+    ? ((testMutation.variables as { destination?: { id?: string } } | undefined)
+        ?.destination?.id ?? null)
+    : null;
 
-  const toggleEvent = (event: NotifyWebhookEvent, checked: boolean) => {
-    const current = form.notifyWebhookEvents;
-    if (checked) {
-      if (current.includes(event)) return;
-      patch({ notifyWebhookEvents: [...current, event] });
-      return;
-    }
-    const next = current.filter((e) => e !== event);
-    patch({
-      notifyWebhookEvents:
-        next.length > 0 ? next : (["processing.completed"] as NotifyWebhookEvent[]),
-    });
-  };
+  const setDestinations = (next: WebhookDestinationForm[]) =>
+    patch({ notifyWebhookDestinations: next });
 
-  const updateHeader = (
-    index: number,
-    key: "name" | "value",
-    value: string,
+  const updateDestination = (
+    id: string,
+    partial: Partial<WebhookDestinationForm>,
   ) => {
-    const next = form.notifyWebhookHeaders.map((header, i) =>
-      i === index ? { ...header, [key]: value } : header,
-    );
-    patch({ notifyWebhookHeaders: next });
-  };
-
-  const removeHeader = (index: number) => {
-    patch({
-      notifyWebhookHeaders: form.notifyWebhookHeaders.filter(
-        (_, i) => i !== index,
+    setDestinations(
+      destinations.map((dest) =>
+        dest.id === id ? { ...dest, ...partial } : dest,
       ),
-    });
+    );
   };
 
-  const runTest = () => {
-    if (!form.notifyWebhookUrl.trim()) {
+  const removeDestination = (id: string) => {
+    setDestinations(destinations.filter((dest) => dest.id !== id));
+  };
+
+  const runTest = (dest: WebhookDestinationForm) => {
+    if (!dest.url.trim()) {
       toast.error("Enter a webhook URL first");
       return;
     }
     testMutation.mutate(
       {
-        url: form.notifyWebhookUrl.trim(),
-        secret: form.notifyWebhookSecret,
-        bearerToken: form.notifyWebhookBearerToken,
-        headers: form.notifyWebhookHeaders.filter((h) => h.name.trim()),
-        event: form.notifyWebhookEvents[0] ?? "processing.completed",
-        includeDownloadUrl: form.notifyWebhookIncludeDownloadUrl,
+        destination: {
+          id: dest.id,
+          name: dest.name,
+          url: dest.url.trim(),
+          secret: dest.secret,
+          bearerToken: dest.bearerToken,
+          headers: dest.headers.filter((h) => h.name.trim()),
+          events: dest.events,
+          includeDownloadUrl: dest.includeDownloadUrl,
+          downloadUrlExpiresIn: (() => {
+            const parsed = parseDownloadUrlExpiresIn(dest.downloadUrlExpiresIn);
+            return parsed === "invalid" ? undefined : parsed;
+          })(),
+        },
+        event: dest.events[0] ?? "processing.completed",
       },
       {
         onSuccess: (result) => {
+          const label = result.destinationName ?? (dest.name || "webhook");
           if (result.ok) {
-            toast.success(`Sample sent · HTTP ${result.statusCode}`);
+            toast.success(`Sample sent to ${label} · HTTP ${result.statusCode}`);
           } else {
             toast.error(
               `Webhook returned HTTP ${result.statusCode}${
@@ -1118,184 +1204,310 @@ function NotifyWebhookOptions({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        POSTs a JSON completion event to your URL (n8n Webhook, Zapier, custom
-        API). Fired when file processing becomes completed, failed, or partial —
-        not as a MIME-scheduled job.
-      </p>
-
-      <div className="space-y-2">
-        <Label htmlFor="webhook-url">Webhook URL</Label>
-        <Input
-          id="webhook-url"
-          value={form.notifyWebhookUrl}
-          onChange={(e) => patch({ notifyWebhookUrl: e.target.value })}
-          placeholder="https://n8n.example.com/webhook/storage-done"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label>Events to send</Label>
-        <div className="flex flex-wrap gap-2">
-          {(NOTIFY_WEBHOOK_EVENTS as readonly NotifyWebhookEvent[]).map(
-            (event) => {
-              const checked = form.notifyWebhookEvents.includes(event);
-              return (
-                <label
-                  key={event}
-                  className={cn(
-                    "inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs",
-                    checked
-                      ? "border-primary/40 bg-primary/5"
-                      : "bg-muted/20 text-muted-foreground",
-                  )}
-                >
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={(value) =>
-                      toggleEvent(event, value === true)
-                    }
-                  />
-                  <span className="font-medium text-foreground">
-                    {eventLabels[event]}
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {event}
-                  </span>
-                </label>
-              );
-            },
-          )}
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="webhook-secret">HMAC secret</Label>
-          <Input
-            id="webhook-secret"
-            value={form.notifyWebhookSecret}
-            onChange={(e) => patch({ notifyWebhookSecret: e.target.value })}
-            placeholder="optional · X-Storage-Signature"
-          />
-          <p className="text-[11px] text-muted-foreground">
-            HMAC-SHA256 hex of the raw JSON body.
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="webhook-bearer">Bearer token</Label>
-          <Input
-            id="webhook-bearer"
-            type="password"
-            autoComplete="off"
-            value={form.notifyWebhookBearerToken}
-            onChange={(e) =>
-              patch({ notifyWebhookBearerToken: e.target.value })
-            }
-            placeholder="optional · Authorization: Bearer …"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <Label>Custom headers</Label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            disabled={form.notifyWebhookHeaders.length >= 20}
-            onClick={() =>
-              patch({
-                notifyWebhookHeaders: [
-                  ...form.notifyWebhookHeaders,
-                  { name: "", value: "" },
-                ],
-              })
-            }
-          >
-            <Plus className="mr-1 size-3" />
-            Add header
-          </Button>
-        </div>
-        {form.notifyWebhookHeaders.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            No custom headers. Use for n8n auth headers or API gateways.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {form.notifyWebhookHeaders.map((header, index) => (
-              <div key={index} className="flex items-start gap-2">
-                <Input
-                  className="font-mono text-xs"
-                  placeholder="Header-Name"
-                  value={header.name}
-                  onChange={(e) => updateHeader(index, "name", e.target.value)}
-                />
-                <Input
-                  className="font-mono text-xs"
-                  placeholder="value"
-                  value={header.value}
-                  onChange={(e) =>
-                    updateHeader(index, "value", e.target.value)
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 shrink-0"
-                  onClick={() => removeHeader(index)}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <label className="flex items-start gap-3 rounded-md border bg-muted/20 p-3">
-        <Checkbox
-          checked={form.notifyWebhookIncludeDownloadUrl}
-          onCheckedChange={(checked) =>
-            patch({ notifyWebhookIncludeDownloadUrl: checked === true })
-          }
-        />
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">Include download URL</p>
-          <p className="text-xs text-muted-foreground">
-            Adds a short-lived signed URL plus filename, mime, and size in the{" "}
-            <code className="rounded bg-muted px-1">file</code> object.
-          </p>
-        </div>
-      </label>
-
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/15 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-xs text-muted-foreground">
+          Add one or more destinations (n8n, Slack, custom APIs). Each can have
+          its own URL, events, auth, and headers. All matching destinations are
+          notified when processing finishes.
+        </p>
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           size="sm"
-          disabled={testMutation.isPending || !form.notifyWebhookUrl.trim()}
-          onClick={runTest}
+          className="h-8"
+          disabled={destinations.length >= 20}
+          onClick={() =>
+            setDestinations([...destinations, createEmptyDestination()])
+          }
         >
-          {testMutation.isPending ? (
-            <>
-              <Loader2 className="mr-2 size-3.5 animate-spin" />
-              Sending…
-            </>
-          ) : (
-            "Send sample"
-          )}
+          <Plus className="mr-1.5 size-3.5" />
+          Add destination
         </Button>
-        <p className="text-xs text-muted-foreground">
-          Posts a sample payload with the settings above (save not required).
-        </p>
       </div>
+
+      {destinations.length === 0 ? (
+        <div className="rounded-lg border border-dashed bg-muted/15 p-6 text-center">
+          <p className="text-sm font-medium">No destinations yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Add an n8n webhook URL (or any HTTP endpoint) to start.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            onClick={() =>
+              setDestinations([...destinations, createEmptyDestination()])
+            }
+          >
+            <Plus className="mr-1.5 size-3.5" />
+            Add destination
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {destinations.map((dest, index) => (
+            <div
+              key={dest.id}
+              className="space-y-3 rounded-xl border bg-muted/10 p-3 sm:p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Checkbox
+                    checked={dest.enabled}
+                    onCheckedChange={(checked) =>
+                      updateDestination(dest.id, { enabled: checked === true })
+                    }
+                  />
+                  <Input
+                    className="h-8 max-w-xs"
+                    placeholder={`Destination ${index + 1}`}
+                    value={dest.name}
+                    onChange={(e) =>
+                      updateDestination(dest.id, { name: e.target.value })
+                    }
+                  />
+                  <Badge variant="outline" className="text-[10px]">
+                    {dest.enabled ? "On" : "Off"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-8"
+                    disabled={
+                      !dest.url.trim() ||
+                      (testMutation.isPending && testingId === dest.id)
+                    }
+                    onClick={() => runTest(dest)}
+                  >
+                    {testMutation.isPending && testingId === dest.id ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        Sending…
+                      </>
+                    ) : (
+                      "Send sample"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => removeDestination(dest.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Webhook URL</Label>
+                <Input
+                  value={dest.url}
+                  onChange={(e) =>
+                    updateDestination(dest.id, { url: e.target.value })
+                  }
+                  placeholder="https://n8n.example.com/webhook/storage-done"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Events</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(NOTIFY_WEBHOOK_EVENTS as readonly NotifyWebhookEvent[]).map(
+                    (event) => {
+                      const checked = dest.events.includes(event);
+                      return (
+                        <label
+                          key={event}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs",
+                            checked
+                              ? "border-primary/40 bg-primary/5"
+                              : "bg-muted/20 text-muted-foreground",
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              const on = value === true;
+                              const next = on
+                                ? dest.events.includes(event)
+                                  ? dest.events
+                                  : [...dest.events, event]
+                                : dest.events.filter((e) => e !== event);
+                              updateDestination(dest.id, {
+                                events:
+                                  next.length > 0
+                                    ? next
+                                    : (["processing.completed"] as NotifyWebhookEvent[]),
+                              });
+                            }}
+                          />
+                          <span className="font-medium text-foreground">
+                            {eventLabels[event]}
+                          </span>
+                        </label>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>HMAC secret</Label>
+                  <Input
+                    value={dest.secret}
+                    onChange={(e) =>
+                      updateDestination(dest.id, { secret: e.target.value })
+                    }
+                    placeholder="optional · X-Storage-Signature"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Bearer token</Label>
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    value={dest.bearerToken}
+                    onChange={(e) =>
+                      updateDestination(dest.id, {
+                        bearerToken: e.target.value,
+                      })
+                    }
+                    placeholder="optional · Authorization: Bearer …"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Custom headers</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={dest.headers.length >= 20}
+                    onClick={() =>
+                      updateDestination(dest.id, {
+                        headers: [...dest.headers, { name: "", value: "" }],
+                      })
+                    }
+                  >
+                    <Plus className="mr-1 size-3" />
+                    Add header
+                  </Button>
+                </div>
+                {dest.headers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No custom headers for this destination.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {dest.headers.map((header, headerIndex) => (
+                      <div key={headerIndex} className="flex items-start gap-2">
+                        <Input
+                          className="font-mono text-xs"
+                          placeholder="Header-Name"
+                          value={header.name}
+                          onChange={(e) => {
+                            const headers = dest.headers.map((h, i) =>
+                              i === headerIndex
+                                ? { ...h, name: e.target.value }
+                                : h,
+                            );
+                            updateDestination(dest.id, { headers });
+                          }}
+                        />
+                        <Input
+                          className="font-mono text-xs"
+                          placeholder="value"
+                          value={header.value}
+                          onChange={(e) => {
+                            const headers = dest.headers.map((h, i) =>
+                              i === headerIndex
+                                ? { ...h, value: e.target.value }
+                                : h,
+                            );
+                            updateDestination(dest.id, { headers });
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-9 shrink-0"
+                          onClick={() =>
+                            updateDestination(dest.id, {
+                              headers: dest.headers.filter(
+                                (_, i) => i !== headerIndex,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border bg-background/60 px-3 py-2">
+                <label className="inline-flex min-w-0 flex-1 items-center gap-2.5">
+                  <Checkbox
+                    checked={dest.includeDownloadUrl}
+                    onCheckedChange={(checked) =>
+                      updateDestination(dest.id, {
+                        includeDownloadUrl: checked === true,
+                      })
+                    }
+                  />
+                  <span className="text-sm font-medium">
+                    Include download URL
+                  </span>
+                </label>
+                {dest.includeDownloadUrl ? (
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor={`webhook-ttl-${dest.id}`}
+                      className="whitespace-nowrap text-xs text-muted-foreground"
+                    >
+                      TTL (sec)
+                    </Label>
+                    <Input
+                      id={`webhook-ttl-${dest.id}`}
+                      type="number"
+                      min={60}
+                      max={604800}
+                      step={1}
+                      className="h-8 w-28"
+                      value={dest.downloadUrlExpiresIn}
+                      onChange={(e) =>
+                        updateDestination(dest.id, {
+                          downloadUrlExpiresIn: e.target.value,
+                        })
+                      }
+                      placeholder="default"
+                      title="60–604800 seconds. Empty = provider default."
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
 
 function saveForm(
   form: FormState,
@@ -1380,17 +1592,21 @@ function saveForm(
   }
   if (
     form.enableNotifyWebhook &&
-    form.notifyWebhookEvents.length === 0
+    form.notifyWebhookDestinations.filter((d) => d.enabled && d.url.trim())
+      .length === 0
   ) {
-    toast.error("Select at least one webhook event");
+    toast.error("Add at least one enabled webhook destination with a URL");
     return;
   }
-  if (
-    form.enableNotifyWebhook &&
-    form.notifyWebhookUrl.trim().length === 0
-  ) {
-    toast.error("Webhook URL is required when the completion webhook is on");
-    return;
+  for (const dest of form.notifyWebhookDestinations) {
+    if (!dest.url.trim()) continue;
+    const ttl = parseDownloadUrlExpiresIn(dest.downloadUrlExpiresIn);
+    if (ttl === "invalid") {
+      toast.error(
+        `Signed URL TTL for "${dest.name || dest.url}" must be 60–604800 seconds`,
+      );
+      return;
+    }
   }
 
   mutate(
@@ -1460,17 +1676,24 @@ function saveForm(
       enableDocumentOcr: form.enableDocumentOcr,
       documentOcrEngine: form.documentOcrEngine,
       enableNotifyWebhook: form.enableNotifyWebhook,
-      notifyWebhookUrl: form.notifyWebhookUrl,
-      notifyWebhookSecret: form.notifyWebhookSecret,
-      notifyWebhookBearerToken: form.notifyWebhookBearerToken,
-      notifyWebhookHeaders: form.notifyWebhookHeaders.filter((h) =>
-        h.name.trim(),
-      ),
-      notifyWebhookEvents:
-        form.notifyWebhookEvents.length > 0
-          ? form.notifyWebhookEvents
-          : [...NOTIFY_WEBHOOK_EVENTS],
-      notifyWebhookIncludeDownloadUrl: form.notifyWebhookIncludeDownloadUrl,
+      notifyWebhookDestinations: form.notifyWebhookDestinations
+        .filter((dest) => dest.url.trim())
+        .map((dest) => ({
+          id: dest.id,
+          name: dest.name,
+          enabled: dest.enabled,
+          url: dest.url.trim(),
+          secret: dest.secret,
+          bearerToken: dest.bearerToken,
+          headers: dest.headers.filter((h) => h.name.trim()),
+          events:
+            dest.events.length > 0 ? dest.events : [...NOTIFY_WEBHOOK_EVENTS],
+          includeDownloadUrl: dest.includeDownloadUrl,
+          downloadUrlExpiresIn: (() => {
+            const parsed = parseDownloadUrlExpiresIn(dest.downloadUrlExpiresIn);
+            return parsed === "invalid" ? undefined : parsed;
+          })(),
+        })),
       processorCapacity: form.processorCapacity,
     },
     {

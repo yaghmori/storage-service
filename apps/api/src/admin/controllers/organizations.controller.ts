@@ -350,23 +350,46 @@ export class UpdateProcessingSettingsDto {
   enableNotifyWebhook?: boolean;
 
   @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  notifyWebhookDestinations?: Array<{
+    id?: string;
+    name?: string;
+    enabled?: boolean;
+    url?: string;
+    secret?: string;
+    bearerToken?: string;
+    headers?: Array<{ name: string; value: string }>;
+    events?: Array<
+      'processing.completed' | 'processing.failed' | 'processing.partial'
+    >;
+    includeDownloadUrl?: boolean;
+    downloadUrlExpiresIn?: number;
+  }>;
+
+  /** @deprecated Prefer notifyWebhookDestinations */
+  @IsOptional()
   @IsString()
   notifyWebhookUrl?: string;
 
+  /** @deprecated Prefer notifyWebhookDestinations */
   @IsOptional()
   @IsString()
   notifyWebhookSecret?: string;
 
+  /** @deprecated Prefer notifyWebhookDestinations */
   @IsOptional()
   @IsString()
   @MaxLength(2048)
   notifyWebhookBearerToken?: string;
 
+  /** @deprecated Prefer notifyWebhookDestinations */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
   notifyWebhookHeaders?: Array<{ name: string; value: string }>;
 
+  /** @deprecated Prefer notifyWebhookDestinations */
   @IsOptional()
   @IsArray()
   @IsIn(['processing.completed', 'processing.failed', 'processing.partial'], {
@@ -376,6 +399,7 @@ export class UpdateProcessingSettingsDto {
     'processing.completed' | 'processing.failed' | 'processing.partial'
   >;
 
+  /** @deprecated Prefer notifyWebhookDestinations */
   @IsOptional()
   @IsBoolean()
   notifyWebhookIncludeDownloadUrl?: boolean;
@@ -396,29 +420,27 @@ export class UpdateProcessingSettingsDto {
 export class TestNotifyWebhookDto {
   @IsOptional()
   @IsString()
-  url?: string;
+  destinationId?: string;
 
   @IsOptional()
-  @IsString()
-  secret?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  bearerToken?: string;
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(20)
-  headers?: Array<{ name: string; value: string }>;
+  @IsObject()
+  destination?: {
+    id?: string;
+    name?: string;
+    url?: string;
+    secret?: string;
+    bearerToken?: string;
+    headers?: Array<{ name: string; value: string }>;
+    events?: Array<
+      'processing.completed' | 'processing.failed' | 'processing.partial'
+    >;
+    includeDownloadUrl?: boolean;
+    downloadUrlExpiresIn?: number;
+  };
 
   @IsOptional()
   @IsIn(['processing.completed', 'processing.failed', 'processing.partial'])
   event?: 'processing.completed' | 'processing.failed' | 'processing.partial';
-
-  @IsOptional()
-  @IsBoolean()
-  includeDownloadUrl?: boolean;
 
   @IsOptional()
   @IsUUID()
@@ -540,14 +562,9 @@ export class OrganizationsController {
     return this.notifyWebhook.sendTest({
       orgId: id,
       fileId: body.fileId,
-      overrides: {
-        url: body.url,
-        secret: body.secret,
-        bearerToken: body.bearerToken,
-        headers: body.headers,
-        includeDownloadUrl: body.includeDownloadUrl,
-        event: body.event,
-      },
+      destinationId: body.destinationId,
+      destination: body.destination,
+      event: body.event,
     });
   }
 

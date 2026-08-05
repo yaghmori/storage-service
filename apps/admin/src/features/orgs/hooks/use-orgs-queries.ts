@@ -151,6 +151,21 @@ export interface OrgProcessingSettings {
   enableDocumentOcr?: boolean;
   documentOcrEngine?: "openai_compatible" | "tesseract";
   enableNotifyWebhook?: boolean;
+  notifyWebhookDestinations?: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    url: string;
+    secret: string;
+    bearerToken: string;
+    headers: Array<{ name: string; value: string }>;
+    events: Array<
+      "processing.completed" | "processing.failed" | "processing.partial"
+    >;
+    includeDownloadUrl: boolean;
+    downloadUrlExpiresIn?: number;
+  }>;
+  /** @deprecated legacy single-destination fields (migrated client-side) */
   notifyWebhookUrl?: string;
   notifyWebhookSecret?: string;
   notifyWebhookBearerToken?: string;
@@ -203,6 +218,8 @@ export type TestWebhookResult = {
   ok: boolean;
   statusCode: number;
   url: string;
+  destinationId?: string;
+  destinationName?: string;
   event: string;
   responsePreview: string;
   payload: Record<string, unknown>;
@@ -211,12 +228,21 @@ export type TestWebhookResult = {
 export function useTestNotifyWebhookMutation(orgId?: string) {
   return useMutation({
     mutationFn: async (input: {
-      url?: string;
-      secret?: string;
-      bearerToken?: string;
-      headers?: Array<{ name: string; value: string }>;
+      destinationId?: string;
+      destination?: {
+        id?: string;
+        name?: string;
+        url?: string;
+        secret?: string;
+        bearerToken?: string;
+        headers?: Array<{ name: string; value: string }>;
+        events?: Array<
+          "processing.completed" | "processing.failed" | "processing.partial"
+        >;
+        includeDownloadUrl?: boolean;
+        downloadUrlExpiresIn?: number;
+      };
       event?: "processing.completed" | "processing.failed" | "processing.partial";
-      includeDownloadUrl?: boolean;
       fileId?: string;
     }) => {
       const path = replacePathParams(OrgsEndpoints.TestWebhook, orgId!);

@@ -8,6 +8,9 @@ import {
   DEFAULT_DOCUMENT_OCR_USER_PROMPT,
   DEFAULT_IMAGE_VARIANTS_SETTINGS,
   DEFAULT_VIDEO_PREVIEW_SETTINGS,
+  NOTIFY_WEBHOOK_EVENTS,
+  normalizeNotifyWebhookDestinations,
+  resolveNotifyWebhookDownloadUrlExpiresIn,
   ProcessorKey,
   aiVisionProcessorSettingsSchema,
   imageVariantsProcessorSettingsSchema,
@@ -321,14 +324,8 @@ export class OrgProcessorsService {
       userPrompt?: string;
       models?: { vision?: string };
     };
-    const notifySettings = (notify?.settings ?? {}) as {
-      url?: string;
-      secret?: string;
-      bearerToken?: string;
-      headers?: Array<{ name: string; value: string }>;
-      events?: string[];
-      includeDownloadUrl?: boolean;
-    };
+    const notifySettings = (notify?.settings ?? {}) as Record<string, unknown>;
+    const notifyDestinations = normalizeNotifyWebhookDestinations(notifySettings);
     // Keep disabled slots' maxEdge from saved settings (not only enabled job slots).
     const variants = normalizeImageVariants(
       imageSettings.imageVariants,
@@ -376,33 +373,41 @@ export class OrgProcessorsService {
         ? 'tesseract'
         : 'openai_compatible') as 'openai_compatible' | 'tesseract',
       enableNotifyWebhook: notify?.enabled ?? false,
-      notifyWebhookUrl: notifySettings.url ?? '',
-      notifyWebhookSecret: notifySettings.secret ?? '',
-      notifyWebhookBearerToken: notifySettings.bearerToken ?? '',
-      notifyWebhookHeaders: Array.isArray(notifySettings.headers)
-        ? notifySettings.headers
-            .filter(
-              (h) =>
-                h &&
-                typeof h.name === 'string' &&
-                typeof h.value === 'string',
+      notifyWebhookDestinations: notifyDestinations.map((dest) => ({
+        id: dest.id,
+        name: dest.name ?? '',
+        enabled: dest.enabled !== false,
+        url: dest.url ?? '',
+        secret: dest.secret ?? '',
+        bearerToken: dest.bearerToken ?? '',
+        headers: Array.isArray(dest.headers)
+          ? dest.headers
+              .filter(
+                (h) =>
+                  h &&
+                  typeof h.name === 'string' &&
+                  typeof h.value === 'string',
+              )
+              .map((h) => ({ name: h.name, value: h.value }))
+          : [],
+        events: Array.isArray(dest.events)
+          ? dest.events.filter(
+              (
+                e,
+              ): e is
+                | 'processing.completed'
+                | 'processing.failed'
+                | 'processing.partial' =>
+                e === 'processing.completed' ||
+                e === 'processing.failed' ||
+                e === 'processing.partial',
             )
-            .map((h) => ({ name: h.name, value: h.value }))
-        : [],
-      notifyWebhookEvents: Array.isArray(notifySettings.events)
-        ? notifySettings.events.filter(
-            (e): e is 'processing.completed' | 'processing.failed' | 'processing.partial' =>
-              e === 'processing.completed' ||
-              e === 'processing.failed' ||
-              e === 'processing.partial',
-          )
-        : [
-            'processing.completed',
-            'processing.failed',
-            'processing.partial',
-          ],
-      notifyWebhookIncludeDownloadUrl:
-        notifySettings.includeDownloadUrl !== false,
+          : [...NOTIFY_WEBHOOK_EVENTS],
+        includeDownloadUrl: dest.includeDownloadUrl !== false,
+        downloadUrlExpiresIn: resolveNotifyWebhookDownloadUrlExpiresIn(
+          dest.downloadUrlExpiresIn,
+        ),
+      })),
       processorCapacity: this.capacityMapFromRows(rows),
     };
   }
@@ -726,58 +731,91 @@ export class OrgProcessorsService {
         sortOrder: 100,
         settings: withCapacity(
           {
-            url:
-              typeof body.notifyWebhookUrl === 'string'
-                ? body.notifyWebhookUrl
-                : (legacy as { notifyWebhookUrl?: string }).notifyWebhookUrl ?? '',
-            secret:
-              typeof body.notifyWebhookSecret === 'string'
-                ? body.notifyWebhookSecret
-                : (legacy as { notifyWebhookSecret?: string })
-                    .notifyWebhookSecret ?? '',
-            bearerToken:
-              typeof body.notifyWebhookBearerToken === 'string'
-                ? body.notifyWebhookBearerToken
-                : (legacy as { notifyWebhookBearerToken?: string })
-                    .notifyWebhookBearerToken ?? '',
-            headers: Array.isArray(body.notifyWebhookHeaders)
-              ? (body.notifyWebhookHeaders as Array<{
-                  name: string;
-                  value: string;
-                }>)
-                  .filter(
-                    (h) =>
-                      h &&
-                      typeof h.name === 'string' &&
-                      h.name.trim() &&
-                      typeof h.value === 'string',
-                  )
-                  .map((h) => ({
-                    name: h.name.trim(),
-                    value: h.value,
-                  }))
+            destinations: Array.isArray(body.notifyWebhookDestinations)
+              ? (body.notifyWebhookDestinations as Array<Record<string, unknown>>)
+                  .map((dest, index) => {
+                    const events = Array.isArray(dest.events)
+                      ? (dest.events as string[]).filter(
+                          (e) =>
+                            e === 'processing.completed' ||
+                            e === 'processing.failed' ||
+                            e === 'processing.partial',
+                        )
+                      : [...NOTIFY_WEBHOOK_EVENTS];
+                    const headers = Array.isArray(dest.headers)
+                      ? (dest.headers as Array<{ name?: string; value?: string }>)
+                          .filter(
+                            (h) =>
+                              h &&
+                              typeof h.name === 'string' &&
+                              h.name.trim() &&
+                              typeof h.value === 'string',
+                          )
+                          .map((h) => ({
+                            name: String(h.name).trim(),
+                            value: String(h.value),
+                          }))
+                          .slice(0, 20)
+                      : [];
+                    return {
+                      id:
+                        typeof dest.id === 'string' && dest.id.trim()
+                          ? dest.id.trim()
+                          : `dest-${index + 1}`,
+                      name:
+                        typeof dest.name === 'string' ? dest.name.trim() : '',
+                      enabled: dest.enabled !== false,
+                      url: typeof dest.url === 'string' ? dest.url.trim() : '',
+                      secret:
+                        typeof dest.secret === 'string' ? dest.secret : '',
+                      bearerToken:
+                        typeof dest.bearerToken === 'string'
+                          ? dest.bearerToken
+                          : '',
+                      headers,
+                      events:
+                        events.length > 0 ? events : [...NOTIFY_WEBHOOK_EVENTS],
+                      includeDownloadUrl: dest.includeDownloadUrl !== false,
+                      downloadUrlExpiresIn: resolveNotifyWebhookDownloadUrlExpiresIn(
+                        dest.downloadUrlExpiresIn,
+                      ),
+                    };
+                  })
+                  .filter((dest) => dest.url)
                   .slice(0, 20)
-              : (legacy as {
-                  notifyWebhookHeaders?: Array<{ name: string; value: string }>;
-                }).notifyWebhookHeaders ?? [],
-            events: Array.isArray(body.notifyWebhookEvents)
-              ? (body.notifyWebhookEvents as string[]).filter(
-                  (e) =>
-                    e === 'processing.completed' ||
-                    e === 'processing.failed' ||
-                    e === 'processing.partial',
-                )
-              : (legacy as { notifyWebhookEvents?: string[] })
-                  .notifyWebhookEvents ?? [
-                  'processing.completed',
-                  'processing.failed',
-                  'processing.partial',
-                ],
-            includeDownloadUrl:
-              typeof body.notifyWebhookIncludeDownloadUrl === 'boolean'
-                ? body.notifyWebhookIncludeDownloadUrl
-                : (legacy as { notifyWebhookIncludeDownloadUrl?: boolean })
-                    .notifyWebhookIncludeDownloadUrl !== false,
+              : normalizeNotifyWebhookDestinations(
+                  (legacy as { notifyWebhookDestinations?: unknown })
+                    .notifyWebhookDestinations
+                    ? {
+                        destinations: (
+                          legacy as {
+                            notifyWebhookDestinations: unknown[];
+                          }
+                        ).notifyWebhookDestinations as never,
+                      }
+                    : {
+                        url: (legacy as { notifyWebhookUrl?: string })
+                          .notifyWebhookUrl,
+                        secret: (legacy as { notifyWebhookSecret?: string })
+                          .notifyWebhookSecret,
+                        bearerToken: (
+                          legacy as { notifyWebhookBearerToken?: string }
+                        ).notifyWebhookBearerToken,
+                        headers: (
+                          legacy as {
+                            notifyWebhookHeaders?: Array<{
+                              name: string;
+                              value: string;
+                            }>;
+                          }
+                        ).notifyWebhookHeaders,
+                        events: (legacy as { notifyWebhookEvents?: string[] })
+                          .notifyWebhookEvents as never,
+                        includeDownloadUrl: (
+                          legacy as { notifyWebhookIncludeDownloadUrl?: boolean }
+                        ).notifyWebhookIncludeDownloadUrl,
+                      },
+                ),
           },
           capacityFor('notify.webhook'),
         ),
