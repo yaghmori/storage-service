@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -29,6 +28,7 @@ import {
 import { Public } from '../../common/decorators/public.decorator';
 import * as schema from '../../database/drizzle/schema';
 import { emptySuccess } from '../../lib/contracts';
+import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
@@ -88,6 +88,7 @@ export class ProvidersController {
   constructor(
     @Inject('DRIZZLE_DB')
     private readonly db: NodePgDatabase<typeof schema>,
+    private readonly storageFactory: StorageFactoryService,
   ) {}
 
   @Get()
@@ -255,13 +256,8 @@ export class ProvidersController {
     @Headers('x-org-id') headerOrgId?: string,
   ) {
     const orgId = requireOrgId(queryOrgId, headerOrgId);
-    const provider = await this.findOrgProvider(id, orgId);
-
-    if (!provider.isActive) {
-      throw new BadRequestException('Provider is inactive');
-    }
-
-    return { ok: true, type: provider.type };
+    await this.findOrgProvider(id, orgId);
+    return this.storageFactory.testConnectivity(id, orgId);
   }
 
   private async findOrgProvider(id: string, orgId: string) {

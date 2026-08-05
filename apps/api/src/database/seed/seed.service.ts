@@ -1,11 +1,20 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { OrgProcessorsService } from '../../processing/services/org-processors.service';
 import * as schema from '../drizzle/schema';
 
 type StorageProviderType = 'local' | 'minio' | 's3';
+
+export type SeedOptions = {
+  /**
+   * When true (boot path): only create org+providers if zero orgs exist.
+   * Always ensures the admin user exists.
+   * Does not recreate a deleted seed org while other orgs remain.
+   */
+  onlyIfEmpty?: boolean;
+};
 
 @Injectable()
 export class SeedService {
@@ -17,45 +26,97 @@ export class SeedService {
     private readonly orgProcessors: OrgProcessorsService,
   ) {}
 
-  async seed(): Promise<void> {
-    this.logger.log('Seeding database...');
-    const org = await this.ensureDefaultOrg();
-    await this.orgProcessors.ensureDefaults(org.id);
+  async seed(options: SeedOptions = {}): Promise<void> {
+    this.logger.log(
+      `Seeding database${options.onlyIfEmpty ? ' (only if empty)' : ''}...`,
+    );
+
     await this.seedAdminUser();
-    await this.seedStorageProviders(org.id);
+
+    const orgCount = await this.countOrgs();
+    const providerCount = await this.countProviders();
+
+    // Boot path: if orgs and providers already exist, do nothing else.
+    if (options.onlyIfEmpty && orgCount > 0 && providerCount > 0) {
+      this.logger.log(
+        `Skipping org/provider seed — ${orgCount} org(s), ${providerCount} provider(s) already exist`,
+      );
+      return;
+    }
+
+    const org = await this.ensureSeedOrg();
+    await this.orgProcessors.ensureDefaults(org.id);
+
+    // Seed providers when missing (covers migration-created org with no providers).
+    if (!options.onlyIfEmpty || providerCount === 0) {
+      await this.seedStorageProviders(org.id);
+    }
+
     if (process.env.AUTH_DEFAULT_ORG_ID !== org.id) {
       this.logger.warn(
-        `Set AUTH_DEFAULT_ORG_ID=${org.id} for static AUTH_API_KEYS to bind to the default org`,
+        `Set AUTH_DEFAULT_ORG_ID=${org.id} for static AUTH_API_KEYS to bind to this org`,
       );
     }
-    this.logger.log('Seeding completed');
+    this.logger.log(`Seeding completed (org slug=${org.slug} id=${org.id})`);
   }
 
-  private async ensureDefaultOrg(): Promise<schema.Organization> {
-    const [existing] = await this.db
+  private async countOrgs(): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.organizations);
+    return row?.count ?? 0;
+  }
+
+  private async countProviders(): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.storageProviders);
+    return row?.count ?? 0;
+  }
+
+  private async ensureSeedOrg(): Promise<schema.Organization> {
+    const slug =
+      (process.env.SEED_ORG_SLUG || 'allyfe').trim().toLowerCase() || 'allyfe';
+    const name = (process.env.SEED_ORG_NAME || 'Allyfe').trim() || 'Allyfe';
+
+    const [bySlug] = await this.db
       .select()
       .from(schema.organizations)
-      .where(eq(schema.organizations.slug, 'default'))
+      .where(eq(schema.organizations.slug, slug))
       .limit(1);
-    if (existing) {
-      this.logger.log(`Default organization exists: ${existing.id}`);
-      return existing;
+    if (bySlug) {
+      this.logger.log(`Seed organization exists: ${bySlug.id} (${bySlug.slug})`);
+      return bySlug;
     }
+
+    // Prefer any existing org (e.g. migration-created `default`) over inserting another.
+    const [anyOrg] = await this.db.select().from(schema.organizations).limit(1);
+    if (anyOrg) {
+      this.logger.log(
+        `Using existing organization ${anyOrg.slug} (${anyOrg.id}) for provider seed`,
+      );
+      return anyOrg;
+    }
+
     const [org] = await this.db
       .insert(schema.organizations)
       .values({
-        slug: 'default',
-        name: 'Default',
+        slug,
+        name,
         status: 'active',
-        supportEmail: process.env.SUPPORT_EMAIL || 'support@example.com',
+        supportEmail: process.env.SUPPORT_EMAIL || 'support@allyfe.org',
       })
       .returning();
-    this.logger.log(`Created default organization: ${org.id}`);
+    this.logger.log(`Created seed organization: ${org.id} (${org.slug})`);
     return org;
   }
 
   private async seedAdminUser(): Promise<void> {
-    const email = (process.env.ADMIN_EMAIL || 'admin@example.com').trim().toLowerCase();
+    const email = (
+      process.env.ADMIN_EMAIL || 'admin@allyfe.org'
+    )
+      .trim()
+      .toLowerCase();
     const password = process.env.ADMIN_PASSWORD || 'admin';
     const [existing] = await this.db
       .select()
@@ -144,7 +205,7 @@ export class SeedService {
       name: 'MinIO Storage',
       type: 'minio',
       config: {
-        endpoint: process.env.MINIO_ENDPOINT?.trim() || '',
+        endpoint: process.env.MINIO_ENDPOINT?.trim() || 'minio',
         port: process.env.MINIO_PORT || '9000',
         publicEndpoint:
           process.env.MINIO_PUBLIC_ENDPOINT?.trim() ||
@@ -172,7 +233,8 @@ export class SeedService {
         bucket: process.env.AWS_S3_BUCKET?.trim() || 'your-bucket-name',
         endpoint: process.env.AWS_S3_ENDPOINT?.trim() || '',
         accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID?.trim() || 'your-access-key',
-        secretAccessKey: process.env.AWS_S3_SECRET_ACCESS_KEY?.trim() || 'your-secret-key',
+        secretAccessKey:
+          process.env.AWS_S3_SECRET_ACCESS_KEY?.trim() || 'your-secret-key',
       },
       isActive: s3Configured ? process.env.AWS_S3_ACTIVE !== 'false' : false,
       isDefault: false,

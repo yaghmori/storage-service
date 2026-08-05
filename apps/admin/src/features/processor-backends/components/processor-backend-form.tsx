@@ -30,15 +30,19 @@ import type {
 export function ProcessorBackendForm({
   initialValues,
   isSubmitting,
+  isTesting,
   submitLabel,
   onSubmit,
   onCancel,
+  onTest,
 }: {
   initialValues?: ProcessorBackendRow;
   isSubmitting?: boolean;
+  isTesting?: boolean;
   submitLabel: string;
   onSubmit: (payload: UpsertProcessorBackendInput) => void;
   onCancel?: () => void;
+  onTest?: () => void;
 }) {
   const [name, setName] = useState(initialValues?.name ?? "");
   const [kind, setKind] = useState<
@@ -304,7 +308,17 @@ export function ProcessorBackendForm({
             Cancel
           </Button>
         ) : null}
-        <Button type="submit" disabled={isSubmitting}>
+        {initialValues?.id && onTest ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isSubmitting || isTesting}
+            onClick={onTest}
+          >
+            {isTesting ? "Testing…" : "Test connection"}
+          </Button>
+        ) : null}
+        <Button type="submit" disabled={isSubmitting || isTesting}>
           {isSubmitting ? "Saving…" : submitLabel}
         </Button>
       </ResponsiveSheet.Footer>

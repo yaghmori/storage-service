@@ -6,6 +6,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
 import { ConfigModule as AppConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
+import { SeedBootstrapService } from './database/seed/seed-bootstrap.service';
+import { SeedService } from './database/seed/seed.service';
 import { EventsModule } from './events/events.module';
 import { FilesModule } from './files/files.module';
 import { HealthModule } from './health/health.module';
@@ -40,7 +42,7 @@ import { VariantsModule } from './variants/variants.module';
     AdminModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [SeedService, SeedBootstrapService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

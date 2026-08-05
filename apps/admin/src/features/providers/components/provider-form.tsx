@@ -40,16 +40,20 @@ export function ProviderForm({
   formId = "provider-form",
   initialValues,
   isSubmitting,
+  isTesting,
   submitLabel,
   onSubmit,
   onCancel,
+  onTest,
 }: {
   formId?: string;
   initialValues?: Partial<ProviderRow>;
   isSubmitting?: boolean;
+  isTesting?: boolean;
   submitLabel: string;
   onSubmit: (payload: UpsertProviderInput) => void;
   onCancel?: () => void;
+  onTest?: () => void;
 }) {
   const isEdit = Boolean(initialValues?.id);
 
@@ -356,6 +360,16 @@ export function ProviderForm({
             Cancel
           </Button>
         )}
+        {isEdit && onTest ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isSubmitting || isTesting}
+            onClick={onTest}
+          >
+            {isTesting ? "Testing…" : "Test connection"}
+          </Button>
+        ) : null}
         <form.Subscribe
           selector={(s) => [s.canSubmit, s.isSubmitting, s.isValidating]}
         >
@@ -364,6 +378,7 @@ export function ProviderForm({
               type="submit"
               disabled={
                 isSubmitting ||
+                isTesting ||
                 !canSubmit ||
                 isFormSubmitting ||
                 isValidating

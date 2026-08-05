@@ -7,6 +7,7 @@ import { OrganizationsModule } from '../organizations/organizations.module';
 import { ProcessingModule } from '../processing/processing.module';
 import { QueuesModule } from '../queues/queues.module';
 import { ServingModule } from '../serving/serving.module';
+import { StorageProvidersModule } from '../storage-providers/storage-providers.module';
 import { UploadModule } from '../upload/upload.module';
 import { VariantsModule } from '../variants/variants.module';
 import { AdminAuthModule } from './admin-auth.module';
@@ -34,6 +35,7 @@ import { AdminApiKeyService } from './services/admin-api-key.service';
     ServingModule,
     FilesModule,
     QueuesModule,
+    StorageProvidersModule,
   ],
   controllers: [
     DashboardController,

@@ -140,7 +140,16 @@ export class UploadService {
       `${year}/${month}/${day}/${uuid}${extension}`;
     const fileName = storageKeyOverride ? basename(key) : `${uuid}${extension}`;
 
-    const provider = await this.storageFactory.getProvider(providerConfig.id);
+    let provider;
+    try {
+      provider = await this.storageFactory.getProvider(providerConfig.id);
+    } catch (error) {
+      throw new BadRequestException(
+        `Storage provider "${providerConfig.name}" (${providerConfig.type}) is not reachable: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
 
     try {
       await provider.upload(key, buffer, file.mimetype);

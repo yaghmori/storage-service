@@ -27,6 +27,7 @@ import {
   useCreateProcessorBackendMutation,
   useDeleteProcessorBackendMutation,
   useProcessorBackendsQuery,
+  useTestProcessorBackendMutation,
   useUpdateProcessorBackendMutation,
   type ProcessorBackendRow,
 } from "../hooks/use-processor-backends-queries";
@@ -58,9 +59,24 @@ export function ProcessorBackendsListView({
   const createMutation = useCreateProcessorBackendMutation(activeOrg?.id);
   const updateMutation = useUpdateProcessorBackendMutation(activeOrg?.id);
   const deleteMutation = useDeleteProcessorBackendMutation(activeOrg?.id);
+  const testMutation = useTestProcessorBackendMutation(activeOrg?.id);
   const columns = useMemo(
-    () => createProcessorBackendsColumns(setEditing, setDeleting),
-    [],
+    () =>
+      createProcessorBackendsColumns(
+        setEditing,
+        setDeleting,
+        (row) =>
+          testMutation.mutate(row.id, {
+            onSuccess: (result) =>
+              toast[result.ok ? "success" : "error"](
+                result.message ||
+                  (result.ok ? "Backend OK" : "Backend test failed"),
+              ),
+            onError: (err) =>
+              toast.error(extractApiErrorMessage(err, "Test failed")),
+          }),
+      ),
+    [testMutation],
   );
   const { table } = useDataTable({
     columns,
@@ -219,7 +235,19 @@ export function ProcessorBackendsListView({
             initialValues={editing}
             submitLabel="Save changes"
             isSubmitting={updateMutation.isPending}
+            isTesting={testMutation.isPending}
             onCancel={() => setEditing(null)}
+            onTest={() =>
+              testMutation.mutate(editing.id, {
+                onSuccess: (result) =>
+                  toast[result.ok ? "success" : "error"](
+                    result.message ||
+                      (result.ok ? "Backend OK" : "Backend test failed"),
+                  ),
+                onError: (err) =>
+                  toast.error(extractApiErrorMessage(err, "Test failed")),
+              })
+            }
             onSubmit={(input) =>
               updateMutation.mutate(
                 { id: editing.id, input },
