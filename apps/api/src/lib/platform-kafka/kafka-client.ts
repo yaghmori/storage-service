@@ -2,12 +2,13 @@
 
 import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { readFileSync } from 'fs';
-import { Consumer, ConsumerConfig, Kafka, KafkaConfig as KafkaJSConfig, logLevel, Producer, ProducerConfig, SASLOptions } from 'kafkajs';
+import { Consumer, ConsumerConfig, Kafka, KafkaConfig as KafkaJSConfig, Producer, ProducerConfig, SASLOptions } from 'kafkajs';
 import { DLQService } from './dlq.service';
 import { classifyError } from './error-classifier';
 import { validateEvent, validateEventEnvelope, ValidationResult } from './event-validator';
 import type { IIdempotencyService } from './idempotency.service';
 import { KafkaConfig } from './kafka-config';
+import { createKafkaJsLogCreator, resolveKafkaJsLogLevel } from './kafka-js-logger';
 
 /**
  * @deprecated Use KafkaConfig from kafka-config.ts instead
@@ -45,18 +46,18 @@ export class KafkaClient implements OnModuleDestroy {
     const kafkaConfig: KafkaConfig = this.normalizeConfig(config);
     this.config = kafkaConfig;
 
-    // Log broker configuration for debugging
-    this.logger.log(`Kafka client configured with brokers: ${kafkaConfig.brokers.join(', ')}`);
-    this.logger.log(`Kafka client ID: ${kafkaConfig.clientId}`);
-    if (kafkaConfig.groupId) {
-      this.logger.log(`Kafka group ID: ${kafkaConfig.groupId}`);
-    }
+    this.logger.log(
+      `Kafka client ready (brokers=${kafkaConfig.brokers.join(',')}, clientId=${kafkaConfig.clientId}${
+        kafkaConfig.groupId ? `, groupId=${kafkaConfig.groupId}` : ''
+      })`,
+    );
 
     // Build KafkaJS configuration
     const kafkaJSConfig: KafkaJSConfig = {
       brokers: kafkaConfig.brokers,
       clientId: kafkaConfig.clientId,
-      logLevel: logLevel.INFO,
+      logLevel: resolveKafkaJsLogLevel(),
+      logCreator: createKafkaJsLogCreator('KafkaJS'),
     };
 
     // Add SSL configuration if enabled
