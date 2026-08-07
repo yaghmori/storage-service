@@ -20,6 +20,7 @@ COPY packages/config-typescript ./packages/config-typescript
 COPY packages/config-eslint ./packages/config-eslint
 COPY apps/api ./apps/api
 COPY scripts/migrate.sh ./scripts/migrate.sh
+COPY scripts/seed.sh ./scripts/seed.sh
 
 RUN pnpm install --filter @yaghmori/storage-service-server... --filter @workspace/validation... \
  && pnpm --filter @workspace/validation build \
@@ -59,7 +60,7 @@ WORKDIR /app
 # Install runtime deps without workspace protocol by using the built package tree
 COPY apps/api/package.json ./
 # Replace workspace dep with a no-op file path so prod install works standalone
-RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; p.scripts={...(p.scripts||{}),migrate:'node dist/migrate.js','db:migrate':'node dist/migrate.js','migrate:prod':'node dist/migrate.js'}; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
+RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; p.scripts={...(p.scripts||{}),migrate:'node dist/migrate.js','db:migrate':'node dist/migrate.js','migrate:prod':'node dist/migrate.js',seed:'node dist/seed.js','db:seed':'node dist/seed.js','seed:prod':'node dist/seed.js'}; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
  && pnpm install --prod --ignore-scripts \
  && pnpm rebuild sharp || true
 
@@ -67,9 +68,10 @@ COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/drizzle.config.ts ./
 COPY --from=build /app/apps/api/src/database/drizzle ./src/database/drizzle
 COPY --from=build /app/scripts/migrate.sh /usr/local/bin/migrate
+COPY --from=build /app/scripts/seed.sh /usr/local/bin/seed
 
-RUN sed -i 's/\r$//' /usr/local/bin/migrate \
- && chmod +x /usr/local/bin/migrate \
+RUN sed -i 's/\r$//' /usr/local/bin/migrate /usr/local/bin/seed \
+ && chmod +x /usr/local/bin/migrate /usr/local/bin/seed \
  && addgroup -g 1001 -S nodejs \
  && adduser -S nestjs -u 1001 \
  && mkdir -p /app/uploads \

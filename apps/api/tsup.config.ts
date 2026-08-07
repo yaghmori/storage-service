@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     main: 'src/main.ts',
     migrate: 'src/scripts/migrate.ts',
+    seed: 'src/scripts/seed.ts',
   },
   format: ['cjs'],
   target: 'node20',

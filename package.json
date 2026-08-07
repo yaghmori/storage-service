@@ -14,6 +14,7 @@
     "db:generate": "pnpm --filter @yaghmori/storage-service-server db:generate",
     "db:migrate": "pnpm --filter @yaghmori/storage-service-server db:migrate",
     "migrate": "pnpm --filter @yaghmori/storage-service-server migrate",
+    "seed": "pnpm --filter @yaghmori/storage-service-server seed",
     "db:push": "pnpm --filter @yaghmori/storage-service-server db:push",
     "db:seed": "pnpm --filter @yaghmori/storage-service-server db:seed",
     "docker:dev": "pnpm --filter @yaghmori/storage-service-server docker:dev",

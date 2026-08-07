@@ -25,7 +25,9 @@
     "migrate": "tsx src/scripts/migrate.ts",
     "migrate:prod": "node dist/migrate.js",
     "db:push": "drizzle-kit push --config=./drizzle.config.ts",
-    "db:seed": "tsx src/database/seed/seed.ts"
+    "db:seed": "tsx src/scripts/seed.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "seed:prod": "node dist/seed.js"
   },
   "keywords": [
     "storage",
