@@ -1,6 +1,6 @@
 {
   "name": "@yaghmori/storage-service",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Client SDK for storage-service — upload, signed URLs, processor results, TCP/Kafka",
   "license": "MIT",
   "type": "commonjs",
