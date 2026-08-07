@@ -30,6 +30,11 @@ export class UploadRateLimitGuard extends ThrottlerGuard {
   }
 
   protected async shouldSkip(context: ExecutionContext): Promise<boolean> {
+    // Throttler is HTTP-only; Nest TCP/RPC has no request path/IP.
+    if (context.getType() !== 'http') {
+      return true;
+    }
+
     if (
       this.config.get<string>('RATE_LIMIT_DISABLED') === 'true' ||
       this.config.get<string>('RATE_LIMIT_DISABLED') === '1'
