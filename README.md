@@ -37,9 +37,9 @@ pnpm install
 pnpm docker:dev
 # HTTP http://localhost:6100  |  TCP :6001
 
-# 2) Migrate + seed (creates DB if missing, then applies schema)
-pnpm migrate
-pnpm db:seed
+# 2) Migrate + seed (creates DB if missing, applies schema, seeds if empty)
+pnpm seed
+# or separately: pnpm migrate && pnpm db:seed
 
 # 3) Admin UI
 pnpm dev
@@ -49,29 +49,33 @@ pnpm dev
 
 Set `AUTH_DEFAULT_ORG_ID` to the seeded default org UUID so static `AUTH_API_KEYS` bind correctly.
 
-### Database (create + migrate)
+### Database (create + migrate + seed)
 
-On boot the app **creates the Postgres database** from `DATABASE_URL` when it does not exist (DB user needs `CREATEDB`). Schema upgrades:
+On boot the app **creates the Postgres database** from `DATABASE_URL` when it does not exist (DB user needs `CREATEDB`). With `RUN_MIGRATIONS=true` / `RUN_SEED=true` it also migrates and seeds on first start.
 
 ```bash
-# Preferred — inside the running production container
-docker exec <storage-service-container> pnpm migrate
-docker exec <storage-service-container> npm run migrate
+# Preferred — one command: create DB + migrate + seed (skips seed data if already present)
+docker exec <storage-service-container> seed
+docker exec <storage-service-container> pnpm seed
+
+# Schema only
 docker exec <storage-service-container> migrate
 
 # One-shot (same image / env; does not start the API)
-docker compose run --rm storage-service pnpm migrate
+docker compose run --rm storage-service seed
 
 # Monorepo (dev)
-pnpm migrate
+pnpm seed
+pnpm seed -- --force   # re-run org/provider seed even if data exists
 ```
 
-Optional: `RUN_MIGRATIONS=true` applies pending migrations on process start (default off for multi-replica).
+Optional boot flags: `RUN_MIGRATIONS=true` and `RUN_SEED=true` (default off for multi-replica).
 
 | Script | What runs |
 | ------ | --------- |
 | `pnpm docker:dev` | Nest API in Docker (`storage-service-api-dev`) |
 | `pnpm migrate` / `pnpm db:migrate` | Create DB if needed + apply Drizzle migrations |
+| `pnpm seed` / `pnpm db:seed` | Create DB + migrate + seed initial data if empty |
 | `pnpm dev` | Next admin only |
 | `pnpm dev:api` | Nest API on host |
 | `pnpm dev:all` | Turbo: host API + admin |

@@ -33,7 +33,7 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate \
 WORKDIR /app/api
 COPY apps/api/package.json ./
 # tsup noExternal bundles @workspace/validation — drop workspace protocol for standalone prod install
-RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; p.scripts={...(p.scripts||{}),migrate:'node dist/migrate.js','db:migrate':'node dist/migrate.js','migrate:prod':'node dist/migrate.js'}; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
+RUN node -e "const p=require('./package.json'); delete p.dependencies['@workspace/validation']; p.scripts={...(p.scripts||{}),migrate:'node dist/migrate.js','db:migrate':'node dist/migrate.js','migrate:prod':'node dist/migrate.js',seed:'node dist/seed.js','db:seed':'node dist/seed.js','seed:prod':'node dist/seed.js'}; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2));" \
  && pnpm install --prod --ignore-scripts \
  && pnpm rebuild sharp || true
 
@@ -65,9 +65,10 @@ COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/static /app/web/ap
 
 COPY --from=build /app/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY --from=build /app/scripts/migrate.sh /usr/local/bin/migrate
+COPY --from=build /app/scripts/seed.sh /usr/local/bin/seed
 COPY --from=build /app/scripts/container-package.json /app/package.json
-RUN sed -i 's/\r$//' /app/docker-entrypoint.sh /usr/local/bin/migrate \
- && chmod +x /app/docker-entrypoint.sh /usr/local/bin/migrate \
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh /usr/local/bin/migrate /usr/local/bin/seed \
+ && chmod +x /app/docker-entrypoint.sh /usr/local/bin/migrate /usr/local/bin/seed \
  && chown nestjs:nodejs /app/package.json
 
 USER nestjs
@@ -77,9 +78,8 @@ EXPOSE 6000 6001 6200
 HEALTHCHECK --interval=30s --timeout=3s --start-period=50s --retries=3 \
   CMD sh -c 'if [ "$${ENABLE_HTTP:-true}" = "false" ]; then exit 0; else nc -z localhost $${PORT:-6000} || exit 1; fi'
 
-# Schema upgrade (any of these):
-#   docker exec <container> pnpm migrate
-#   docker exec <container> npm run migrate
+# Schema + first data:
 #   docker exec <container> migrate
-# Optional boot migrate: RUN_MIGRATIONS=true
+#   docker exec <container> seed
+# Optional boot: RUN_MIGRATIONS=true RUN_SEED=true
 ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]

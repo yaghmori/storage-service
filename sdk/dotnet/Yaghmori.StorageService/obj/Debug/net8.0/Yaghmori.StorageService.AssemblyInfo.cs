@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("Client SDK for storage-service — upload, signed URLs, processor results, TCP/Kafk" +
     "a"))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.2.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.2.0+e0106d942f1b050e4e0775853cef80344ed4329f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.2.0+1aa725f3cad34ab8d2faa0223bba1fdd1d903958")]
 [assembly: System.Reflection.AssemblyProductAttribute("Yaghmori.StorageService")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Yaghmori.StorageService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.2.0.0")]
