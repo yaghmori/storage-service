@@ -22,6 +22,7 @@ function pageTitle(pathname: string): string {
       if (segments[1] === "users") return "Users";
     if (segments[1] === "settings") {
       if (segments[2] === "profile") return "Profile";
+      if (segments[2] === "preferences") return "Preferences";
       if (segments[2] === "appearance") return "Appearance";
       return "Account settings";
     }

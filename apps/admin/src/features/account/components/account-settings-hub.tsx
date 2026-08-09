@@ -42,7 +42,7 @@ export function AccountSettingsHub() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {CARDS.map((card) => (
           <Link key={card.href} href={card.href} className="group">
-            <Card className="h-full transition-colors group-hover:bg-muted/40">
+            <Card className="h-full rounded-2xl border-border/70 bg-card/90 shadow-sm transition-colors group-hover:bg-muted/40">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <card.icon className="size-4" />
