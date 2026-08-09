@@ -12,6 +12,10 @@ import {
   Skeleton,
 } from "@workspace/ui/components";
 import {
+  createAuditUserColumns,
+  type AuditUserRef,
+} from "@/lib/audit-user";
+import {
   ProcessorBackendKind,
   ProcessorBackendKindLabels,
 } from "@workspace/validation";
@@ -43,6 +47,7 @@ export function createProcessorBackendsColumns(
   onEdit: (row: ProcessorBackendRow) => void,
   onDelete: (row: ProcessorBackendRow) => void,
   onTest?: (row: ProcessorBackendRow) => void,
+  usersById: Map<string, AuditUserRef> = new Map(),
 ): ColumnDef<ProcessorBackendRow>[] {
   return [
     {
@@ -130,6 +135,7 @@ export function createProcessorBackendsColumns(
         </div>
       ),
     },
+    ...createAuditUserColumns<ProcessorBackendRow>(usersById),
     {
       id: "actions",
       header: "Actions",

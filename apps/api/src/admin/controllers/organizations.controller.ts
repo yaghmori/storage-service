@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -41,7 +42,11 @@ import { OrgUsageService } from '../../organizations/services/org-usage.service'
 import { OrgProcessorsService } from '../../processing/services/org-processors.service';
 import { NotifyWebhookProcessingService } from '../../processing/services/notify-webhook-processing.service';
 import { PLATFORM_PROCESSING_DEFAULTS } from '../../processing/types/processing-settings';
+import { CurrentAdmin } from '../decorators/current-admin.decorator';
+import type { AdminRequestUser } from '../decorators/current-admin.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { AdminUserService } from '../services/admin-user.service';
+import { MembershipService } from '../services/membership.service';
 
 export class CreateOrganizationDto {
   @IsString()
@@ -496,11 +501,13 @@ export class OrganizationsController {
     private readonly retentionService: OrgRetentionService,
     private readonly usageService: OrgUsageService,
     private readonly notifyWebhook: NotifyWebhookProcessingService,
+    private readonly memberships: MembershipService,
+    private readonly users: AdminUserService,
   ) {}
 
   @Get()
-  async list() {
-    return this.organizations.list();
+  async list(@CurrentAdmin() admin: AdminRequestUser) {
+    return this.memberships.listOrgsForUser(admin.adminId);
   }
 
   /** Check whether a slug is free (used by create-org name debounce). */
@@ -523,7 +530,11 @@ export class OrganizationsController {
   }
 
   @Get(':id/processing-settings')
-  async getProcessingSettings(@Param('id') id: string) {
+  async getProcessingSettings(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'member');
     const rows = await this.orgProcessors.ensureDefaults(id);
     const settings = this.orgProcessors.toLegacyProcessingSettings(rows);
     return {
@@ -543,9 +554,11 @@ export class OrganizationsController {
 
   @Put(':id/processing-settings')
   async updateProcessingSettings(
+    @CurrentAdmin() admin: AdminRequestUser,
     @Param('id') id: string,
     @Body() body: UpdateProcessingSettingsDto,
   ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'admin');
     return this.orgProcessors.updateFromLegacySettings(id, {
       ...body,
     });
@@ -554,9 +567,11 @@ export class OrganizationsController {
   @Post(':id/processing-settings/test-webhook')
   @HttpCode(HttpStatus.OK)
   async testNotifyWebhook(
+    @CurrentAdmin() admin: AdminRequestUser,
     @Param('id') id: string,
     @Body() body: TestNotifyWebhookDto,
   ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'admin');
     const org = await this.organizations.getById(id);
     if (!org) throw new NotFoundException('Organization not found');
     return this.notifyWebhook.sendTest({
@@ -569,40 +584,67 @@ export class OrganizationsController {
   }
 
   @Get(':id/limits')
-  async getLimits(@Param('id') id: string) {
+  async getLimits(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'member');
     return this.limitsService.getForOrg(id);
   }
 
   @Put(':id/limits')
-  async updateLimits(@Param('id') id: string, @Body() body: UpdateOrgLimitsDto) {
+  async updateLimits(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+    @Body() body: UpdateOrgLimitsDto,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'admin');
     return this.limitsService.updateForOrg(id, body);
   }
 
   @Get(':id/retention')
-  async getRetention(@Param('id') id: string) {
+  async getRetention(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'member');
     return this.retentionService.getForOrg(id);
   }
 
   @Put(':id/retention')
   async updateRetention(
+    @CurrentAdmin() admin: AdminRequestUser,
     @Param('id') id: string,
     @Body() body: UpdateOrgRetentionDto,
   ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'admin');
     return this.retentionService.updateForOrg(id, body);
   }
 
   @Get(':id/usage')
-  async getUsage(@Param('id') id: string) {
+  async getUsage(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'member');
     return this.usageService.getUsage(id);
   }
 
   @Post(':id/usage/recalculate')
-  async recalculateUsage(@Param('id') id: string) {
+  async recalculateUsage(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'admin');
     return this.usageService.recalculate(id);
   }
 
   @Get(':id')
-  async get(@Param('id') id: string) {
+  async get(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'member');
     const org = await this.organizations.getById(id);
     if (!org) throw new NotFoundException(`Organization ${id} not found`);
     return org;
@@ -610,20 +652,50 @@ export class OrganizationsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() body: CreateOrganizationDto) {
+  async create(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Body() body: CreateOrganizationDto,
+  ) {
+    const user = await this.users.findById(admin.adminId);
+    if (!user) throw new ForbiddenException('User not found');
+
+    // Platform super-admins (users.role = admin) can create orgs.
+    // Org-invited users (platform role member) may only create when they belong to none.
+    const isPlatformAdmin = user.role === 'admin';
+    if (!isPlatformAdmin) {
+      const existingOrgs = await this.memberships.listOrgsForUser(admin.adminId);
+      if (existingOrgs.length > 0) {
+        throw new ForbiddenException(
+          'You already belong to an organization and cannot create another',
+        );
+      }
+    }
+
     const organization = await this.organizations.create(body);
     await this.orgProcessors.ensureDefaults(organization.id);
+    await this.memberships.addOwner(organization.id, user);
     return organization;
   }
 
   @Put(':id')
-  async update(@Param('id') id: string, @Body() body: UpdateOrganizationDto) {
+  async update(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+    @Body() body: UpdateOrganizationDto,
+  ) {
+    // Status changes are destructive — owners only. Other fields need admin+.
+    const minRole = body.status !== undefined ? 'owner' : 'admin';
+    await this.memberships.requireMembership(admin.adminId, id, minRole);
     return this.organizations.update(id, body);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id') id: string) {
+  async remove(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, id, 'owner');
     const deleted = await this.organizations.delete(id);
     if (!deleted) throw new NotFoundException(`Organization ${id} not found`);
     return emptySuccess({ message: 'Organization deleted' });

@@ -1,4 +1,9 @@
-import { isPublicRoute, PAGE_ROUTES, PLATFORM_PREFIX } from "@/lib/constants/page-routes";
+import {
+  isInvitationRoute,
+  isPublicRoute,
+  PAGE_ROUTES,
+  PLATFORM_PREFIX,
+} from "@/lib/constants/page-routes";
 import { getSessionFromRequest } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -46,7 +51,8 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (session && isPublic) {
+  // Allow signed-in users to accept invitations; other public auth pages bounce home.
+  if (session && isPublic && !isInvitationRoute(pathname)) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 

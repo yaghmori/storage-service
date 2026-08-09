@@ -13,6 +13,8 @@ export interface ApiKeyRow {
   permissions: Record<string, unknown> | null;
   expiresAt: string | null;
   isActive: boolean;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
   createdAt: string;
 }
 

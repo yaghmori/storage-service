@@ -13,6 +13,7 @@ import { Type } from 'class-transformer';
 import { Public } from '../../common/decorators/public.decorator';
 import * as schema from '../../database/drizzle/schema';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { OrgMembershipGuard } from '../guards/org-membership.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
 class AnalyticsQueryDto {
@@ -36,7 +37,7 @@ class AnalyticsQueryDto {
 
 @Public()
 @Controller('admin/api/analytics')
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class AnalyticsController {
   constructor(
     @Inject('DRIZZLE_DB')

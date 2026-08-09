@@ -22,6 +22,7 @@ import { KeyRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createApiKeySchema } from "@workspace/validation";
 import { toast } from "sonner";
+import { useOrgAuditUsersMap } from "@/lib/audit-user";
 import { createApiKeysColumns } from "../columns/api-keys-columns";
 import {
   useApiKeysQuery,
@@ -45,6 +46,7 @@ export function ApiKeysListView({
   const createMutation = useCreateApiKeyMutation(activeOrg?.id);
   const revokeMutation = useRevokeApiKeyMutation(activeOrg?.id);
   const deleteMutation = useDeleteApiKeyMutation(activeOrg?.id);
+  const usersById = useOrgAuditUsersMap(activeOrg?.id);
 
   const columns = useMemo(
     () =>
@@ -52,8 +54,9 @@ export function ApiKeysListView({
         activeOrg?.slug,
         (row) => setRevoking(row),
         (row) => setDeleting(row),
+        usersById,
       ),
-    [activeOrg?.slug],
+    [activeOrg?.slug, usersById],
   );
 
   const { table } = useDataTable({

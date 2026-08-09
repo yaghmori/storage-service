@@ -1,11 +1,13 @@
 "use client";
 
 import { useLogout } from "@/features/auth/hooks/use-auth-mutation";
+import { useAccountMeQuery } from "@/features/account/hooks/use-account-queries";
 import { PAGE_ROUTES } from "@/lib/constants/page-routes";
 import { useAuth } from "@/provider/auth-provider";
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -26,10 +28,12 @@ import Link from "next/link";
 export function NavUser() {
   const { isMobile } = useSidebar();
   const { user } = useAuth();
+  const { data: me } = useAccountMeQuery();
   const logout = useLogout();
 
-  const name = user?.name ?? user?.email ?? "Admin";
-  const email = user?.email ?? "";
+  const name = me?.name ?? user?.name ?? user?.email ?? "Admin";
+  const email = me?.email ?? user?.email ?? "";
+  const avatar = me?.avatar ?? user?.avatar ?? null;
   const initials =
     name
       .split(/\s+/)
@@ -48,6 +52,9 @@ export function NavUser() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
+                {avatar ? (
+                  <AvatarImage src={avatar} alt={name} className="rounded-lg" />
+                ) : null}
                 <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -66,7 +73,16 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                  {avatar ? (
+                    <AvatarImage
+                      src={avatar}
+                      alt={name}
+                      className="rounded-lg"
+                    />
+                  ) : null}
+                  <AvatarFallback className="rounded-lg">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{name}</span>

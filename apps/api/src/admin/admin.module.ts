@@ -11,6 +11,11 @@ import { StorageProvidersModule } from '../storage-providers/storage-providers.m
 import { UploadModule } from '../upload/upload.module';
 import { VariantsModule } from '../variants/variants.module';
 import { AdminAuthModule } from './admin-auth.module';
+import { AdminInvitesController } from './controllers/admin-invites.controller';
+import {
+  AdminMembersByHeaderController,
+  AdminMembersController,
+} from './controllers/admin-members.controller';
 import { AdminUsersController } from './controllers/admin-users.controller';
 import { AnalyticsController } from './controllers/analytics.controller';
 import { ApiKeysController } from './controllers/api-keys.controller';
@@ -20,7 +25,9 @@ import { JobsController } from './controllers/jobs.controller';
 import { OrganizationsController } from './controllers/organizations.controller';
 import { ProcessorBackendsController } from './controllers/processor-backends.controller';
 import { ProvidersController } from './controllers/providers.controller';
+import { OrgMembershipGuard } from './guards/org-membership.guard';
 import { AdminApiKeyService } from './services/admin-api-key.service';
+import { MembershipService } from './services/membership.service';
 
 @Module({
   imports: [
@@ -47,7 +54,11 @@ import { AdminApiKeyService } from './services/admin-api-key.service';
     OrganizationsController,
     ProcessorBackendsController,
     AdminUsersController,
+    AdminMembersController,
+    AdminMembersByHeaderController,
+    AdminInvitesController,
   ],
-  providers: [AdminApiKeyService],
+  providers: [AdminApiKeyService, MembershipService, OrgMembershipGuard],
+  exports: [MembershipService],
 })
 export class AdminModule {}

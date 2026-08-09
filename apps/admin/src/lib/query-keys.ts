@@ -196,6 +196,16 @@ export function invalidateUsers(qc: Qc) {
   qc.invalidateQueries({ queryKey: userKeys.all });
 }
 
+export const memberKeys = {
+  all: ["members"] as const,
+  list: (orgId?: string, type?: string) =>
+    [...memberKeys.all, orgId, type ?? "all"] as const,
+};
+
+export function invalidateMembers(qc: Qc) {
+  qc.invalidateQueries({ queryKey: memberKeys.all });
+}
+
 export const MUTATION_KEYS = {
   AUTH: {
     LOGIN: ["auth", "login"] as const,

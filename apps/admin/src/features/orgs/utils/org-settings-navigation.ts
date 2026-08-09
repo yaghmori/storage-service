@@ -8,11 +8,13 @@ import {
   KeyRound,
   Server,
   Timer,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
 export type OrgSettingsSection =
   | "general"
+  | "members"
   | "limits"
   | "providers"
   | "processor-backends"
@@ -36,6 +38,13 @@ export const orgSettingsNavItems: OrgSettingsNavItem[] = [
     section: "general",
     icon: Building2,
     href: PAGE_ROUTES.settingsGeneral,
+  },
+  {
+    title: "Members",
+    description: "Invite teammates and manage organization roles.",
+    section: "members",
+    icon: Users,
+    href: PAGE_ROUTES.settingsMembers,
   },
   {
     title: "Limits & quota",

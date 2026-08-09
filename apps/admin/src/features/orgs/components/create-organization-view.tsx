@@ -2,6 +2,7 @@
 
 import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
 import { PAGE_ROUTES } from "@/lib/constants/page-routes";
+import { useAuth } from "@/provider/auth-provider";
 import { useActiveOrg } from "@/provider/org-provider";
 import {
   checkOrganizationSlugAvailable,
@@ -19,6 +20,7 @@ import {
 } from "@workspace/ui/components";
 import { Info, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -44,10 +46,24 @@ function isDuplicateOrgError(message: string): boolean {
 /** Mirrors Parslinks dashboard first-organization / new-team onboarding. */
 export function CreateOrganizationView() {
   const router = useRouter();
+  const { user } = useAuth();
   const { setSelectedOrgSlug } = useActiveOrg();
   const { data, isLoading } = useOrganizationsQuery();
   const createMutation = useCreateOrganizationMutation();
-  const hasOrgs = (data?.items?.length ?? 0) > 0;
+  const orgs = data?.items ?? [];
+  const hasOrgs = orgs.length > 0;
+  // Platform super-admin (users.role), not org membership role.
+  const isPlatformAdmin = user?.role === "admin";
+
+  // Invited org members cannot create orgs — send them back to their workspace.
+  // Platform admins may create additional organizations.
+  useEffect(() => {
+    if (isLoading || !hasOrgs || isPlatformAdmin) return;
+    const first = orgs[0];
+    if (!first) return;
+    setSelectedOrgSlug(first.slug);
+    router.replace(PAGE_ROUTES.home(first.slug));
+  }, [hasOrgs, isLoading, isPlatformAdmin, orgs, router, setSelectedOrgSlug]);
 
   const form = useAppForm({
     defaultValues: { organizationName: "" },
@@ -105,20 +121,24 @@ export function CreateOrganizationView() {
     },
   });
 
-  if (isLoading) {
+  if (isLoading || (hasOrgs && !isPlatformAdmin)) {
     return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-        Loading…
+      <div className="flex justify-center items-center text-sm min-h-svh text-muted-foreground">
+        {hasOrgs && !isPlatformAdmin ? "Redirecting…" : "Loading…"}
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="flex w-full max-w-md flex-col items-center">
-        <h1 className="mb-2 text-2xl font-bold">Welcome!</h1>
+    <div className="flex justify-center items-center px-4 min-h-screen">
+      <div className="flex flex-col items-center w-full max-w-md">
+        <h1 className="mb-2 text-2xl font-bold">
+          {hasOrgs ? "Create organization" : "Welcome!"}
+        </h1>
         <p className="mb-6 text-muted-foreground">
-          Create an organization or team to get started
+          {hasOrgs
+            ? "Create another organization workspace"
+            : "Create an organization or team to get started"}
         </p>
 
         <form
@@ -126,7 +146,7 @@ export function CreateOrganizationView() {
             e.preventDefault();
             form.handleSubmit();
           }}
-          className="flex w-full flex-col gap-4"
+          className="flex flex-col gap-4 w-full"
         >
           <form.AppField
             name="organizationName"
@@ -157,7 +177,7 @@ export function CreateOrganizationView() {
               return (
                 <field.Input
                   label={
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex gap-1 items-center">
                       Organization name
                       <HoverCard>
                         <HoverCardTrigger asChild>
@@ -171,9 +191,9 @@ export function CreateOrganizationView() {
                           </button>
                         </HoverCardTrigger>
                         <HoverCardContent>
-                          This will be your workspace where you can manage files,
-                          storage providers, and API keys. The URL slug is
-                          generated from the name.
+                          This will be your workspace where you can manage
+                          files, storage providers, and API keys. The URL slug
+                          is generated from the name.
                         </HoverCardContent>
                       </HoverCard>
                     </span>
@@ -190,7 +210,7 @@ export function CreateOrganizationView() {
                   endAdornment={
                     checking ? (
                       <Loader2
-                        className="size-4 animate-spin text-muted-foreground"
+                        className="animate-spin size-4 text-muted-foreground"
                         aria-label="Checking name"
                       />
                     ) : undefined
@@ -214,7 +234,7 @@ export function CreateOrganizationView() {
                   disabled={!canSubmit || pending}
                 >
                   {pending ? (
-                    <span className="flex items-center gap-2">
+                    <span className="flex gap-2 items-center">
                       <Spinner variant="bars" />
                       <span>Creating organization...</span>
                     </span>
@@ -226,12 +246,20 @@ export function CreateOrganizationView() {
             }}
           </form.Subscribe>
 
-          {hasOrgs ? (
+          {hasOrgs && isPlatformAdmin ? (
             <Button
               type="button"
               variant="ghost"
               className="w-full"
-              onClick={() => router.push(PAGE_ROUTES.ORGS)}
+              onClick={() => {
+                const first = orgs[0];
+                if (first) {
+                  setSelectedOrgSlug(first.slug);
+                  router.push(PAGE_ROUTES.home(first.slug));
+                } else {
+                  router.back();
+                }
+              }}
             >
               Cancel
             </Button>

@@ -10,6 +10,12 @@ const PUBLIC_ROUTES = [
   "admin/api/auth/forgot-password",
 ];
 
+function isUpstreamPublic(fullPath: string): boolean {
+  if (PUBLIC_ROUTES.some((route) => fullPath === route)) return true;
+  if (fullPath.startsWith("admin/api/invites/")) return true;
+  return false;
+}
+
 async function handleRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
@@ -21,7 +27,7 @@ async function handleRequest(
     const fullPath = path.join("/");
     const targetUrl = `${STORAGE_API_URL}/${fullPath}${search}`;
 
-    const isPublicRoute = PUBLIC_ROUTES.some((route) => fullPath === route);
+    const isPublicRoute = isUpstreamPublic(fullPath);
 
     let token = null;
     if (!isPublicRoute) {

@@ -29,7 +29,12 @@ import { Public } from '../../common/decorators/public.decorator';
 import * as schema from '../../database/drizzle/schema';
 import { emptySuccess } from '../../lib/contracts';
 import { StorageFactoryService } from '../../storage-providers/services/storage-factory.service';
+import {
+  CurrentAdmin,
+  type AdminRequestUser,
+} from '../decorators/current-admin.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { OrgMembershipGuard } from '../guards/org-membership.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
 const PROVIDER_TYPES = ['s3', 'minio', 'local'] as const;
@@ -83,7 +88,7 @@ export class UpdateProviderDto {
 
 @Public()
 @Controller('admin/api/providers')
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class ProvidersController {
   constructor(
     @Inject('DRIZZLE_DB')
@@ -118,6 +123,7 @@ export class ProvidersController {
   @HttpCode(HttpStatus.CREATED)
   async createProvider(
     @Body() dto: CreateProviderDto,
+    @CurrentAdmin() admin: AdminRequestUser,
     @Query('orgId') queryOrgId?: string,
     @Headers('x-org-id') headerOrgId?: string,
   ) {
@@ -158,6 +164,8 @@ export class ProvidersController {
           config: dto.config,
           isActive: dto.isActive ?? true,
           isDefault,
+          createdByUserId: admin.adminId,
+          updatedByUserId: admin.adminId,
         })
         .returning();
 
@@ -169,6 +177,7 @@ export class ProvidersController {
   async updateProvider(
     @Param('id') id: string,
     @Body() dto: UpdateProviderDto,
+    @CurrentAdmin() admin: AdminRequestUser,
     @Query('orgId') queryOrgId?: string,
     @Headers('x-org-id') headerOrgId?: string,
   ) {
@@ -209,6 +218,7 @@ export class ProvidersController {
           ...(dto.config !== undefined ? { config: dto.config } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           ...(dto.isDefault !== undefined ? { isDefault: dto.isDefault } : {}),
+          updatedByUserId: admin.adminId,
           updatedAt: new Date(),
         })
         .where(

@@ -12,6 +12,10 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from "@workspace/ui/components";
+import {
+  createAuditUserColumns,
+  type AuditUserRef,
+} from "@/lib/audit-user";
 import { Ban, MoreHorizontal, Trash2 } from "lucide-react";
 import type { ApiKeyRow } from "../hooks/use-api-keys-queries";
 
@@ -19,6 +23,7 @@ export function createApiKeysColumns(
   orgSlug?: string,
   onRevoke?: (row: ApiKeyRow) => void,
   onDelete?: (row: ApiKeyRow) => void,
+  usersById: Map<string, AuditUserRef> = new Map(),
 ): ColumnDef<ApiKeyRow>[] {
   return [
     {
@@ -71,6 +76,7 @@ export function createApiKeysColumns(
       meta: { label: "Created", skeleton: <Skeleton className="h-4 w-28" /> },
       cell: ({ row }) => <DateDisplay date={row.original.createdAt} />,
     },
+    ...createAuditUserColumns<ApiKeyRow>(usersById),
     {
       id: "actions",
       header: "Actions",

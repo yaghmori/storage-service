@@ -26,7 +26,10 @@ import {
 } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { ProcessorBackendsService } from '../../processing/services/processor-backends.service';
+import { CurrentAdmin } from '../decorators/current-admin.decorator';
+import type { AdminRequestUser } from '../decorators/current-admin.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { MembershipService } from '../services/membership.service';
 
 class CreateProcessorBackendDto {
   @IsString()
@@ -135,30 +138,49 @@ class UpdateProcessorBackendDto {
 @Controller('admin/api/orgs/:orgId/processor-backends')
 @UseGuards(AdminAuthGuard)
 export class ProcessorBackendsController {
-  constructor(private readonly backends: ProcessorBackendsService) {}
+  constructor(
+    private readonly backends: ProcessorBackendsService,
+    private readonly memberships: MembershipService,
+  ) {}
 
   @Get()
-  async list(@Param('orgId') orgId: string) {
+  async list(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('orgId') orgId: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, orgId, 'member');
     const rows = await this.backends.listByOrg(orgId);
     return rows.map((row) => this.backends.toPublic(row));
   }
 
   @Get(':id/models')
-  async listModels(@Param('orgId') orgId: string, @Param('id') id: string) {
+  async listModels(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('orgId') orgId: string,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, orgId, 'member');
     const items = await this.backends.listModels(orgId, id);
     return { items, total: items.length };
   }
 
   @Post(':id/test')
   async test(
+    @CurrentAdmin() admin: AdminRequestUser,
     @Param('orgId') orgId: string,
     @Param('id') id: string,
   ) {
+    await this.memberships.requireMembership(admin.adminId, orgId, 'admin');
     return this.backends.testConnectivity(orgId, id);
   }
 
   @Get(':id')
-  async get(@Param('orgId') orgId: string, @Param('id') id: string) {
+  async get(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('orgId') orgId: string,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, orgId, 'member');
     const row = await this.backends.getById(id, orgId);
     if (!row) throw new NotFoundException('Processor backend not found');
     return this.backends.toPublic(row);
@@ -167,26 +189,41 @@ export class ProcessorBackendsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(
+    @CurrentAdmin() admin: AdminRequestUser,
     @Param('orgId') orgId: string,
     @Body() body: CreateProcessorBackendDto,
   ) {
-    const row = await this.backends.create(orgId, body);
+    await this.memberships.requireMembership(admin.adminId, orgId, 'admin');
+    const row = await this.backends.create(orgId, {
+      ...body,
+      actorUserId: admin.adminId,
+    });
     return this.backends.toPublic(row);
   }
 
   @Put(':id')
   async update(
+    @CurrentAdmin() admin: AdminRequestUser,
     @Param('orgId') orgId: string,
     @Param('id') id: string,
     @Body() body: UpdateProcessorBackendDto,
   ) {
-    const row = await this.backends.update(id, orgId, body);
+    await this.memberships.requireMembership(admin.adminId, orgId, 'admin');
+    const row = await this.backends.update(id, orgId, {
+      ...body,
+      actorUserId: admin.adminId,
+    });
     return this.backends.toPublic(row);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('orgId') orgId: string, @Param('id') id: string) {
+  async remove(
+    @CurrentAdmin() admin: AdminRequestUser,
+    @Param('orgId') orgId: string,
+    @Param('id') id: string,
+  ) {
+    await this.memberships.requireMembership(admin.adminId, orgId, 'admin');
     const row = await this.backends.delete(id, orgId);
     if (!row) throw new NotFoundException('Processor backend not found');
   }

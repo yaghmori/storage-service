@@ -12,6 +12,7 @@ import { IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import * as schema from '../../database/drizzle/schema';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { OrgMembershipGuard } from '../guards/org-membership.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
 class OrgQueryDto {
@@ -22,7 +23,7 @@ class OrgQueryDto {
 
 @Public()
 @Controller('admin/api/dashboard')
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class DashboardController {
   constructor(
     @Inject('DRIZZLE_DB')

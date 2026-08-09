@@ -92,8 +92,33 @@ Optional boot flags: `RUN_MIGRATIONS=true` and `RUN_SEED=true` (default off for 
 
 ## Admin features
 
-Tenant (`/{orgSlug}/…`): Dashboard, Files, Jobs, Analytics, Providers, Tokens, Settings.  
-Platform (`/~/…`): Organizations, Admin users, Account.
+Tenant (`/{orgSlug}/…`): Dashboard, Files, Jobs, Analytics, Providers, Tokens, Settings (Members, Danger zone for owners).  
+Onboarding create-org: `/~/orgs/new` (platform admin, or users with zero memberships).
+
+## Organization membership
+
+Two role layers (do not conflate):
+
+| Layer | Column | Values | Meaning |
+| ----- | ------ | ------ | ------- |
+| **Platform** | `users.role` | `admin` \| `member` | Super-admin can create orgs; invitees stay `member` (DB default) |
+| **Org** | `organization_members.role` | `owner` \| `admin` \| `member` | Per-org authority (Settings → Members, danger zone, transfers) |
+
+- Invite: Settings → Members → email invite → `/auth/invitation/[token]`
+- Create org: platform `admin` always; others only if they have zero memberships
+- Danger zone / ownership transfer: org `owner` only
+- Invite mail uses nodemailer (`SMTP_HOST` / `INVITE_SMTP_*`); if SMTP is missing the accept URL is logged. Set `ADMIN_APP_URL` to the admin origin for invite links.
+
+### Authorization regression checklist
+
+| Case | Expected |
+| ---- | -------- |
+| Seed admin creates a second org | Allowed |
+| Invited member opens create-org | Redirected / API 403 |
+| Member opens Settings → Danger | Redirect to General |
+| Non-owner opens owner row menu | Hidden |
+| Owner transfers ownership | Roles swap; actor becomes org admin |
+| Create/update provider / processor backend / API key | `created_by_user_id` / `updated_by_user_id` set |
 
 ## SDK
 

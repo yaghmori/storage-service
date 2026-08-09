@@ -2,6 +2,8 @@
 
 import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
 import { TypeToConfirmDialog } from "@/components/type-to-confirm-dialog";
+import { TransferOwnershipDialog } from "@/features/members/components/transfer-ownership-dialog";
+import { useMembersQuery } from "@/features/members/hooks/use-members-queries";
 import { PAGE_ROUTES } from "@/lib/constants/page-routes";
 import {
   Badge,
@@ -11,7 +13,7 @@ import {
   Separator,
   Switch,
 } from "@workspace/ui/components";
-import { Trash2 } from "lucide-react";
+import { Shield, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -25,10 +27,12 @@ import {
 export function OrgDangerZone({ org }: { org: OrganizationRow }) {
   const router = useRouter();
   const { data } = useOrganizationsQuery();
+  const { data: members = [] } = useMembersQuery(org.id, "all");
   const updateMutation = useUpdateOrganizationMutation();
   const deleteMutation = useDeleteOrganizationMutation();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const isActive = org.status === "active";
 
@@ -84,6 +88,30 @@ export function OrgDangerZone({ org }: { org: OrganizationRow }) {
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
+              <Shield className="mt-0.5 size-5 shrink-0 text-destructive" />
+              <div>
+                <h3 className="font-medium text-destructive">
+                  Transfer ownership
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Transfer ownership to another organization member. You will
+                  become an admin after the transfer.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full shrink-0 sm:w-auto"
+              onClick={() => setTransferOpen(true)}
+            >
+              Transfer ownership
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
               <Trash2 className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div>
                 <h3 className="font-medium text-destructive">
@@ -105,6 +133,13 @@ export function OrgDangerZone({ org }: { org: OrganizationRow }) {
           </div>
         </CardContent>
       </Card>
+
+      <TransferOwnershipDialog
+        orgId={org.id}
+        members={members}
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+      />
 
       <TypeToConfirmDialog
         open={suspendOpen}

@@ -28,7 +28,8 @@ export interface SessionUser {
   id: string;
   email: string;
   role?: string;
-  name?: string;
+  name?: string | null;
+  avatar?: string | null;
   [key: string]: unknown;
 }
 
@@ -88,6 +89,7 @@ export async function getSession(): Promise<Session | null> {
         email: internal.user.email,
         role: internal.user.role,
         name: internal.user.name ?? internal.user.email,
+        avatar: internal.user.avatar ?? null,
       },
     };
   } catch {
@@ -133,6 +135,7 @@ export async function getSessionFromRequest(
         email: internal.user.email,
         role: internal.user.role,
         name: internal.user.name ?? internal.user.email,
+        avatar: internal.user.avatar ?? null,
       },
     };
   } catch {

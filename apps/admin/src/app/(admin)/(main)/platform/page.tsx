@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
-import { PAGE_ROUTES } from "@/lib/constants/page-routes";
 
-/** Bare `/~` is not a page — land on organizations. */
+/** Bare `/~` lands on home (membership-scoped org resolution). */
 export default function PlatformRootPage() {
-  redirect(PAGE_ROUTES.ORGS);
+  redirect("/");
 }

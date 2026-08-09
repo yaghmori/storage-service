@@ -68,6 +68,7 @@ import {
   type AdminRequestUser,
 } from '../decorators/current-admin.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { OrgMembershipGuard } from '../guards/org-membership.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
 /** MIME families aligned with org usage breakdown. */
@@ -186,7 +187,7 @@ class ListFilesQueryDto {
 
 @Public()
 @Controller('admin/api/files')
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class FilesController {
   constructor(
     @Inject('DRIZZLE_DB')

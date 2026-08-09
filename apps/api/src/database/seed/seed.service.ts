@@ -31,13 +31,15 @@ export class SeedService {
       `Seeding database${options.onlyIfEmpty ? ' (only if empty)' : ''}...`,
     );
 
-    await this.seedAdminUser();
+    const admin = await this.seedAdminUser();
 
     const orgCount = await this.countOrgs();
     const providerCount = await this.countProviders();
 
-    // Boot path: if orgs and providers already exist, do nothing else.
+    // Boot path: if orgs and providers already exist, still ensure owner membership.
     if (options.onlyIfEmpty && orgCount > 0 && providerCount > 0) {
+      const org = await this.ensureSeedOrg();
+      await this.ensureOwnerMembership(org.id, admin);
       this.logger.log(
         `Skipping org/provider seed — ${orgCount} org(s), ${providerCount} provider(s) already exist`,
       );
@@ -46,6 +48,7 @@ export class SeedService {
 
     const org = await this.ensureSeedOrg();
     await this.orgProcessors.ensureDefaults(org.id);
+    await this.ensureOwnerMembership(org.id, admin);
 
     // Seed providers when missing (covers migration-created org with no providers).
     if (!options.onlyIfEmpty || providerCount === 0) {
@@ -111,7 +114,7 @@ export class SeedService {
     return org;
   }
 
-  private async seedAdminUser(): Promise<void> {
+  private async seedAdminUser(): Promise<schema.AdminUser> {
     const email = (
       process.env.ADMIN_EMAIL || 'admin@allyfe.org'
     )
@@ -124,17 +127,62 @@ export class SeedService {
       .where(eq(schema.users.email, email))
       .limit(1);
     if (existing) {
+      if (existing.role !== 'admin') {
+        const [promoted] = await this.db
+          .update(schema.users)
+          .set({ role: 'admin', updatedAt: new Date() })
+          .where(eq(schema.users.id, existing.id))
+          .returning();
+        this.logger.log(`Promoted seed user "${email}" to platform admin`);
+        return promoted;
+      }
       this.logger.log(`Admin user "${email}" already exists`);
-      return;
+      return existing;
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    await this.db.insert(schema.users).values({
-      email,
-      passwordHash,
-      role: 'admin',
-      isActive: true,
-    });
+    const [created] = await this.db
+      .insert(schema.users)
+      .values({
+        email,
+        passwordHash,
+        role: 'admin',
+        isActive: true,
+      })
+      .returning();
     this.logger.log(`Created admin user ${email}`);
+    return created;
+  }
+
+  private async ensureOwnerMembership(
+    orgId: string,
+    user: schema.AdminUser,
+  ): Promise<void> {
+    const [membership] = await this.db
+      .select()
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.orgId, orgId),
+          eq(schema.organizationMembers.userId, user.id),
+        ),
+      )
+      .limit(1);
+
+    if (membership) {
+      this.logger.log(`Owner membership already exists for ${user.email}`);
+      return;
+    }
+
+    await this.db.insert(schema.organizationMembers).values({
+      orgId,
+      userId: user.id,
+      role: 'owner',
+      status: 'active',
+      email: user.email.trim().toLowerCase(),
+      acceptedAt: new Date(),
+      token: null,
+    });
+    this.logger.log(`Created owner membership for ${user.email}`);
   }
 
   private async upsertStorageProvider(

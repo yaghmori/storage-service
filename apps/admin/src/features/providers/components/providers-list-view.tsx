@@ -19,6 +19,7 @@ import { useDataTable } from "@workspace/ui/hooks/use-data-table";
 import { Server } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useOrgAuditUsersMap } from "@/lib/audit-user";
 import { createProvidersColumns } from "../columns/providers-columns";
 import {
   useCreateProviderMutation,
@@ -44,6 +45,7 @@ export function ProvidersListView({
   const updateMutation = useUpdateProviderMutation(activeOrg?.id);
   const deleteMutation = useDeleteProviderMutation(activeOrg?.id);
   const testMutation = useTestProviderMutation(activeOrg?.id);
+  const usersById = useOrgAuditUsersMap(activeOrg?.id);
 
   const columns = useMemo(
     () =>
@@ -62,8 +64,9 @@ export function ProvidersListView({
             onError: (err) =>
               toast.error(extractApiErrorMessage(err, "Test failed")),
           }),
+        usersById,
       ),
-    [testMutation],
+    [testMutation, usersById],
   );
 
   const { table } = useDataTable({

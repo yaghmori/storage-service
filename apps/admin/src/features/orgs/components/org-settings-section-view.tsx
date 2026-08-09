@@ -9,9 +9,12 @@ import {
 import { useActiveOrg } from "@/provider/org-provider";
 import { Button, Card, CardContent, Skeleton } from "@workspace/ui/components";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { toast } from "sonner";
+import { useMyOrgRole } from "../hooks/use-my-org-role";
 import { useUpdateOrganizationMutation } from "../hooks/use-orgs-queries";
 import { ApiKeysListView } from "@/features/api-keys/components/api-keys-list-view";
+import { MembersListView } from "@/features/members/components/members-list-view";
 import { ProcessorBackendsListView } from "@/features/processor-backends/components/processor-backends-list-view";
 import { ProvidersListView } from "@/features/providers/components/providers-list-view";
 import { OrgDangerZone } from "./org-danger-zone";
@@ -28,8 +31,16 @@ type Props = {
 export function OrgSettingsSectionView({ section }: Props) {
   const router = useRouter();
   const { activeOrg, urlOrgSlug, isLoading } = useActiveOrg();
+  const { isOwner, isLoading: roleLoading } = useMyOrgRole();
   const updateMutation = useUpdateOrganizationMutation();
   const navItem = orgSettingsNavItems.find((item) => item.section === section);
+
+  useEffect(() => {
+    if (section !== "danger" || roleLoading || !activeOrg) return;
+    if (!isOwner) {
+      router.replace(PAGE_ROUTES.settingsGeneral(activeOrg.slug));
+    }
+  }, [section, roleLoading, isOwner, activeOrg, router]);
 
   if (isLoading && !activeOrg) {
     return <Skeleton className="h-[min(50vh,420px)] w-full rounded-md" />;
@@ -46,6 +57,10 @@ export function OrgSettingsSectionView({ section }: Props) {
     );
   }
 
+  if (section === "danger" && (roleLoading || !isOwner)) {
+    return <Skeleton className="h-[min(50vh,420px)] w-full rounded-md" />;
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <SettingsHeading
@@ -53,6 +68,8 @@ export function OrgSettingsSectionView({ section }: Props) {
         description={navItem?.description ?? ""}
         destructive={section === "danger"}
       />
+
+      {section === "members" ? <MembersListView hideHeading /> : null}
 
       {section === "general" ? (
         <div className="space-y-4">

@@ -97,7 +97,11 @@ export const users = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     passwordHash: varchar('password_hash', { length: 255 }).notNull(),
-    role: varchar('role', { length: 50 }).default('admin').notNull(),
+    name: varchar('name', { length: 255 }),
+    /** Profile image URL or data URL */
+    avatar: text('avatar'),
+    /** Platform role: `admin` = super-admin (can create orgs); org role lives on organization_members. */
+    role: varchar('role', { length: 50 }).default('member').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -106,6 +110,58 @@ export const users = pgTable(
   (table) => ({
     emailIdx: index('users_email_idx').on(table.email),
     emailActiveIdx: index('users_email_active_idx').on(table.email, table.isActive),
+  }),
+);
+
+export const orgMemberRoleEnum = pgEnum('org_member_role', [
+  'owner',
+  'admin',
+  'member',
+]);
+
+export const orgMemberStatusEnum = pgEnum('org_member_status', [
+  'active',
+  'invited',
+]);
+
+/** Org authority lives here — users are global platform identities. */
+export const organizationMembers = pgTable(
+  'organization_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    role: orgMemberRoleEnum('role').notNull().default('member'),
+    status: orgMemberStatusEnum('status').notNull().default('invited'),
+    email: text('email').notNull(),
+    token: text('token'),
+    message: text('message'),
+    invitedByUserId: uuid('invited_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    invitedAt: timestamp('invited_at', { withTimezone: true }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgUserUq: uniqueIndex('organization_members_org_user_uq').on(
+      table.orgId,
+      table.userId,
+    ),
+    orgEmailUq: uniqueIndex('organization_members_org_email_uq').on(
+      table.orgId,
+      table.email,
+    ),
+    tokenUq: uniqueIndex('organization_members_token_uq').on(table.token),
+    orgIdx: index('organization_members_org_id_idx').on(table.orgId),
+    userIdx: index('organization_members_user_id_idx').on(table.userId),
   }),
 );
 
@@ -122,6 +178,12 @@ export const apiKeys = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     expiresAt: timestamp('expires_at'),
     isActive: boolean('is_active').default(true).notNull(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    updatedByUserId: uuid('updated_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => ({
     serviceNameActiveIdx: index('api_keys_service_name_active_idx').on(
@@ -150,6 +212,12 @@ export const storageProviders = pgTable(
     isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    updatedByUserId: uuid('updated_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => ({
     typeIdx: index('storage_providers_type_idx').on(table.type),
@@ -179,6 +247,12 @@ export const processorBackends = pgTable(
     isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    updatedByUserId: uuid('updated_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => ({
     orgIdIdx: index('processor_backends_org_id_idx').on(table.orgId),
@@ -527,7 +601,30 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   processorBackends: many(processorBackends),
   orgProcessors: many(orgProcessors),
   files: many(files),
+  members: many(organizationMembers),
 }));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  memberships: many(organizationMembers),
+}));
+
+export const organizationMembersRelations = relations(
+  organizationMembers,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [organizationMembers.orgId],
+      references: [organizations.id],
+    }),
+    user: one(users, {
+      fields: [organizationMembers.userId],
+      references: [users.id],
+    }),
+    invitedBy: one(users, {
+      fields: [organizationMembers.invitedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   organization: one(organizations, {
@@ -631,7 +728,11 @@ export const uploadSessions = pgTable(
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
 export type AdminUser = typeof users.$inferSelect;
+export type User = AdminUser;
 export type NewAdminUser = typeof users.$inferInsert;
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+export type OrgMemberRole = (typeof orgMemberRoleEnum.enumValues)[number];
+export type OrgMemberStatus = (typeof orgMemberStatusEnum.enumValues)[number];
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type ProcessorBackend = typeof processorBackends.$inferSelect;

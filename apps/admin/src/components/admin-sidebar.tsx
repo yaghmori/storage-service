@@ -14,11 +14,9 @@ import {
 } from "@workspace/ui/components";
 import {
   BarChart3,
-  Building2,
   FileIcon,
   Home,
   Settings,
-  Users,
   Workflow,
 } from "lucide-react";
 import type { ComponentProps } from "react";
@@ -61,10 +59,6 @@ export function AdminSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         },
       ]
     : [];
-  const navPlatform: NavMainItem[] = [
-    { title: "Organizations", url: PAGE_ROUTES.ORGS, icon: Building2 },
-    { title: "Users", url: PAGE_ROUTES.USERS, icon: Users },
-  ];
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -76,7 +70,6 @@ export function AdminSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         {navTenant.length > 0 && (
           <NavMain items={navTenant} label="Organization" />
         )}
-        <NavMain items={navPlatform} label="Platform" />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />
