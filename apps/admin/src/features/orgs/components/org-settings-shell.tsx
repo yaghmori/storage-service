@@ -1,8 +1,11 @@
 "use client";
 
 import { OrgSettingsNavbar } from "@/features/orgs/components/org-settings-navbar";
+import { useMyOrgRole } from "@/features/orgs/hooks/use-my-org-role";
+import { orgSettingsNavItems } from "@/features/orgs/utils/org-settings-navigation";
 import { useActiveOrg } from "@/provider/org-provider";
 import { PageHeading, Separator } from "@workspace/ui/components";
+import { useMemo } from "react";
 
 export function OrgSettingsShell({
   children,
@@ -10,7 +13,16 @@ export function OrgSettingsShell({
   children: React.ReactNode;
 }) {
   const { activeOrg, urlOrgSlug } = useActiveOrg();
+  const { isOwner } = useMyOrgRole();
   const slug = activeOrg?.slug ?? urlOrgSlug ?? "";
+
+  const navItems = useMemo(
+    () =>
+      orgSettingsNavItems.filter(
+        (item) => item.section !== "danger" || isOwner,
+      ),
+    [isOwner],
+  );
 
   return (
     <div className="flex w-full flex-col">
@@ -29,7 +41,9 @@ export function OrgSettingsShell({
       <div className="flex flex-col gap-6 pt-5 lg:min-h-[calc(100svh-6.5rem)] lg:flex-row lg:items-stretch lg:gap-0 lg:pt-0">
         <aside className="w-full shrink-0 lg:w-48 lg:border-r lg:border-border">
           <div className="lg:pr-6 lg:pt-5">
-            {slug ? <OrgSettingsNavbar orgSlug={slug} /> : null}
+            {slug ? (
+              <OrgSettingsNavbar orgSlug={slug} items={navItems} />
+            ) : null}
           </div>
         </aside>
 

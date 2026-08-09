@@ -14,6 +14,8 @@ export interface ProviderRow {
   config: Record<string, unknown>;
   isActive: boolean;
   isDefault: boolean;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

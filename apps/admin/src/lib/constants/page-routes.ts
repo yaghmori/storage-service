@@ -35,6 +35,7 @@ export const PAGE_ROUTES = {
   tokens: (slug: string) => orgPath(slug, "settings", "api-keys"),
   settings: (slug: string) => orgPath(slug, "settings"),
   settingsGeneral: (slug: string) => orgPath(slug, "settings", "general"),
+  settingsMembers: (slug: string) => orgPath(slug, "settings", "members"),
   settingsLimits: (slug: string) => orgPath(slug, "settings", "limits"),
   settingsProviders: (slug: string) => orgPath(slug, "settings", "providers"),
   settingsProcessorBackends: (slug: string) =>
@@ -50,6 +51,7 @@ export const PAGE_ROUTES = {
     slug: string,
     section:
       | "general"
+      | "members"
       | "limits"
       | "providers"
       | "processor-backends"
@@ -66,7 +68,12 @@ export const PUBLIC_ROUTES = [
 ] as const;
 
 export function isPublicRoute(pathname: string): boolean {
+  if (pathname.startsWith("/auth/invitation/")) return true;
   return PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
+}
+
+export function isInvitationRoute(pathname: string): boolean {
+  return pathname.startsWith("/auth/invitation/");
 }
 
 export function isPlatformPath(pathname: string): boolean {

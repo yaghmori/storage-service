@@ -36,6 +36,7 @@ export class AdminApiKeyService {
     orgId: string;
     permissions?: any;
     expiresAt?: Date;
+    actorUserId?: string;
   }): Promise<{ apiKey: schema.ApiKey; plainKey: string }> {
     const plainKey = `sk_${crypto.randomBytes(32).toString('hex')}`;
     const keyHash = await this.commonApiKeyService.hashApiKey(plainKey);
@@ -49,6 +50,8 @@ export class AdminApiKeyService {
         permissions: data.permissions || null,
         expiresAt: data.expiresAt || null,
         isActive: true,
+        createdByUserId: data.actorUserId,
+        updatedByUserId: data.actorUserId,
       } as typeof schema.apiKeys.$inferInsert)
       .returning();
 
@@ -63,6 +66,7 @@ export class AdminApiKeyService {
       isActive: boolean;
     }>,
     orgId: string,
+    actorUserId?: string,
   ): Promise<schema.ApiKey | null> {
     const existing = await this.findById(id, orgId);
     if (!existing) return null;
@@ -77,6 +81,9 @@ export class AdminApiKeyService {
     }
     if (data.isActive !== undefined) {
       updateData.isActive = data.isActive;
+    }
+    if (actorUserId) {
+      updateData.updatedByUserId = actorUserId;
     }
 
     const [apiKey] = await this.db

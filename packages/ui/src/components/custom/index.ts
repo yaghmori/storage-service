@@ -1,6 +1,7 @@
 "use client";
 
 export * from "./animated-tooltip";
+export * from "./avatar-uploader";
 export * from "./date-display";
 export * from "./file-uploader";
 export * from "./liquid-glass-card";

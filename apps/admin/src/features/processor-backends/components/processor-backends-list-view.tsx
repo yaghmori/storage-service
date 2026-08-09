@@ -20,6 +20,9 @@ import { Cpu } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  useOrgAuditUsersMap,
+} from "@/lib/audit-user";
+import {
   createProcessorBackendsColumns,
   filterProcessorBackends,
 } from "../columns/processor-backends-columns";
@@ -60,6 +63,7 @@ export function ProcessorBackendsListView({
   const updateMutation = useUpdateProcessorBackendMutation(activeOrg?.id);
   const deleteMutation = useDeleteProcessorBackendMutation(activeOrg?.id);
   const testMutation = useTestProcessorBackendMutation(activeOrg?.id);
+  const usersById = useOrgAuditUsersMap(activeOrg?.id);
   const columns = useMemo(
     () =>
       createProcessorBackendsColumns(
@@ -75,8 +79,9 @@ export function ProcessorBackendsListView({
             onError: (err) =>
               toast.error(extractApiErrorMessage(err, "Test failed")),
           }),
+        usersById,
       ),
-    [testMutation],
+    [testMutation, usersById],
   );
   const { table } = useDataTable({
     columns,

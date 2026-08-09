@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
         id: admin.id,
         email: admin.email,
         role: admin.role,
-        name: admin.email,
+        name: admin.name ?? admin.email,
+        avatar: admin.avatar ?? null,
       },
     });
 

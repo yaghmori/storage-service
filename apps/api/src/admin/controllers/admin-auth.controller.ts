@@ -9,7 +9,15 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 import { randomBytes } from 'crypto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -41,6 +49,20 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(8)
   newPassword!: string;
+}
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(255)
+  name?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(5_000_000)
+  avatar?: string | null;
 }
 
 /** Temporary password that satisfies admin password policy (upper/lower/digit/special). */
@@ -102,6 +124,8 @@ export class AdminAuthController {
         id: adminUser.id,
         email: adminUser.email,
         role: adminUser.role,
+        name: adminUser.name,
+        avatar: adminUser.avatar,
       },
     };
   }
@@ -152,9 +176,47 @@ export class AdminAuthController {
       id: adminUser.id,
       email: adminUser.email,
       role: adminUser.role,
+      name: adminUser.name,
+      avatar: adminUser.avatar,
       isActive: adminUser.isActive,
       createdAt: adminUser.createdAt,
       lastLoginAt: adminUser.lastLoginAt,
+    };
+  }
+
+  @UseGuards(AdminAuthGuard)
+  @Put('me')
+  async updateProfile(
+    @CurrentUser() user: { adminId: string; email: string; role: string } | undefined,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    if (!user?.adminId) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+
+    const adminUser = await this.adminUserService.findById(user.adminId);
+    if (!adminUser) {
+      throw new UnauthorizedException('Admin user not found');
+    }
+
+    const patch: { name?: string | null; avatar?: string | null } = {};
+    if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.avatar !== undefined) patch.avatar = dto.avatar;
+
+    const updated = await this.adminUserService.update(adminUser.id, patch);
+    if (!updated) {
+      throw new UnauthorizedException('Admin user not found');
+    }
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      role: updated.role,
+      name: updated.name,
+      avatar: updated.avatar,
+      isActive: updated.isActive,
+      createdAt: updated.createdAt,
+      lastLoginAt: updated.lastLoginAt,
     };
   }
 

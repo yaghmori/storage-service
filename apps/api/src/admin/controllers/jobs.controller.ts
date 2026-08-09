@@ -44,6 +44,7 @@ import { toJsonSafe } from '../../common/utils/json-safe.util';
 import * as schema from '../../database/drizzle/schema';
 import { QueuesService } from '../../queues/queues.service';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { OrgMembershipGuard } from '../guards/org-membership.guard';
 import { requireOrgId } from '../utils/require-org-id';
 
 /** Must match DB enum + JobStatusLabels (includes partial / skipped). */
@@ -154,7 +155,7 @@ function parseProcessorKeyFilter(raw: string): ProcessorKey[] {
 
 @Public()
 @Controller('admin/api/jobs')
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class JobsController {
   constructor(
     @Inject('DRIZZLE_DB')

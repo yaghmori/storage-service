@@ -15,7 +15,12 @@ import {
 } from '@nestjs/common';
 import { emptySuccess } from '../../lib/contracts';
 import { IsBoolean, IsDateString, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  CurrentAdmin,
+  type AdminRequestUser,
+} from '../decorators/current-admin.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
+import { OrgMembershipGuard } from '../guards/org-membership.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { AdminApiKeyService } from '../services/admin-api-key.service';
 import { requireOrgId } from '../utils/require-org-id';
@@ -54,7 +59,7 @@ export class UpdateApiKeyDto {
 
 @Public()
 @Controller('admin/api/api-keys')
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class ApiKeysController {
   constructor(private readonly apiKeyService: AdminApiKeyService) {}
 
@@ -71,6 +76,7 @@ export class ApiKeysController {
   @HttpCode(HttpStatus.CREATED)
   async createApiKey(
     @Body() dto: CreateApiKeyDto,
+    @CurrentAdmin() admin: AdminRequestUser,
     @Query('orgId') queryOrgId?: string,
     @Headers('x-org-id') headerOrgId?: string,
   ) {
@@ -80,6 +86,7 @@ export class ApiKeysController {
       orgId,
       permissions: dto.permissions,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+      actorUserId: admin.adminId,
     });
 
     return {
@@ -90,6 +97,8 @@ export class ApiKeysController {
       permissions: apiKey.permissions,
       expiresAt: apiKey.expiresAt,
       isActive: apiKey.isActive,
+      createdByUserId: apiKey.createdByUserId,
+      updatedByUserId: apiKey.updatedByUserId,
       createdAt: apiKey.createdAt,
     };
   }
@@ -98,6 +107,7 @@ export class ApiKeysController {
   async updateApiKey(
     @Param('id') id: string,
     @Body() dto: UpdateApiKeyDto,
+    @CurrentAdmin() admin: AdminRequestUser,
     @Query('orgId') queryOrgId?: string,
     @Headers('x-org-id') headerOrgId?: string,
   ) {
@@ -114,6 +124,7 @@ export class ApiKeysController {
         isActive: dto.isActive,
       },
       orgId,
+      admin.adminId,
     );
 
     if (!apiKey) {

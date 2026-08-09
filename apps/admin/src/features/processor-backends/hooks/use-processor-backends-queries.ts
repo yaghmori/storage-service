@@ -25,6 +25,8 @@ export interface ProcessorBackendRow {
   visionModel: string | null;
   textModel: string | null;
   timeoutMs: number | null;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
 }
 
 export type UpsertProcessorBackendInput = {

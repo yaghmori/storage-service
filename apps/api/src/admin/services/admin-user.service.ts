@@ -56,7 +56,7 @@ export class AdminUserService {
       .values({
         email: data.email.trim().toLowerCase(),
         passwordHash,
-        role: data.role || 'admin',
+        role: data.role || 'member',
         isActive: true,
       } as typeof schema.users.$inferInsert)
       .returning();
@@ -80,6 +80,8 @@ export class AdminUserService {
     password: string;
     role: string;
     isActive: boolean;
+    name: string | null;
+    avatar: string | null;
   }>): Promise<schema.AdminUser | null> {
     const updateData: any = {
       updatedAt: new Date(),
@@ -96,6 +98,12 @@ export class AdminUserService {
     }
     if (data.isActive !== undefined) {
       updateData.isActive = data.isActive;
+    }
+    if (data.name !== undefined) {
+      updateData.name = data.name?.trim() || null;
+    }
+    if (data.avatar !== undefined) {
+      updateData.avatar = data.avatar?.trim() || null;
     }
 
     const [user] = await this.db

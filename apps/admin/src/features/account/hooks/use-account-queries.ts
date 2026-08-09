@@ -10,6 +10,8 @@ export type AccountMe = {
   id: string;
   email: string;
   role: string;
+  name: string | null;
+  avatar: string | null;
   isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
@@ -21,6 +23,25 @@ export function useAccountMeQuery() {
     queryFn: async () => {
       const response = await upstream.get(AdminAuthEndpoints.Me);
       return unwrapApiData<AccountMe>(response.data);
+    },
+  });
+}
+
+export function useUpdateProfileMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      name?: string | null;
+      avatar?: string | null;
+    }) => {
+      const response = await upstream.put(
+        AdminAuthEndpoints.UpdateProfile,
+        input,
+      );
+      return unwrapApiData<AccountMe>(response.data);
+    },
+    onSuccess: () => {
+      invalidateAccount(queryClient);
     },
   });
 }

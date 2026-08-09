@@ -11,6 +11,10 @@ import {
   DropdownMenuTrigger,
   Skeleton,
 } from "@workspace/ui/components";
+import {
+  createAuditUserColumns,
+  type AuditUserRef,
+} from "@/lib/audit-user";
 import { ProviderTypeLabels } from "@workspace/validation";
 import { MoreHorizontal, Pencil, Plug, Trash2 } from "lucide-react";
 import type { ProviderRow } from "../hooks/use-providers-queries";
@@ -19,6 +23,7 @@ export function createProvidersColumns(
   onEdit?: (row: ProviderRow) => void,
   onDelete?: (row: ProviderRow) => void,
   onTest?: (row: ProviderRow) => void,
+  usersById: Map<string, AuditUserRef> = new Map(),
 ): ColumnDef<ProviderRow>[] {
   return [
     {
@@ -60,6 +65,7 @@ export function createProvidersColumns(
         </Badge>
       ),
     },
+    ...createAuditUserColumns<ProviderRow>(usersById),
     {
       id: "actions",
       header: "Actions",

@@ -78,6 +78,34 @@
       "when": 1785715200000,
       "tag": "0010_upload_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785718800000,
+      "tag": "0011_organization_members",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785722400000,
+      "tag": "0012_user_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785726000000,
+      "tag": "0013_users_role_default_member",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785729600000,
+      "tag": "0014_user_tracking",
+      "breakpoints": true
     }
   ]
 }

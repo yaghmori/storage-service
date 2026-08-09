@@ -2,6 +2,7 @@ export const AdminAuthEndpoints = {
   Login: "admin/api/auth/login",
   ForgotPassword: "admin/api/auth/forgot-password",
   Me: "admin/api/auth/me",
+  UpdateProfile: "admin/api/auth/me",
   ChangePassword: "admin/api/auth/me/password",
   Logout: "admin/api/auth/logout",
 } as const;
@@ -99,6 +100,20 @@ export const OrgsEndpoints = {
   Limits: "admin/api/orgs/{0}/limits",
   Retention: "admin/api/orgs/{0}/retention",
   Usage: "admin/api/orgs/{0}/usage",
+} as const;
+
+export const MembersEndpoints = {
+  List: "admin/api/orgs/{0}/members",
+  Invite: "admin/api/orgs/{0}/members/invite",
+  Resend: "admin/api/orgs/{0}/members/{1}/resend",
+  ChangeRole: "admin/api/orgs/{0}/members/{1}/role",
+  Remove: "admin/api/orgs/{0}/members/{1}",
+  Transfer: "admin/api/orgs/{0}/members/transfer",
+} as const;
+
+export const InvitesEndpoints = {
+  Preview: "admin/api/invites/{0}",
+  Accept: "admin/api/invites/{0}/accept",
 } as const;
 
 export const UsersEndpoints = {

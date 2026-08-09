@@ -1,6 +1,7 @@
 "use client";
 
 import { orgPath, PAGE_ROUTES } from "@/lib/constants/page-routes";
+import { useAuth } from "@/provider/auth-provider";
 import { useActiveOrg } from "@/provider/org-provider";
 import {
   DropdownMenu,
@@ -25,10 +26,12 @@ import { usePathname, useRouter } from "next/navigation";
  */
 export function OrgSwitcher() {
   const { isMobile } = useSidebar();
+  const { user } = useAuth();
   const { orgs, activeOrg, isPlatform, isLoading, setSelectedOrgSlug } =
     useActiveOrg();
   const pathname = usePathname();
   const router = useRouter();
+  const isPlatformAdmin = user?.role === "admin";
 
   const selectOrganization = (slug: string) => {
     setSelectedOrgSlug(slug);
@@ -154,17 +157,21 @@ export function OrgSwitcher() {
                 </DropdownMenuItem>
               );
             })}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2" asChild>
-              <Link href={PAGE_ROUTES.ORG_NEW}>
-                <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
-                  <Plus className="size-4" />
-                </div>
-                <div className="font-medium text-muted-foreground">
-                  Add organization
-                </div>
-              </Link>
-            </DropdownMenuItem>
+            {isPlatformAdmin ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 p-2" asChild>
+                  <Link href={PAGE_ROUTES.ORG_NEW}>
+                    <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
+                      <Plus className="size-4" />
+                    </div>
+                    <div className="font-medium text-muted-foreground">
+                      Add organization
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

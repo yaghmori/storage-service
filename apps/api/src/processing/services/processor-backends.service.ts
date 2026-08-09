@@ -63,6 +63,8 @@ export class ProcessorBackendsService {
       kind: row.kind,
       isActive: row.isActive,
       isDefault: row.isDefault,
+      createdByUserId: row.createdByUserId,
+      updatedByUserId: row.updatedByUserId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       baseUrl: typeof config.baseUrl === 'string' ? config.baseUrl : '',
@@ -96,6 +98,7 @@ export class ProcessorBackendsService {
       visionModel?: string;
       textModel?: string;
       timeoutMs?: number;
+      actorUserId?: string;
     },
   ) {
     if (input.isDefault) {
@@ -112,6 +115,8 @@ export class ProcessorBackendsService {
         config,
         isActive: input.isActive ?? true,
         isDefault: input.isDefault ?? false,
+        createdByUserId: input.actorUserId,
+        updatedByUserId: input.actorUserId,
       })
       .returning();
     return row;
@@ -130,6 +135,7 @@ export class ProcessorBackendsService {
       visionModel?: string;
       textModel?: string;
       timeoutMs?: number;
+      actorUserId?: string;
     },
   ) {
     const existing = await this.getById(id, orgId);
@@ -158,6 +164,9 @@ export class ProcessorBackendsService {
         isActive: input.isActive ?? existing.isActive,
         isDefault: input.isDefault ?? existing.isDefault,
         config,
+        ...(input.actorUserId
+          ? { updatedByUserId: input.actorUserId }
+          : {}),
         updatedAt: new Date(),
       })
       .where(
