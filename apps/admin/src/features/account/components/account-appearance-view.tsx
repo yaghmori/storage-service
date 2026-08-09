@@ -84,7 +84,7 @@ export function AccountAppearanceView() {
           description="Customize the look and feel of the admin interface."
         />
 
-        <Card>
+        <Card className="rounded-2xl border-border/70 bg-card/90 shadow-sm">
           <CardContent className="space-y-8 p-6">
             {!mounted ? (
               <p className="text-sm text-muted-foreground">Loading…</p>

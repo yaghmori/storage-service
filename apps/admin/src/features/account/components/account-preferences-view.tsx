@@ -51,7 +51,7 @@ export function AccountPreferencesView() {
           description="Dates and times in the admin console use this timezone. Stored on this device only."
         />
 
-        <Card>
+        <Card className="rounded-2xl border-border/70 bg-card/90 shadow-sm">
           <CardContent className="space-y-4 p-6">
             <div className="space-y-2">
               <Label>Preferred timezone</Label>
