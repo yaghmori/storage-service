@@ -1,6 +1,6 @@
-import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { appRole } from './config/app-role';
 import { resolveListenPorts } from './config/listen-ports';
@@ -9,22 +9,23 @@ import { isRetriableKafkaError } from './lib/platform-kafka/kafka-js-logger';
 async function bootstrap() {
   const { httpHost, httpPort, tcpHost, tcpPort } = resolveListenPorts();
 
-  const nestLogLevels = (process.env.LOG_LEVEL || 'log').toLowerCase();
-  const loggerLevels =
-    nestLogLevels === 'error'
-      ? (['error'] as const)
-      : nestLogLevels === 'warn'
-        ? (['error', 'warn'] as const)
-        : nestLogLevels === 'debug' || nestLogLevels === 'verbose'
-          ? (['error', 'warn', 'log', 'debug', 'verbose'] as const)
-          : (['error', 'warn', 'log'] as const);
-
   const app = await NestFactory.create(AppModule, {
-    logger: [...loggerLevels],
+    bufferLogs: true,
   });
+  app.useLogger(app.get(Logger));
+
+  const httpAdapter = app.getHttpAdapter();
+  if (httpAdapter?.getInstance) {
+    const instance = httpAdapter.getInstance();
+    if (typeof instance?.set === 'function') {
+      instance.set('trust proxy', 1);
+    }
+  }
 
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
+
+  const logger = app.get(Logger);
 
   if (appRole.enableTcp) {
     app.connectMicroservice<MicroserviceOptions>({
@@ -37,33 +38,33 @@ async function bootstrap() {
       },
     });
     await app.startAllMicroservices();
-    Logger.log(`TCP microservice listening on ${tcpHost}:${tcpPort}`);
+    logger.log(`TCP microservice listening on ${tcpHost}:${tcpPort}`);
   }
 
   if (appRole.enableHttp) {
     await app.listen(httpPort, httpHost);
-    Logger.log(
+    logger.log(
       `HTTP server listening on http://${httpHost}:${httpPort}/${globalPrefix}`,
     );
   } else {
     await app.init();
-    Logger.log(
+    logger.log(
       `HTTP disabled (ENABLE_HTTP=false); workers=${appRole.enableWorkers} crons=${appRole.enableCrons}`,
     );
   }
 
-  Logger.log(
+  logger.log(
     `Role flags: HTTP=${appRole.enableHttp} TCP=${appRole.enableTcp} WORKERS=${appRole.enableWorkers} CRONS=${appRole.enableCrons}`,
   );
 
   const gracefulShutdown = async (signal: string) => {
-    Logger.log(`Received ${signal}, starting graceful shutdown...`);
+    logger.log(`Received ${signal}, starting graceful shutdown...`);
     try {
       await app.close();
-      Logger.log('Application closed successfully');
+      logger.log('Application closed successfully');
       process.exit(0);
     } catch (error) {
-      Logger.error('Error during graceful shutdown', error);
+      logger.error({ msg: 'graceful_shutdown_error', err: error });
       process.exit(1);
     }
   };
@@ -71,16 +72,16 @@ async function bootstrap() {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   process.on('uncaughtException', (error) => {
-    Logger.error('Uncaught exception', error);
+    logger.error({ msg: 'uncaught_exception', err: error });
     gracefulShutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
     if (isRetriableKafkaError(reason)) {
       const message = reason instanceof Error ? reason.message : String(reason);
-      Logger.warn(`Ignored retriable Kafka rejection: ${message}`);
+      logger.warn({ msg: 'ignored_retriable_kafka_rejection', error: message });
       return;
     }
-    Logger.error('Unhandled rejection', reason);
+    logger.error({ msg: 'unhandled_rejection', err: reason });
     gracefulShutdown('unhandledRejection');
   });
 }
