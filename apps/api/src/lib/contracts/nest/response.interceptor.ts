@@ -148,57 +148,13 @@ export class ResponseTransformInterceptor<T> implements NestInterceptor<T, Succe
 }
 
 /**
- * Logging interceptor for request/response tracking
- *
- * @example
- * ```typescript
- * app.useGlobalInterceptors(new LoggingInterceptor());
- * ```
+ * HTTP access logging is handled by nestjs-pino / pino-http.
+ * Kept as a no-op for backward-compatible imports.
  */
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const request = context.switchToHttp().getRequest();
-    const { method, url, body, headers } = request;
-    const startTime = Date.now();
-
-    const requestId = request.id || headers['x-request-id'] || 'unknown';
-
-    console.log(`[${requestId}] --> ${method} ${url}`, {
-      body: this.sanitizeBody(body),
-      userAgent: headers['user-agent'],
-    });
-
-    return next.handle().pipe(
-      map((data) => {
-        const duration = Date.now() - startTime;
-        const response = context.switchToHttp().getResponse();
-
-        console.log(`[${requestId}] <-- ${method} ${url} ${response.statusCode} (${duration}ms)`);
-
-        return data;
-      }),
-    );
-  }
-
-  /**
-   * Removes sensitive fields from request body
-   */
-  private sanitizeBody(body: any): any {
-    if (!body || typeof body !== 'object') {
-      return body;
-    }
-
-    const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'refreshToken', 'accessToken'];
-    const sanitized = { ...body };
-
-    for (const field of sensitiveFields) {
-      if (field in sanitized) {
-        sanitized[field] = '[REDACTED]';
-      }
-    }
-
-    return sanitized;
+  intercept(_context: ExecutionContext, next: CallHandler): Observable<any> {
+    return next.handle();
   }
 }
 

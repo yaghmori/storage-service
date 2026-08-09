@@ -9,32 +9,56 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
 /**
- * Logs TCP/RPC microservice requests with a readable label (not `[object Object]`).
+ * Logs TCP/RPC microservice requests with structured fields for Loki/ELK.
  */
 @Injectable()
 export class RpcLoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(RpcLoggingInterceptor.name);
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const startTime = Date.now();
-    const label = this.describeRpcCall(context);
+    if (context.getType() !== 'rpc') {
+      return next.handle();
+    }
 
-    this.logger.log(`Request: ${label}`);
+    const startTime = Date.now();
+    const meta = this.describeRpcCall(context);
+
+    this.logger.log({
+      msg: 'rpc_request',
+      ...meta,
+    });
 
     return next.handle().pipe(
       tap({
         next: () => {
-          this.logger.log(`Response: ${label} (${Date.now() - startTime}ms)`);
+          this.logger.log({
+            msg: 'rpc_response',
+            ...meta,
+            durationMs: Date.now() - startTime,
+          });
         },
         error: (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          this.logger.error(`Error: ${label} (${Date.now() - startTime}ms) - ${message}`);
+          this.logger.error({
+            msg: 'rpc_error',
+            ...meta,
+            durationMs: Date.now() - startTime,
+            error: message,
+            ...(error instanceof Error
+              ? { err: { type: error.name, message: error.message } }
+              : {}),
+          });
         },
       }),
     );
   }
 
-  private describeRpcCall(context: ExecutionContext): string {
+  private describeRpcCall(context: ExecutionContext): {
+    pattern: string;
+    controller: string;
+    handler: string;
+    requestId?: string;
+  } {
     const controller = context.getClass()?.name ?? 'UnknownController';
     const handler = context.getHandler()?.name ?? 'unknownHandler';
     const data = context.switchToRpc().getData() as Record<string, unknown> | undefined;
@@ -43,9 +67,9 @@ export class RpcLoggingInterceptor implements NestInterceptor {
 
     const ctx = context.switchToRpc().getContext();
     const patternFromContext = this.extractPattern(ctx);
+    const pattern = patternFromContext ?? `${controller}.${handler}`;
 
-    const base = patternFromContext ?? `${controller}.${handler}`;
-    return requestId ? `${base} [requestId=${requestId}]` : base;
+    return { pattern, controller, handler, requestId };
   }
 
   private extractPattern(ctx: unknown): string | undefined {

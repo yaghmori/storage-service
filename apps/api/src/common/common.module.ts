@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE, Reflector } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
 import {
   GlobalExceptionFilter,
   MicroserviceExceptionFilter,
@@ -13,10 +14,12 @@ import { UploadRateLimitGuard } from './guards/upload-rate-limit.guard';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { ValidationPipe } from './pipes/validation.pipe';
 import { ApiKeyService } from './services/api-key.service';
+import { buildLoggerModuleParams } from './logging/pino-logger.config';
 
 @Global()
 @Module({
   imports: [
+    LoggerModule.forRoot(buildLoggerModuleParams()),
     DatabaseModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],

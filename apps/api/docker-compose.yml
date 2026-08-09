@@ -4,6 +4,8 @@
 
 x-storage-env: &storage-env
   NODE_ENV: development
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_PRETTY: ${LOG_PRETTY:-false}
   HOST: ${HOST:-0.0.0.0}
   PORT: ${PORT:-6100}
   TCP_HOST: ${TCP_HOST:-0.0.0.0}

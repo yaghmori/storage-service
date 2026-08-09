@@ -18,6 +18,8 @@
     "db:push": "pnpm --filter @yaghmori/storage-service-server db:push",
     "db:seed": "pnpm --filter @yaghmori/storage-service-server db:seed",
     "docker:dev": "pnpm --filter @yaghmori/storage-service-server docker:dev",
+    "docker:dev:detached": "pnpm --filter @yaghmori/storage-service-server docker:dev:detached",
+    "docker:dev:logs": "pnpm --filter @yaghmori/storage-service-server docker:dev:logs",
     "docker:dev:down": "pnpm --filter @yaghmori/storage-service-server docker:dev:down",
     "docker:up": "pnpm --filter @yaghmori/storage-service-server docker:up",
     "docker:down": "pnpm --filter @yaghmori/storage-service-server docker:down"
