@@ -8,6 +8,7 @@ import {
   Put,
   UnauthorizedException,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import {
   IsEmail,
@@ -91,7 +92,7 @@ function normalizeEmail(email: string): string {
 }
 
 @Public()
-@Controller('admin/api/auth')
+@Controller({ path: 'admin/api/auth', version: VERSION_NEUTRAL })
 export class AdminAuthController {
   private readonly logger = new Logger(AdminAuthController.name);
 

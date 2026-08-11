@@ -29,21 +29,14 @@ export function resolveAdminDebugPort(): number {
 }
 
 /**
- * Nest uses a global `/api` prefix. Accept either host root or `…/api`.
- * Default HTTP port is **6100** (not 6000 — Node/undici blocks 6000 as an X11 port).
- */
-function withApiPrefix(base: string): string {
-  const trimmed = trimSlash(base);
-  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
-}
-
-/**
- * Nest storage-service HTTP base URL used by BFF routes (includes `/api`).
+ * Nest storage-service HTTP origin used by BFF routes (no `/api` prefix).
  * Priority: STORAGE_API_URL → STORAGE_API_HOST + STORAGE_API_PORT → localhost:6100
  */
 export function resolveStorageApiUrl(): string {
   const explicit = process.env.STORAGE_API_URL?.trim();
-  if (explicit) return withApiPrefix(explicit);
+  if (explicit) {
+    return trimSlash(explicit).replace(/\/api$/i, "");
+  }
 
   const host =
     process.env.STORAGE_API_HOST?.trim() ||
@@ -54,7 +47,7 @@ export function resolveStorageApiUrl(): string {
     6100,
   );
   const protocol = process.env.STORAGE_API_PROTOCOL?.trim() || "http";
-  return withApiPrefix(`${protocol}://${host}:${port}`);
+  return `${protocol}://${host}:${port}`;
 }
 
 /** Public browser origin for the admin app. */

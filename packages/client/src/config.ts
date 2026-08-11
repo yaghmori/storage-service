@@ -31,9 +31,8 @@ export function resolveHttpBaseUrl(options: ServiceEndpoint = {}): string {
       base = `${protocol}://${authority}`;
     }
   }
-  // Nest global prefix is `/api` — normalize so clients can pass host:port without `/api`
-  if (!base.endsWith('/api')) {
-    base = `${base}/api`;
+  if (base.endsWith('/api')) {
+    base = base.slice(0, -4);
   }
   return base;
 }

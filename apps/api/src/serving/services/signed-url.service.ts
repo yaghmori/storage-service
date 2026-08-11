@@ -91,7 +91,7 @@ export class SignedUrlService {
       const baseUrl =
         process.env.APP_URL || process.env.BASE_URL || 'http://localhost:6100';
       return {
-        url: `${baseUrl}/api/files/${fileId}/download${variantType ? `?variant=${variantType}` : ''}`,
+        url: `${baseUrl}/v1/files/${fileId}/download${variantType ? `?variant=${variantType}` : ''}`,
         expiresIn: ttl,
       };
     }

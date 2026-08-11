@@ -31,14 +31,13 @@ caller omits `expiresIn`. Explicit request/query TTL always wins.
 
 ## HTTP base URL
 
-The Nest app uses global prefix `/api`. The Node SDK appends `/api` when missing, so both
-`http://localhost:6100` and `http://localhost:6100/api` work. Prefer including `/api` explicitly
-in `STORAGE_SERVICE_URL` for clarity.
+Set `STORAGE_SERVICE_URL` to the host origin (`http://localhost:6100`). Public HTTP paths
+are `/v1/...` (for example `POST /v1/upload`). A trailing `/api` on the base URL is stripped.
 
 ## Uploads
 
-- Prefer multipart HTTP (`POST /upload`) over TCP for binaries (files within `MAX_FILE_SIZE`, default 100MB).
-- **Large files:** use `uploadLarge()` / `POST /upload/initiate` → PUT to MinIO/S3 → `POST /upload/complete` (same response shape as `POST /upload`). Do not raise Multer limits to multi-GB.
+- Prefer multipart HTTP (`POST /v1/upload`) over TCP for binaries (files within `MAX_FILE_SIZE`, default 100MB).
+- **Large files:** use `uploadLarge()` / `POST /v1/upload/initiate` → PUT to MinIO/S3 → `POST /v1/upload/complete` (same response shape as `POST /v1/upload`). Do not raise Multer limits to multi-GB.
 - Align reverse-proxy `client_max_body_size` and timeouts with `MAX_FILE_SIZE` for the small path.
 - Set `DIRECT_UPLOAD_MAX_FILE_SIZE` (default 5GB) for the direct path org ceiling.
 - Retry 408/429/5xx with backoff; do not retry non-idempotent uploads without hash awareness.

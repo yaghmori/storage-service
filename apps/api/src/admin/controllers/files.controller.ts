@@ -17,6 +17,7 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -186,7 +187,7 @@ class ListFilesQueryDto {
 }
 
 @Public()
-@Controller('admin/api/files')
+@Controller({ path: 'admin/api/files', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class FilesController {
   constructor(

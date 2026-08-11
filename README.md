@@ -23,7 +23,7 @@ packages/config-eslint
 | Surface | Auth |
 | ------- | ---- |
 | **Admin UI** `/admin/api/*` | Admin JWT (login → iron-session BFF, cookie `storage_admin_session`) |
-| **Core HTTP** `/api/*` + SDK | Org-bound API key (`x-api-key`) + optional static `AUTH_API_KEYS` |
+| **Core HTTP** `/v1/*` + SDK | Org-bound API key (`x-api-key`) + optional static `AUTH_API_KEYS` |
 | **TCP / Kafka** | Network trust (unchanged) |
 
 ## Local development (recommended)
@@ -43,7 +43,7 @@ pnpm seed
 
 # 3) Admin UI
 pnpm dev
-# http://localhost:6200  →  proxies to STORAGE_API_URL (default http://localhost:6100/api)
+# http://localhost:6200  →  proxies to STORAGE_API_URL (default http://localhost:6100)
 # Login: admin@example.com / admin (or ADMIN_EMAIL / ADMIN_PASSWORD)
 ```
 

@@ -47,7 +47,7 @@ export class BullBoardSetupService implements OnModuleInit {
     ].map((name) => new Queue(name, { connection }));
 
     this.serverAdapter = new ExpressAdapter();
-    this.serverAdapter.setBasePath('/api/admin/queues');
+    this.serverAdapter.setBasePath('/admin/queues');
 
     createBullBoard({
       queues: queues.map((q) => new BullMQAdapter(q, { readOnlyMode: false })),

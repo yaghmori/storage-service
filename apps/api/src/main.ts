@@ -1,3 +1,4 @@
+import { VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { Logger } from 'nestjs-pino';
@@ -22,8 +23,10 @@ async function bootstrap() {
     }
   }
 
-  const globalPrefix = 'api';
-  app.setGlobalPrefix(globalPrefix);
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
 
   const logger = app.get(Logger);
 
@@ -43,9 +46,7 @@ async function bootstrap() {
 
   if (appRole.enableHttp) {
     await app.listen(httpPort, httpHost);
-    logger.log(
-      `HTTP server listening on http://${httpHost}:${httpPort}/${globalPrefix}`,
-    );
+    logger.log(`HTTP server listening on http://${httpHost}:${httpPort}`);
   } else {
     await app.init();
     logger.log(

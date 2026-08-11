@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, VERSION_NEUTRAL } from '@nestjs/common';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AdminJwtService } from '../services/admin-jwt.service';
@@ -16,7 +16,7 @@ export class AcceptInviteDto {
 }
 
 @Public()
-@Controller('admin/api/invites')
+@Controller({ path: 'admin/api/invites', version: VERSION_NEUTRAL })
 export class AdminInvitesController {
   constructor(
     private readonly memberships: MembershipService,

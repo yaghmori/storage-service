@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import {
   and,
@@ -154,7 +155,7 @@ function parseProcessorKeyFilter(raw: string): ProcessorKey[] {
 }
 
 @Public()
-@Controller('admin/api/jobs')
+@Controller({ path: 'admin/api/jobs', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class JobsController {
   constructor(

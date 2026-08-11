@@ -1,8 +1,8 @@
-import { All, Controller, Get, Inject, Req, Res } from '@nestjs/common';
+import { All, Controller, Get, Inject, Req, Res, VERSION_NEUTRAL } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { BullBoardSetupService } from './bull-board-setup.service';
 
-@Controller('admin/queues')
+@Controller({ path: 'admin/queues', version: VERSION_NEUTRAL })
 export class BullBoardController {
   constructor(
     @Inject(BullBoardSetupService)
@@ -22,9 +22,9 @@ export class BullBoardController {
     }
 
     // Adjust the request URL to be relative to the base path
-    // Bull Board expects paths relative to /api/admin/queues
+    // Bull Board expects paths relative to /admin/queues
     const originalUrl = req.url;
-    const basePath = '/api/admin/queues';
+    const basePath = '/admin/queues';
 
     // If the URL starts with the base path, remove it to make it relative
     if (originalUrl.startsWith(basePath)) {

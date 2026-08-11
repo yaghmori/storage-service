@@ -39,22 +39,22 @@ public static class StorageService
 
     public static class HttpPaths
     {
-        public const string Upload = "/upload";
-        public const string UploadInitiate = "/upload/initiate";
-        public const string UploadComplete = "/upload/complete";
-        public const string UploadAbort = "/upload/abort";
-        public const string UploadMultipartPartUrl = "/upload/multipart/part-url";
-        public const string UploadMultipartInitiate = "/upload/multipart/initiate";
-        public const string UploadMultipartComplete = "/upload/multipart/complete";
-        public const string UploadMultipartAbort = "/upload/multipart/abort";
-        public const string GetFile = "/files/{id}";
-        public const string DeleteFile = "/files/{id}";
-        public const string Download = "/files/{id}/download";
-        public const string SignedUrl = "/files/{id}/signed-url";
-        public const string Metadata = "/files/{id}/metadata";
-        public const string ProcessorResults = "/files/{id}/processor-results";
-        public const string ProcessorResult = "/files/{id}/processor-results/{processorKey}";
-        public const string Variants = "/files/{id}/variants";
+        public const string Upload = "/v1/upload";
+        public const string UploadInitiate = "/v1/upload/initiate";
+        public const string UploadComplete = "/v1/upload/complete";
+        public const string UploadAbort = "/v1/upload/abort";
+        public const string UploadMultipartPartUrl = "/v1/upload/multipart/part-url";
+        public const string UploadMultipartInitiate = "/v1/upload/multipart/initiate";
+        public const string UploadMultipartComplete = "/v1/upload/multipart/complete";
+        public const string UploadMultipartAbort = "/v1/upload/multipart/abort";
+        public const string GetFile = "/v1/files/{id}";
+        public const string DeleteFile = "/v1/files/{id}";
+        public const string Download = "/v1/files/{id}/download";
+        public const string SignedUrl = "/v1/files/{id}/signed-url";
+        public const string Metadata = "/v1/files/{id}/metadata";
+        public const string ProcessorResults = "/v1/files/{id}/processor-results";
+        public const string ProcessorResult = "/v1/files/{id}/processor-results/{processorKey}";
+        public const string Variants = "/v1/files/{id}/variants";
         public const string Health = "/health";
     }
 

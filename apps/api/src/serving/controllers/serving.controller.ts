@@ -18,7 +18,7 @@ import { SignedUrlService } from '../services/signed-url.service';
  * Prefer `?variant=thumbnail|medium` for image previews. Omit `variant` for the original.
  * The unused `size` query is not supported — use named variants from org processing settings.
  */
-@Controller('files')
+@Controller({ path: 'files', version: '1' })
 export class ServingController {
   constructor(
     private readonly servingService: ServingService,

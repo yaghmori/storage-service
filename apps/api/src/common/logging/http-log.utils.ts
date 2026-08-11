@@ -91,7 +91,6 @@ export function isIgnoredAccessPath(url: string | undefined): boolean {
   return (
     path === '/health' ||
     path === '/metrics' ||
-    path === '/api/health' ||
     path.endsWith('/health') ||
     path.endsWith('/metrics')
   );

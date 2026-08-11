@@ -14,6 +14,7 @@ import {
   Put,
   Query,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -87,7 +88,7 @@ export class UpdateProviderDto {
 }
 
 @Public()
-@Controller('admin/api/providers')
+@Controller({ path: 'admin/api/providers', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class ProvidersController {
   constructor(

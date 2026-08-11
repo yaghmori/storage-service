@@ -12,6 +12,7 @@ import {
   Put,
   Query,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import {
   ArrayMaxSize,
@@ -491,7 +492,7 @@ export class UpdateOrgRetentionDto {
 }
 
 @Public()
-@Controller('admin/api/orgs')
+@Controller({ path: 'admin/api/orgs', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard)
 export class OrganizationsController {
   constructor(
