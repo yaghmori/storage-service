@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>Yaghmori.StorageService</PackageId>
-    <Version>0.2.11</Version>
+    <Version>0.3.0</Version>
     <Authors>yaghmori</Authors>
     <Description>Client SDK for storage-service — upload, signed URLs, processor results, TCP/Kafka</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
