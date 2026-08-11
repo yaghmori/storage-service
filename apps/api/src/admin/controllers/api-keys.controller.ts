@@ -12,6 +12,7 @@ import {
   Put,
   Query,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { emptySuccess } from '../../lib/contracts';
 import { IsBoolean, IsDateString, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
@@ -58,7 +59,7 @@ export class UpdateApiKeyDto {
 }
 
 @Public()
-@Controller('admin/api/api-keys')
+@Controller({ path: 'admin/api/api-keys', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class ApiKeysController {
   constructor(private readonly apiKeyService: AdminApiKeyService) {}

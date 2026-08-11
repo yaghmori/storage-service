@@ -5,6 +5,7 @@ import {
   Inject,
   Query,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { and, count, eq, gte, isNull, sum } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -22,7 +23,7 @@ class OrgQueryDto {
 }
 
 @Public()
-@Controller('admin/api/dashboard')
+@Controller({ path: 'admin/api/dashboard', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class DashboardController {
   constructor(

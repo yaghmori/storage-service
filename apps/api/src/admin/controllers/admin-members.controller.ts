@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { IsEmail, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -43,7 +44,7 @@ export class TransferOwnershipDto {
 }
 
 @Public()
-@Controller('admin/api/orgs/:orgId/members')
+@Controller({ path: 'admin/api/orgs/:orgId/members', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard)
 export class AdminMembersController {
   constructor(private readonly memberships: MembershipService) {}
@@ -127,7 +128,7 @@ export class AdminMembersController {
 
 /** Convenience routes that take orgId from header (for clients that already set x-org-id). */
 @Public()
-@Controller('admin/api/members')
+@Controller({ path: 'admin/api/members', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard)
 export class AdminMembersByHeaderController {
   constructor(private readonly memberships: MembershipService) {}

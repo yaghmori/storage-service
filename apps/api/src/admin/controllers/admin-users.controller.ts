@@ -13,6 +13,7 @@ import {
   Post,
   Put,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import {
   IsBoolean,
@@ -64,7 +65,7 @@ export class UpdateAdminUserDto {
 }
 
 @Public()
-@Controller('admin/api/users')
+@Controller({ path: 'admin/api/users', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard)
 export class AdminUsersController {
   constructor(

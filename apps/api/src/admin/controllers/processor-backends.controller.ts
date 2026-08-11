@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   UseGuards,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { ProcessorBackendKind } from '@workspace/validation';
 import { Type } from 'class-transformer';
@@ -135,7 +136,7 @@ class UpdateProcessorBackendDto {
 }
 
 @Public()
-@Controller('admin/api/orgs/:orgId/processor-backends')
+@Controller({ path: 'admin/api/orgs/:orgId/processor-backends', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard)
 export class ProcessorBackendsController {
   constructor(

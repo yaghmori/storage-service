@@ -15,7 +15,7 @@ import { resolveBoundOrgId } from '../../common/guards/auth.guard';
 import { FileInsightsService } from '../services/file-insights.service';
 import { FilesService } from '../services/files.service';
 
-@Controller('files')
+@Controller({ path: 'files', version: '1' })
 export class FilesController {
   constructor(
     private readonly filesService: FilesService,

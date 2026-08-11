@@ -62,7 +62,7 @@ jobs:
     name: Publish @yaghmori/storage-service (+ NuGet)
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write # NuGet Trusted Publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Align version, build, publish npm
+      - name: Build and publish npm (repo version only)
         working-directory: packages/client
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -92,41 +92,14 @@ jobs:
             exit 1
           fi
           pnpm install --frozen-lockfile
-
-          LOCAL="$(node -p "require('./package.json').version")"
-          PUBLISHED="$(npm view @yaghmori/storage-service version 2>/dev/null || true)"
-          BASE="$LOCAL"
-          if [ -n "${PUBLISHED}" ]; then
-            BASE="$(node -e "
-              const parse = (v) => v.split('.').map((x) => Number(x) || 0);
-              const a = parse(process.argv[1]);
-              const b = parse(process.argv[2]);
-              for (let i = 0; i < 3; i++) {
-                if (b[i] > a[i]) { console.log(process.argv[2]); process.exit(0); }
-                if (a[i] > b[i]) { console.log(process.argv[1]); process.exit(0); }
-              }
-              console.log(process.argv[1]);
-            " "$LOCAL" "$PUBLISHED")"
-            echo "Aligning to base ${BASE} (local=${LOCAL}, npm=${PUBLISHED})"
-            npm version "$BASE" --no-git-tag-version --allow-same-version
-          fi
-
-          # If this exact version is not on npm yet, publish it; otherwise patch-bump.
           VERSION="$(node -p "require('./package.json').version")"
-          if npm view "@yaghmori/storage-service@${VERSION}" version >/dev/null 2>&1; then
-            pnpm version patch --no-git-tag-version
-            VERSION="$(node -p "require('./package.json').version")"
-            while npm view "@yaghmori/storage-service@${VERSION}" version >/dev/null 2>&1; do
-              pnpm version patch --no-git-tag-version
-              VERSION="$(node -p "require('./package.json').version")"
-            done
-          fi
-
-          sed -i "s|<Version>.*</Version>|<Version>${VERSION}</Version>|" \
-            ../../sdk/dotnet/Yaghmori.StorageService/Yaghmori.StorageService.csproj
-          pnpm run build
-          pnpm publish --access public --no-git-checks
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          pnpm run build
+          if npm view "@yaghmori/storage-service@${VERSION}" version >/dev/null 2>&1; then
+            echo "Already on npm: @yaghmori/storage-service@${VERSION} — skip publish"
+            exit 0
+          fi
+          pnpm publish --access public --no-git-checks
 
       - name: Pack NuGet
         run: |
@@ -161,16 +134,3 @@ jobs:
             --api-key "$KEY" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
-
-      - name: Commit version bump
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/client/package.json sdk/dotnet/Yaghmori.StorageService/Yaghmori.StorageService.csproj
-          if git diff --staged --quiet; then
-            echo "No version files to commit"
-            exit 0
-          fi
-          git commit -m "chore(client): bump @yaghmori/storage-service to ${VERSION} [skip ci]"
-          git push

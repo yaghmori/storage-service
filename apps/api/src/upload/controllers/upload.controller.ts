@@ -20,7 +20,7 @@ import { platformMulterFileLimits } from '../multer-limits';
 import { DirectUploadService } from '../services/direct-upload.service';
 import { UploadService } from '../services/upload.service';
 
-@Controller('upload')
+@Controller({ path: 'upload', version: '1' })
 export class UploadController {
   constructor(
     private readonly uploadService: UploadService,
