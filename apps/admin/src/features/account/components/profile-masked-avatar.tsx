@@ -23,6 +23,12 @@ const maskStyle: CSSProperties = {
   objectFit: "cover",
 };
 
+/** Same as eallyfe: empty / whitespace / broken URLs → `/default-avatar.svg`. */
+export function resolveProfileAvatarSrc(src?: string | null): string {
+  const trimmed = typeof src === "string" ? src.trim() : "";
+  return trimmed || IMAGES.defaultAvatar;
+}
+
 export function ProfileMaskedAvatar({
   src,
   alt,
@@ -32,11 +38,12 @@ export function ProfileMaskedAvatar({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={src || IMAGES.defaultAvatar}
+      src={resolveProfileAvatarSrc(src)}
       alt={alt}
       style={maskStyle}
-      className={cn(sizeClassName, className)}
+      className={cn("bg-muted", sizeClassName, className)}
       onError={(e) => {
+        if (e.currentTarget.src.endsWith(IMAGES.defaultAvatar)) return;
         e.currentTarget.src = IMAGES.defaultAvatar;
       }}
     />

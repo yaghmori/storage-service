@@ -25,6 +25,10 @@ import { Public } from '../../common/decorators/public.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
 import { AdminJwtService } from '../services/admin-jwt.service';
 import { AdminUserService } from '../services/admin-user.service';
+import {
+  buildAdminPasswordResetEmail,
+  resolveAdminSignInUrl,
+} from '../utils/build-admin-password-reset-email';
 import { sendOpsSmtpMail } from '../utils/send-ops-smtp-mail';
 
 export class LoginDto {
@@ -156,17 +160,20 @@ export class AdminAuthController {
       `ADMIN PASSWORD RESET — temporary password (read from docker logs, then change after login) email=${adminUser.email} adminId=${adminUser.id} temporaryPassword=${temporaryPassword}`,
     );
 
+    const mail = buildAdminPasswordResetEmail({
+      serviceName: process.env.PRODUCT_NAME || 'Storage Service',
+      temporaryPassword,
+      recipientEmail: adminUser.email,
+      recipientName: adminUser.name,
+      signInUrl: resolveAdminSignInUrl('6200'),
+      supportEmail: process.env.SUPPORT_EMAIL || null,
+    });
+
     const mailResult = await sendOpsSmtpMail({
       to: adminUser.email,
-      subject: 'Admin temporary password',
-      text: [
-        'Your admin password was reset.',
-        `Temporary password: ${temporaryPassword}`,
-        'Sign in, then change your password immediately.',
-      ].join('\n'),
-      html: `<p>Your admin password was reset.</p>
-<p>Temporary password: <code>${temporaryPassword}</code></p>
-<p>Sign in, then change your password immediately.</p>`,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
       defaultFrom: 'noreply@storage.local',
     });
 

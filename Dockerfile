@@ -62,6 +62,8 @@ COPY --from=build --chown=nestjs:nodejs /app/apps/api/src/database/drizzle /app/
 
 COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/standalone /app/web
 COPY --from=build --chown=nestjs:nodejs /app/apps/admin/.next/static /app/web/apps/admin/.next/static
+# Static assets (default-avatar, shape mask, etc.) are not in the standalone output
+COPY --from=build --chown=nestjs:nodejs /app/apps/admin/public /app/web/apps/admin/public
 
 COPY --from=build /app/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY --from=build /app/scripts/migrate.sh /usr/local/bin/migrate

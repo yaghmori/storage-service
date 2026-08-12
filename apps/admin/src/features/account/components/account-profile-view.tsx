@@ -30,6 +30,7 @@ import { AccountSettingsShell } from "./account-settings-shell";
 import {
   ProfileMaskedAvatar,
   ProfileMaskedOverlay,
+  resolveProfileAvatarSrc,
 } from "./profile-masked-avatar";
 import { SettingsHeading } from "./settings-heading";
 
@@ -100,9 +101,9 @@ export function AccountProfileView() {
   const shownName = displayName.trim() || email;
   const currentImageSrc = removeAvatar
     ? IMAGES.defaultAvatar
-    : avatarPreview || avatarUrl || IMAGES.defaultAvatar;
+    : resolveProfileAvatarSrc(avatarPreview || avatarUrl);
   const hasCustomImage = Boolean(
-    !removeAvatar && (avatarPreview || avatarUrl),
+    !removeAvatar && resolveProfileAvatarSrc(avatarPreview || avatarUrl) !== IMAGES.defaultAvatar,
   );
   const isAvatarBusy = updateProfile.isPending;
 
