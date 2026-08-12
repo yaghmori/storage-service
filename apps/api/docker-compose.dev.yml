@@ -44,6 +44,10 @@ x-api-env: &api-env
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
   MINIO_BUCKET: ${MINIO_BUCKET:-storage}
   MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+  # Ops SMTP (invites + forgot-password) → MailHog on `internal`
+  SMTP_HOST: ${DOCKER_SMTP_HOST:-mailhog}
+  SMTP_PORT: ${DOCKER_SMTP_PORT:-1025}
+  SMTP_FROM: ${SMTP_FROM:-noreply@storage.local}
   PROCESSOR_CREDENTIALS_ENCRYPTION_KEY: ${PROCESSOR_CREDENTIALS_ENCRYPTION_KEY:-change-me-32chars-min-dev-only}
   PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_BASE_URL:-}
   PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY: ${PROCESSOR_BACKEND_OPENAI_COMPATIBLE_API_KEY:-}
@@ -84,7 +88,9 @@ services:
       ENABLE_CRONS: "false"
     volumes: *api-volumes
     networks:
-      - internal
+      internal:
+        aliases:
+          - storage-service
     restart: unless-stopped
 
   worker:
@@ -101,7 +107,9 @@ services:
       ENABLE_CRONS: "true"
     volumes: *api-volumes
     networks:
-      - internal
+      internal:
+        aliases:
+          - storage-worker
     restart: unless-stopped
 
 volumes:
