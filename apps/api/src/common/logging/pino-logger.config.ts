@@ -9,6 +9,23 @@ import {
 
 export const SERVICE_NAME = 'storage-service';
 
+/** Align with Parslinks @org/shared-logger / email-service field schema. */
+const LOG_REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.headers["x-api-key"]',
+  'body.password',
+  'body.token',
+  'body.secret',
+  'body.apiKey',
+  'body.refreshToken',
+  'body.accessToken',
+  'body.temporaryPassword',
+  'body.otp',
+  'body.otpToken',
+  'body.code',
+];
+
 export function buildLoggerModuleParams(): Params {
   const level = resolveLogLevel();
   const pretty = shouldUsePrettyLogs();
@@ -18,17 +35,22 @@ export function buildLoggerModuleParams(): Params {
       level,
       name: SERVICE_NAME,
       genReqId,
+      mixin: () => ({
+        service: SERVICE_NAME,
+      }),
       customProps: (req) => {
         const r = req as Request & {
           id?: string;
           correlationId?: string;
+          orgId?: string;
           tenantId?: string;
         };
         return {
           requestId: r.id,
           correlationId: r.correlationId,
-          tenantId: r.tenantId,
+          orgId: r.orgId ?? r.tenantId,
           ip: r.ip,
+          service: SERVICE_NAME,
         };
       },
       autoLogging: {
@@ -48,17 +70,7 @@ export function buildLoggerModuleParams(): Params {
         level: (label) => ({ level: label }),
       },
       redact: {
-        paths: [
-          'req.headers.authorization',
-          'req.headers.cookie',
-          'req.headers["x-api-key"]',
-          'body.password',
-          'body.token',
-          'body.secret',
-          'body.apiKey',
-          'body.refreshToken',
-          'body.accessToken',
-        ],
+        paths: [...LOG_REDACT_PATHS],
         remove: true,
       },
       transport: pretty
