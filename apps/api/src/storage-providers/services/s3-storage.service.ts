@@ -14,6 +14,7 @@ import { Injectable } from '@nestjs/common';
 import { Readable } from 'stream';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
 import { S3Config } from '../types/storage-provider-config.types';
+import { isBrowserReachableS3Endpoint } from '../utils/browser-reachable-endpoint';
 
 @Injectable()
 export class S3StorageService {
@@ -24,8 +25,11 @@ export class S3StorageService {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
       },
-      endpoint: config.endpoint,
-      forcePathStyle: config.forcePathStyle || false,
+      endpoint: config.endpoint || undefined,
+      forcePathStyle: Boolean(config.forcePathStyle),
+      // AWS SDK v3 default CRC32 checksums break Cloudflare R2 / some MinIO.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
 
     return {
@@ -125,6 +129,8 @@ export class S3StorageService {
         }
         return `https://${config.bucket}.s3.${config.region || 'us-east-1'}.amazonaws.com/${key}`;
       },
+      canPresignForBrowser: () =>
+        isBrowserReachableS3Endpoint(config.endpoint),
       getSignedUploadUrl: async (
         key: string,
         expiresIn = 3600,

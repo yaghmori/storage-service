@@ -44,6 +44,8 @@ x-api-env: &api-env
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
   MINIO_BUCKET: ${MINIO_BUCKET:-storage}
   MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+  FILES_PUBLIC_BASE_URL: ${FILES_PUBLIC_BASE_URL:-http://localhost:6100}
+  FILES_SIGNING_SECRET: ${FILES_SIGNING_SECRET:-}
   # Ops SMTP (invites + forgot-password) → MailHog on `internal`
   SMTP_HOST: ${DOCKER_SMTP_HOST:-mailhog}
   SMTP_PORT: ${DOCKER_SMTP_PORT:-1025}

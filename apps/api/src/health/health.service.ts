@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import * as http from 'http';
+import * as https from 'https';
 import { sql } from 'drizzle-orm';
 import Redis from 'ioredis';
 import { DatabaseConfig } from '../config/database.config';
 import { RedisConfig } from '../config/redis.config';
+import { StorageConfig } from '../config/storage.config';
 import { DatabaseService } from '../database/database.service';
 
 @Injectable()
@@ -11,6 +14,7 @@ export class HealthService {
     private readonly redisConfig: RedisConfig,
     private readonly databaseService: DatabaseService,
     private readonly databaseConfig: DatabaseConfig,
+    private readonly storageConfig: StorageConfig,
   ) {}
 
   async checkRedis(): Promise<{
@@ -88,6 +92,64 @@ export class HealthService {
     }
   }
 
+  async checkMinio(): Promise<{
+    status: string;
+    latency?: number;
+    host?: string;
+    port?: number;
+    error?: string;
+  }> {
+    if (this.storageConfig.defaultProvider !== 'minio') {
+      return { status: 'skipped' };
+    }
+
+    const host = process.env.MINIO_ENDPOINT?.trim() || 'minio';
+    const port = parseInt(process.env.MINIO_PORT || '9000', 10);
+    const useSSL = ['1', 'true', 'yes', 'on'].includes(
+      (process.env.MINIO_USE_SSL || '').trim().toLowerCase(),
+    );
+    const client = useSSL ? https : http;
+
+    const startTime = Date.now();
+    return new Promise((resolve) => {
+      const req = client.get(
+        {
+          hostname: host,
+          port: Number.isFinite(port) ? port : 9000,
+          path: '/minio/health/live',
+          timeout: 3000,
+        },
+        (res) => {
+          res.resume();
+          const latency = Date.now() - startTime;
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({ status: 'ok', latency, host, port });
+            return;
+          }
+          resolve({
+            status: 'error',
+            latency,
+            host,
+            port,
+            error: `HTTP ${res.statusCode ?? 'unknown'}`,
+          });
+        },
+      );
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ status: 'error', host, port, error: 'timeout' });
+      });
+      req.on('error', (error) => {
+        resolve({
+          status: 'error',
+          host,
+          port,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      });
+    });
+  }
+
   getSystemInfo(): {
     uptime: number;
     memory: {
@@ -133,22 +195,27 @@ export class HealthService {
     status: string;
     database: Awaited<ReturnType<HealthService['checkDatabase']>>;
     redis: Awaited<ReturnType<HealthService['checkRedis']>>;
+    minio: Awaited<ReturnType<HealthService['checkMinio']>>;
     system: ReturnType<HealthService['getSystemInfo']>;
     application: ReturnType<HealthService['getApplicationInfo']>;
   }> {
-    const [database, redis] = await Promise.all([
+    const [database, redis, minio] = await Promise.all([
       this.checkDatabase(),
       this.checkRedis(),
+      this.checkMinio(),
     ]);
 
-    // Determine overall status
-    const allHealthy = database.status === 'ok' && redis.status === 'ok';
+    const allHealthy =
+      database.status === 'ok' &&
+      redis.status === 'ok' &&
+      (minio.status === 'ok' || minio.status === 'skipped');
     const overallStatus = allHealthy ? 'healthy' : 'degraded';
 
     return {
       status: overallStatus,
       database,
       redis,
+      minio,
       system: this.getSystemInfo(),
       application: this.getApplicationInfo(),
     };

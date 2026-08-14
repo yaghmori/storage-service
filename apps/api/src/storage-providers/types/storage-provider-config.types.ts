@@ -4,7 +4,7 @@ export interface S3Config {
   accessKeyId: string;
   secretAccessKey: string;
   endpoint?: string;
-  /** Browser/CDN base for public URLs (optional). */
+  /** Optional unsigned public/CDN base (not used for app-signed delivery). */
   publicEndpoint?: string;
   forcePathStyle?: boolean;
   /** Default signed URL TTL in seconds when caller omits expiresIn. */
@@ -15,11 +15,14 @@ export interface MinIOConfig {
   bucket: string;
   endpoint?: string;
   /**
-   * Browser-facing base URL for signed/public URLs
-   * (e.g. http://localhost:9000 or https://cdn.allyfe.org).
-   * Keep `endpoint` as the API→MinIO host (e.g. minio).
+   * @deprecated Not used for delivery. App-signed URLs go to FILES_PUBLIC_BASE_URL.
    */
   publicEndpoint?: string;
+  /**
+   * Optional public S3 API for this MinIO (HTTPS hostname browsers can reach).
+   * Leave empty for private Docker MinIO — delivery streams through the API.
+   */
+  browserEndpoint?: string;
   port?: number | string;
   useSSL?: boolean;
   accessKeyId: string;

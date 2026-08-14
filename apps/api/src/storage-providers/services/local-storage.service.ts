@@ -63,6 +63,7 @@ export class LocalStorageService {
       getPublicUrl: async (key: string) => {
         return `/files/${key}`;
       },
+      canPresignForBrowser: () => false,
       // Direct/presigned uploads are not supported for local disk — use POST /upload.
     };
   }

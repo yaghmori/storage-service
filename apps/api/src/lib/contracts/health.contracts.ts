@@ -66,9 +66,21 @@ export type ApplicationInfo = z.infer<typeof applicationInfoSchema>;
 // Overall Health Response
 // ============================================================================
 
+export const minioHealthSchema = z.object({
+  status: z.string(),
+  latency: z.number().optional(),
+  host: z.string().optional(),
+  port: z.number().optional(),
+  error: z.string().optional(),
+});
+
+export type MinioHealth = z.infer<typeof minioHealthSchema>;
+
 export const healthCheckResponseSchema = z.object({
   status: z.string(),
   database: databaseHealthSchema,
+  redis: databaseHealthSchema.optional(),
+  minio: minioHealthSchema.optional(),
   system: systemInfoSchema,
   application: applicationInfoSchema,
 });

@@ -191,12 +191,12 @@ export function ProviderForm({
                     </form.AppField>
                   </div>
 
-                  <form.AppField name="minio.publicEndpoint">
+                  <form.AppField name="minio.browserEndpoint">
                     {(field) => (
                       <field.Input
-                        label="Public endpoint (signed URLs)"
-                        placeholder="http://localhost:9000"
-                        description="Browser/CDN base URL. Keep separate from API endpoint."
+                        label="Browser S3 endpoint (optional)"
+                        placeholder=""
+                        description="Leave empty for private MinIO. Set only if browsers can reach this MinIO over HTTPS (not cdn.allyfe.org)."
                       />
                     )}
                   </form.AppField>
@@ -303,7 +303,7 @@ export function ProviderForm({
                       <field.Input
                         label="Custom endpoint (optional)"
                         placeholder="https://s3.amazonaws.com"
-                        description="Leave empty for AWS; set for S3-compatible APIs."
+                        description="Leave empty for AWS. R2: https://<accountid>.r2.cloudflarestorage.com. Must be public HTTPS for browser presign."
                       />
                     )}
                   </form.AppField>
@@ -312,8 +312,8 @@ export function ProviderForm({
                     {(field) => (
                       <field.Input
                         label="Public / CDN endpoint (optional)"
-                        placeholder="https://cdn.allyfe.org"
-                        description="Browser-facing base for public URL generation."
+                        placeholder=""
+                        description="Unused for app-signed delivery. Keep the bucket private; leave empty unless you serve unsigned objects from a custom domain."
                       />
                     )}
                   </form.AppField>

@@ -71,15 +71,15 @@ Duplicate file detection (SHA-256) is **per organization**.
 | `UPLOAD` | `POST /upload` | Multipart / binary upload |
 | `GET_FILE` | `GET /files/{id}` | Metadata |
 | `DELETE_FILE` | `DELETE /files/{id}` | Soft/hard delete per service |
-| `DOWNLOAD` | `GET /files/{id}/download` | Stream or redirect |
-| `SIGNED_URL` | `GET /files/{id}/signed-url` | Time-limited URL |
+| `DOWNLOAD` | `GET /files/{id}/download` | HMAC (`exp`+`sig`) or API key; 302 to provider or stream |
+| `SIGNED_URL` | `GET /files/{id}/signed-url` | App-signed URL on `FILES_PUBLIC_BASE_URL` |
 | `HEALTH` | `GET /health` | Liveness |
 
 SDK HTTP helpers currently emphasize signed URL + health; extend with multipart upload using the same auth headers and `HttpPaths.Upload`.
 
 Best practices:
 
-- Short-lived signed URLs for browsers/CDN.
+- Short-lived app-signed URLs for browsers (`<img src>`). Provider hostnames never appear in clients.
 - Timeouts longer for upload/download (60–120s) than for metadata.
 - Retry 408/429/5xx with backoff; never retry non-idempotent uploads without an idempotency key.
 - Do not log storage keys or full signed URLs in cleartext logs.

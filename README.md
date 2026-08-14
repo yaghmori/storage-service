@@ -80,6 +80,10 @@ Optional boot flags: `RUN_MIGRATIONS=true` and `RUN_SEED=true` (default off for 
 | `pnpm dev:api` | Nest API on host |
 | `pnpm dev:all` | Turbo: host API + admin |
 
+## File delivery
+
+Clients only see `FILES_PUBLIC_BASE_URL` (e.g. `https://cdn.allyfe.org`). Signed URLs are HMAC (`FILES_SIGNING_SECRET`), not MinIO/AWS signatures. `GET /v1/files/:id/download` verifies HMAC then **302**s to a provider presign when the store is browser-reachable (R2/S3), or **streams** for private MinIO / local disk. Point NPM at storage-service HTTP, never `minio:9000`. Keep R2/S3 buckets private.
+
 ## Ports
 
 | Surface | Default (compose / admin) | SDK contract default |

@@ -110,6 +110,7 @@ const CORE_EXPORTS = [
 /**
  * Core processing (scheduler, settings, services) is always registered.
  * BullMQ processors / crons are added only when ENABLE_WORKERS / ENABLE_CRONS.
+ * File retention purge is also gated by ENABLE_CRONS (FilesModule).
  */
 @Global()
 @Module({

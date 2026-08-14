@@ -156,7 +156,9 @@ export class StorageFactoryService {
         secretAccessKey: config.secretAccessKey,
       },
       endpoint: config.endpoint || undefined,
-      forcePathStyle: config.forcePathStyle || false,
+      forcePathStyle: Boolean(config.forcePathStyle),
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
 
     try {
