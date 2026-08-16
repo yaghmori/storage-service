@@ -579,6 +579,28 @@ export function useRegenerateProcessingMutation(orgId?: string) {
   });
 }
 
+export type BulkRegenerateProcessingResult = {
+  succeeded: { id: string; scheduled: string[] }[];
+  failed: { id: string; error: string }[];
+};
+
+export function useBulkRegenerateProcessingMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const response = await upstream.post(
+        FilesEndpoints.BulkRegenerateProcessing,
+        { ids },
+        { params: { orgId } },
+      );
+      return unwrapApiData<BulkRegenerateProcessingResult>(response.data);
+    },
+    onSuccess: () => {
+      invalidateFiles(queryClient);
+    },
+  });
+}
+
 export function useVerifyFileMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
