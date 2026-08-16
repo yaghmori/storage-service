@@ -7,6 +7,16 @@ export type OrgLimitsSettings = {
   storageQuotaBytes: number | null;
   /** null = unlimited */
   maxObjectCount: number | null;
+  /**
+   * Max upload HTTP requests per TTL window for API keys in this org
+   * (when the key does not set its own rateLimitMax). null = platform RATE_LIMIT_MAX.
+   */
+  uploadRateLimitMax: number | null;
+  /**
+   * Upload rate-limit window in ms for API keys in this org
+   * (when the key does not set its own rateLimitTtlMs). null = platform RATE_LIMIT_TTL_MS.
+   */
+  uploadRateLimitTtlMs: number | null;
 };
 
 export type OrgLimitsOverride = Partial<OrgLimitsSettings>;
@@ -17,6 +27,14 @@ export const EMPTY_ORG_LIMITS: OrgLimitsSettings = {
   allowedMimeTypes: null,
   storageQuotaBytes: null,
   maxObjectCount: null,
+  uploadRateLimitMax: null,
+  uploadRateLimitTtlMs: null,
+};
+
+/** Slice attached to authenticated requests for the upload throttler. */
+export type OrgUploadRateLimit = {
+  uploadRateLimitMax: number | null;
+  uploadRateLimitTtlMs: number | null;
 };
 
 const METADATA_KEY = 'limits';
@@ -53,6 +71,19 @@ export function extractLimitsFromMetadata(
   return raw as OrgLimitsOverride;
 }
 
+/** Org-level upload rate overrides only (null fields = use platform env). */
+export function extractOrgUploadRateLimit(
+  metadata: unknown,
+): OrgUploadRateLimit {
+  const limits = extractLimitsFromMetadata(metadata);
+  return {
+    uploadRateLimitMax:
+      asNullablePositiveInt(limits?.uploadRateLimitMax) ?? null,
+    uploadRateLimitTtlMs:
+      asNullablePositiveInt(limits?.uploadRateLimitTtlMs) ?? null,
+  };
+}
+
 export function mergeLimitsSettings(
   platform: {
     maxFileSizeBytes: number;
@@ -64,6 +95,8 @@ export function mergeLimitsSettings(
   allowedMimeTypes: string[];
   storageQuotaBytes: number | null;
   maxObjectCount: number | null;
+  uploadRateLimitMax: number | null;
+  uploadRateLimitTtlMs: number | null;
   /** Raw org overrides (for admin GET). */
   org: OrgLimitsSettings;
 } {
@@ -87,6 +120,14 @@ export function mergeLimitsSettings(
       const v = asNullablePositiveInt(layer.maxObjectCount);
       if (v !== undefined) org.maxObjectCount = v;
     }
+    if (layer.uploadRateLimitMax !== undefined) {
+      const v = asNullablePositiveInt(layer.uploadRateLimitMax);
+      if (v !== undefined) org.uploadRateLimitMax = v;
+    }
+    if (layer.uploadRateLimitTtlMs !== undefined) {
+      const v = asNullablePositiveInt(layer.uploadRateLimitTtlMs);
+      if (v !== undefined) org.uploadRateLimitTtlMs = v;
+    }
   }
 
   const maxFileSizeBytes =
@@ -104,6 +145,8 @@ export function mergeLimitsSettings(
     allowedMimeTypes,
     storageQuotaBytes: org.storageQuotaBytes,
     maxObjectCount: org.maxObjectCount,
+    uploadRateLimitMax: org.uploadRateLimitMax,
+    uploadRateLimitTtlMs: org.uploadRateLimitTtlMs,
     org,
   };
 }

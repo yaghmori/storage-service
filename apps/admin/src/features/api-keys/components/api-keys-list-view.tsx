@@ -20,7 +20,7 @@ import {
 import { useDataTable } from "@workspace/ui/hooks/use-data-table";
 import { KeyRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { createApiKeySchema } from "@workspace/validation";
+import { createApiKeySchema, buildApiKeyPermissions } from "@workspace/validation";
 import { toast } from "sonner";
 import { useOrgAuditUsersMap } from "@/lib/audit-user";
 import { createApiKeysColumns } from "../columns/api-keys-columns";
@@ -78,6 +78,9 @@ export function ApiKeysListView({
     defaultValues: {
       serviceName: "",
       expiresAt: "",
+      rateLimitMax: "",
+      rateLimitTtlMs: "",
+      rateLimitExempt: false,
     },
     validators: { onChange: createApiKeySchema },
     onSubmit: async ({ value }) => {
@@ -85,6 +88,11 @@ export function ApiKeysListView({
         {
           serviceName: value.serviceName.trim(),
           expiresAt: value.expiresAt || undefined,
+          permissions: buildApiKeyPermissions({
+            rateLimitMax: value.rateLimitMax,
+            rateLimitTtlMs: value.rateLimitTtlMs,
+            rateLimitExempt: value.rateLimitExempt,
+          }),
         },
         {
           onSuccess: (result) => {
@@ -102,7 +110,13 @@ export function ApiKeysListView({
 
   useEffect(() => {
     if (!createOpen) return;
-    form.reset({ serviceName: "", expiresAt: "" });
+    form.reset({
+      serviceName: "",
+      expiresAt: "",
+      rateLimitMax: "",
+      rateLimitTtlMs: "",
+      rateLimitExempt: false,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createOpen]);
 
@@ -218,6 +232,42 @@ export function ApiKeysListView({
                 />
               )}
             </form.AppField>
+            <form.AppField name="rateLimitExempt">
+              {(field) => (
+                <field.Checkbox
+                  label="Exempt from upload rate limit"
+                  description="For bulk migration keys. Equivalent to permissions.rateLimitExempt."
+                />
+              )}
+            </form.AppField>
+            <form.Subscribe selector={(s) => s.values.rateLimitExempt}>
+              {(exempt) => (
+                <>
+                  <form.AppField name="rateLimitMax">
+                    {(field) => (
+                      <field.Input
+                        label="Upload rate limit max (optional)"
+                        inputMode="numeric"
+                        placeholder="Inherit org / platform (120)"
+                        description="Max uploads per window for this key. Leave empty to inherit."
+                        disabled={exempt}
+                      />
+                    )}
+                  </form.AppField>
+                  <form.AppField name="rateLimitTtlMs">
+                    {(field) => (
+                      <field.Input
+                        label="Upload rate window ms (optional)"
+                        inputMode="numeric"
+                        placeholder="Inherit org / platform (60000)"
+                        description="Window size in milliseconds. Leave empty to inherit."
+                        disabled={exempt}
+                      />
+                    )}
+                  </form.AppField>
+                </>
+              )}
+            </form.Subscribe>
           </ResponsiveSheet.Content>
 
           <ResponsiveSheet.Footer className="gap-2 px-4 pb-4">

@@ -257,6 +257,8 @@ export interface OrgLimitsSettings {
   allowedMimeTypes: string[] | null;
   storageQuotaBytes: number | null;
   maxObjectCount: number | null;
+  uploadRateLimitMax: number | null;
+  uploadRateLimitTtlMs: number | null;
   defaults?: {
     maxFileSizeBytes: number;
     allowedMimeTypes: string[];
@@ -266,6 +268,8 @@ export interface OrgLimitsSettings {
     allowedMimeTypes: string[];
     storageQuotaBytes: number | null;
     maxObjectCount: number | null;
+    uploadRateLimitMax: number | null;
+    uploadRateLimitTtlMs: number | null;
   };
 }
 

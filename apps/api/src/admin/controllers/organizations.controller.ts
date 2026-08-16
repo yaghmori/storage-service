@@ -480,6 +480,22 @@ export class UpdateOrgLimitsDto {
   @IsInt()
   @Min(1)
   maxObjectCount?: number | null;
+
+  /** Max upload requests per TTL window; null = platform RATE_LIMIT_MAX. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  uploadRateLimitMax?: number | null;
+
+  /** Upload rate-limit window in ms; null = platform RATE_LIMIT_TTL_MS. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  uploadRateLimitTtlMs?: number | null;
 }
 
 export class UpdateOrgRetentionDto {

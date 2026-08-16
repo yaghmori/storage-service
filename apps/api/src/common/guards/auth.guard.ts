@@ -127,6 +127,7 @@ export class AuthGuard implements CanActivate {
         request.serviceName = verification.serviceName;
         request.orgId = verification.orgId;
         request.apiKeyPermissions = verification.permissions;
+        request.orgUploadRateLimit = verification.orgUploadRateLimit;
         request.user = {
           serviceName: verification.serviceName,
           orgId: verification.orgId,
