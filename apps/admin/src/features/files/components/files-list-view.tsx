@@ -18,7 +18,7 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components";
 import { useDataTable } from "@workspace/ui/hooks/use-data-table";
-import { FileIcon, Trash2, Upload } from "lucide-react";
+import { FileIcon, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -27,6 +27,7 @@ import {
 } from "../columns/files-columns";
 import {
   useBulkDeleteFilesMutation,
+  useBulkRegenerateProcessingMutation,
   useDeleteFileMutation,
   useFilesQuery,
   useHardDeleteFileMutation,
@@ -132,6 +133,9 @@ export function FilesListView() {
   const hardDeleteMutation = useHardDeleteFileMutation(activeOrg?.id);
   const restoreMutation = useRestoreFileMutation(activeOrg?.id);
   const bulkDeleteMutation = useBulkDeleteFilesMutation(activeOrg?.id);
+  const bulkRegenerateMutation = useBulkRegenerateProcessingMutation(
+    activeOrg?.id,
+  );
   const deletePending =
     softDeleteMutation.isPending || hardDeleteMutation.isPending;
 
@@ -287,6 +291,8 @@ export function FilesListView() {
   const selectedRows = table.getFilteredSelectedRowModel().rows;
   const selectedCount = Object.keys(rowSelection).length;
   const selectedFiles = selectedRows.map((row) => row.original);
+  const showBulkRegenerate =
+    visibility === "active" && selectedFiles.length > 0;
   const showBulkDelete = selectedCount > 1;
   const deletingAlreadySoftDeleted = !!deleting?.deletedAt;
 
@@ -359,6 +365,49 @@ export function FilesListView() {
         >
           <DataGridContainer className="flex flex-col overflow-auto">
             <DataTableToolbar table={table}>
+              {showBulkRegenerate && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkRegenerateMutation.isPending}
+                  onClick={() => {
+                    const ids = selectedFiles.map((file) => file.id);
+                    bulkRegenerateMutation.mutate(ids, {
+                      onSuccess: (result) => {
+                        table.resetRowSelection();
+                        const scheduled = result.succeeded.filter(
+                          (item) => item.scheduled.length > 0,
+                        ).length;
+                        if (result.failed.length > 0) {
+                          toast.error(
+                            `Processing scheduled for ${scheduled} files; ${result.failed.length} failed`,
+                          );
+                        } else if (scheduled === 0) {
+                          toast.warning(
+                            "No processing jobs were scheduled. Check the organization processing settings.",
+                          );
+                        } else {
+                          toast.success(
+                            `Processing scheduled for ${scheduled} files`,
+                          );
+                        }
+                      },
+                      onError: (error) =>
+                        toast.error(
+                          extractApiErrorMessage(
+                            error,
+                            "Failed to schedule processing",
+                          ),
+                        ),
+                    });
+                  }}
+                >
+                  <RefreshCw
+                    className={`size-4 ${bulkRegenerateMutation.isPending ? "animate-spin" : ""}`}
+                  />
+                  Process ({selectedFiles.length})
+                </Button>
+              )}
               {showBulkDelete && (
                 <Button
                   size="sm"

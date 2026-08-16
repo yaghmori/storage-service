@@ -27,6 +27,7 @@ export const FilesEndpoints = {
   Metadata: "admin/api/files/{0}/metadata",
   ProcessorResults: "admin/api/files/{0}/processor-results",
   Variants: "admin/api/files/{0}/variants",
+  BulkRegenerateProcessing: "admin/api/files/bulk-regenerate-processing",
   RegenerateProcessing: "admin/api/files/{0}/regenerate-processing",
   Verify: "admin/api/files/{0}/verify",
   Duplicates: "admin/api/files/{0}/duplicates",

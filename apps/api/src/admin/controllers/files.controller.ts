@@ -39,10 +39,14 @@ import {
 } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   Min,
 } from 'class-validator';
@@ -184,6 +188,14 @@ class ListFilesQueryDto {
   @Min(1)
   @Max(100)
   limit?: number;
+}
+
+class BulkRegenerateProcessingDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @IsUUID(undefined, { each: true })
+  ids!: string[];
 }
 
 @Public()
@@ -518,6 +530,43 @@ export class FilesController {
     await this.findOrgFile(id, orgId, true);
     const variants = await this.variantsService.findByFileId(id);
     return { items: variants, total: variants.length };
+  }
+
+  @Post('bulk-regenerate-processing')
+  @HttpCode(HttpStatus.OK)
+  async bulkRegenerateProcessing(
+    @Body() body: BulkRegenerateProcessingDto,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    const uniqueIds = [...new Set(body.ids)];
+    const results = await Promise.allSettled(
+      uniqueIds.map(async (id) => {
+        await this.findOrgFile(id, orgId);
+        const result = await this.uploadService.regenerateProcessing(id, orgId);
+        return { id, scheduled: result.scheduled };
+      }),
+    );
+
+    const succeeded: { id: string; scheduled: string[] }[] = [];
+    const failed: { id: string; error: string }[] = [];
+    results.forEach((result, index) => {
+      const id = uniqueIds[index]!;
+      if (result.status === 'fulfilled') {
+        succeeded.push(result.value);
+      } else {
+        failed.push({
+          id,
+          error:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+        });
+      }
+    });
+
+    return { succeeded, failed };
   }
 
   @Post(':id/regenerate-processing')
