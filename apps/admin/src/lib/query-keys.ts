@@ -70,6 +70,8 @@ export const fileKeys = {
     [...fileKeys.all, orgId, "variants", id] as const,
   duplicates: (orgId: string | undefined, id: string | undefined) =>
     [...fileKeys.all, orgId, "duplicates", id] as const,
+  bulkProcessingStatus: (orgId: string | undefined) =>
+    [...fileKeys.all, orgId, "bulk-processing-status"] as const,
 };
 
 export function invalidateFiles(

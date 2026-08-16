@@ -28,6 +28,11 @@ export const FilesEndpoints = {
   ProcessorResults: "admin/api/files/{0}/processor-results",
   Variants: "admin/api/files/{0}/variants",
   BulkRegenerateProcessing: "admin/api/files/bulk-regenerate-processing",
+  RegenerateProcessingAll: "admin/api/files/regenerate-processing-all",
+  RegenerateProcessingAllStatus:
+    "admin/api/files/regenerate-processing-all/status",
+  RegenerateProcessingAllCancel:
+    "admin/api/files/regenerate-processing-all/cancel",
   RegenerateProcessing: "admin/api/files/{0}/regenerate-processing",
   Verify: "admin/api/files/{0}/verify",
   Duplicates: "admin/api/files/{0}/duplicates",
