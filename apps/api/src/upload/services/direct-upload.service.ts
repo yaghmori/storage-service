@@ -96,13 +96,12 @@ export class DirectUploadService {
         'Storage provider does not belong to this organization',
       );
     }
-    if (providerConfig.type === 'local') {
+    const provider = await this.storageFactory.getProvider(providerConfig.id);
+    if (!provider.canPresignForBrowser()) {
       throw new BadRequestException(
-        'Direct uploads require MinIO or S3. Use POST /upload for the local provider.',
+        'Direct uploads require a browser-reachable object store (S3/R2). Use POST /upload for private MinIO or local disk.',
       );
     }
-
-    const provider = await this.storageFactory.getProvider(providerConfig.id);
     if (!provider.getSignedUploadUrl && !provider.createMultipartUpload) {
       throw new BadRequestException(
         `Provider type "${providerConfig.type}" does not support direct uploads`,

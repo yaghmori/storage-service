@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as MinIO from 'minio';
 import { IStorageProvider } from '../../common/interfaces/storage-provider.interface';
 import { MinIOConfig } from '../types/storage-provider-config.types';
+import {
+  isBrowserReachableS3Endpoint,
+  isFilesPublicBaseHost,
+} from '../utils/browser-reachable-endpoint';
 
 type ResolvedMinioEndpoint = {
   endPoint: string;
@@ -114,69 +118,6 @@ function resolveMinioEndpoint(config: MinIOConfig): ResolvedMinioEndpoint {
   return fromConfig;
 }
 
-/**
- * Host used in browser-facing signed URLs. Prefer provider `publicEndpoint`,
- * then MINIO_PUBLIC_ENDPOINT. Never return a Docker-only hostname (e.g. "minio")
- * — browsers cannot resolve Compose service DNS.
- */
-function isLikelyDockerServiceHost(host: string): boolean {
-  const normalized = host.trim().toLowerCase();
-  if (!normalized || isLoopbackHost(normalized)) return false;
-  // Compose DNS names are single labels without dots ("minio", "storage-minio").
-  return !normalized.includes('.');
-}
-
-function resolvePublicMinioEndpoint(
-  config: MinIOConfig,
-  internal: ResolvedMinioEndpoint,
-): ResolvedMinioEndpoint {
-  const fromConfig = config.publicEndpoint?.trim();
-  if (fromConfig) {
-    const parsed = parseMinioEndpoint(fromConfig, undefined, config.useSSL);
-    if (!isLikelyDockerServiceHost(parsed.endPoint)) {
-      return parsed;
-    }
-  }
-
-  const fromEnv = process.env.MINIO_PUBLIC_ENDPOINT?.trim();
-  if (fromEnv) {
-    return parseMinioEndpoint(
-      fromEnv,
-      process.env.MINIO_PUBLIC_PORT,
-      process.env.MINIO_PUBLIC_USE_SSL === 'true' || config.useSSL,
-    );
-  }
-
-  // Internal API host is Docker DNS — fall back to localhost for browser URLs.
-  if (isLikelyDockerServiceHost(internal.endPoint)) {
-    const port =
-      process.env.MINIO_PUBLIC_PORT?.trim() ||
-      String(internal.port || 9000);
-    return parseMinioEndpoint(`http://localhost:${port}`, port, false);
-  }
-
-  return internal;
-}
-
-function rewriteSignedUrlEndpoint(
-  url: string,
-  from: ResolvedMinioEndpoint,
-  to: ResolvedMinioEndpoint,
-): string {
-  if (sameEndpoint(from, to)) return url;
-  try {
-    const parsed = new URL(url);
-    const fromHost = from.endPoint.toLowerCase();
-    if (parsed.hostname.toLowerCase() !== fromHost) return url;
-    parsed.protocol = to.useSSL ? 'https:' : 'http:';
-    parsed.hostname = to.endPoint;
-    parsed.port = String(to.port);
-    return parsed.toString();
-  } catch {
-    return url;
-  }
-}
-
 function sameEndpoint(a: ResolvedMinioEndpoint, b: ResolvedMinioEndpoint): boolean {
   return a.endPoint === b.endPoint && a.port === b.port && a.useSSL === b.useSSL;
 }
@@ -187,14 +128,20 @@ export class MinIOStorageService {
 
   async createInstance(config: MinIOConfig): Promise<IStorageProvider> {
     const internal = resolveMinioEndpoint(config);
-    const publicEp = resolvePublicMinioEndpoint(config, internal);
+    const browserRaw = config.browserEndpoint?.trim() || '';
+    const browserReachable =
+      Boolean(browserRaw) &&
+      isBrowserReachableS3Endpoint(browserRaw) &&
+      !isFilesPublicBaseHost(browserRaw);
+    const browserEp = browserReachable
+      ? parseMinioEndpoint(browserRaw, undefined, true)
+      : undefined;
 
     if (!config.accessKeyId?.trim() || !config.secretAccessKey?.trim()) {
       throw new Error('MinIO accessKeyId and secretAccessKey are required');
     }
 
-    // Region must be set so presign does not call GetBucketLocation against
-    // publicEndpoint (localhost/CDN is unreachable from inside Docker).
+    // Region must be set so presign does not call GetBucketLocation.
     const region = config.region?.trim() || 'us-east-1';
 
     const client = new MinIO.Client({
@@ -206,20 +153,21 @@ export class MinIOStorageService {
       region,
     });
 
-    const signingClient = sameEndpoint(internal, publicEp)
-      ? client
-      : new MinIO.Client({
-          endPoint: publicEp.endPoint,
-          port: publicEp.port,
-          useSSL: publicEp.useSSL,
-          accessKey: config.accessKeyId,
-          secretKey: config.secretAccessKey,
-          region,
-        });
+    const signingClient =
+      browserEp && !sameEndpoint(internal, browserEp)
+        ? new MinIO.Client({
+            endPoint: browserEp.endPoint,
+            port: browserEp.port,
+            useSSL: browserEp.useSSL,
+            accessKey: config.accessKeyId,
+            secretKey: config.secretAccessKey,
+            region,
+          })
+        : client;
 
-    if (!sameEndpoint(internal, publicEp)) {
+    if (browserEp) {
       this.logger.log(
-        `MinIO signed URLs use public endpoint ${publicEp.useSSL ? 'https' : 'http'}://${publicEp.endPoint}:${publicEp.port} (API uses ${internal.endPoint}:${internal.port})`,
+        `MinIO browser presign enabled at ${browserEp.useSSL ? 'https' : 'http'}://${browserEp.endPoint}:${browserEp.port} (API uses ${internal.endPoint}:${internal.port})`,
       );
     }
 
@@ -291,25 +239,23 @@ export class MinIOStorageService {
         };
       },
       getSignedUrl: async (key: string, expiresIn = 3600) => {
-        const url = await signingClient.presignedGetObject(
+        return signingClient.presignedGetObject(
           config.bucket,
           key,
           expiresIn,
         );
-        // Belt-and-suspenders: rewrite if MinIO still stamped the API host.
-        return rewriteSignedUrlEndpoint(url, internal, publicEp);
       },
       getPublicUrl: async (key: string) => {
-        const protocol = publicEp.useSSL ? 'https' : 'http';
-        return `${protocol}://${publicEp.endPoint}:${publicEp.port}/${config.bucket}/${key}`;
+        const protocol = internal.useSSL ? 'https' : 'http';
+        return `${protocol}://${internal.endPoint}:${internal.port}/${config.bucket}/${key}`;
       },
+      canPresignForBrowser: () => browserReachable,
       getSignedUploadUrl: async (key: string, expiresIn = 3600) => {
-        const url = await signingClient.presignedPutObject(
+        return signingClient.presignedPutObject(
           config.bucket,
           key,
           expiresIn,
         );
-        return rewriteSignedUrlEndpoint(url, internal, publicEp);
       },
       createMultipartUpload: async (key: string, contentType?: string) => {
         const meta: Record<string, string> = {};
@@ -327,14 +273,13 @@ export class MinIOStorageService {
         partNumber: number,
         expiresIn = 3600,
       ) => {
-        const url = await signingClient.presignedUrl(
+        return signingClient.presignedUrl(
           'PUT',
           config.bucket,
           key,
           expiresIn,
           { uploadId, partNumber },
         );
-        return rewriteSignedUrlEndpoint(url, internal, publicEp);
       },
       completeMultipartUpload: async (key, uploadId, parts) => {
         const etags = parts

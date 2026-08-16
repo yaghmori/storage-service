@@ -24,6 +24,11 @@ export interface IStorageProvider {
   stat?(key: string): Promise<ObjectStat>;
   getSignedUrl(key: string, expiresIn?: number): Promise<string>;
   getPublicUrl(key: string): Promise<string>;
+  /**
+   * Browser can reach this store's S3 API for presigned GET/PUT.
+   * False for private MinIO / local disk — delivery streams through the API.
+   */
+  canPresignForBrowser(): boolean;
 
   /** Presigned PUT for direct client → object-store uploads (MinIO/S3). */
   getSignedUploadUrl?(

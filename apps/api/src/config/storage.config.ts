@@ -71,6 +71,24 @@ export class StorageConfig {
     return this.configService.get<string>('UPLOAD_PATH') || './uploads';
   }
 
+  /** Public origin for app-signed download URLs (e.g. https://cdn.allyfe.org). */
+  get filesPublicBaseUrl(): string {
+    const raw =
+      this.configService.get<string>('FILES_PUBLIC_BASE_URL') ||
+      this.configService.get<string>('APP_URL') ||
+      this.configService.get<string>('BASE_URL') ||
+      '';
+    return raw.replace(/\/$/, '');
+  }
+
+  get filesSigningSecret(): string {
+    const secret =
+      this.configService.get<string>('FILES_SIGNING_SECRET')?.trim() ||
+      this.configService.get<string>('JWT_SECRET')?.trim() ||
+      '';
+    return secret;
+  }
+
   private parsePositiveInt(raw: string | undefined, fallback: number): number {
     const parsed = parseInt(raw || String(fallback), 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;

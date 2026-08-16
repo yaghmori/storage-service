@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
+import { appRole } from '../config/app-role';
 import { DatabaseModule } from '../database/database.module';
 import { EventsModule } from '../events/events.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -22,7 +22,6 @@ import { RetentionCleanupService } from './services/retention-cleanup.service';
     VariantsModule,
     OrganizationsModule,
     EventsModule,
-    ScheduleModule.forRoot(),
   ],
   controllers: [FilesController, FilesMicroserviceInsightsController],
   providers: [
@@ -32,7 +31,7 @@ import { RetentionCleanupService } from './services/retention-cleanup.service';
     FileDuplicationService,
     FileDeletionService,
     FilesRepository,
-    RetentionCleanupService,
+    ...(appRole.enableCrons ? [RetentionCleanupService] : []),
   ],
   exports: [
     FilesService,

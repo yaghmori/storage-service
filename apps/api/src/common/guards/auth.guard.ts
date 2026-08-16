@@ -10,6 +10,11 @@ import { Reflector } from '@nestjs/core';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ApiKeyService } from '../services/api-key.service';
+import {
+  filesSigningSecret,
+  parseFileDownloadPath,
+  verifyFileDownloadHmac,
+} from '../../serving/utils/file-download-hmac';
 
 function authDisabled(): boolean {
   const mode = (process.env.AUTH_MODE || '').toLowerCase();
@@ -81,6 +86,9 @@ export class AuthGuard implements CanActivate {
     if (authDisabled()) return true;
 
     const request = context.switchToHttp().getRequest();
+    if (this.allowHmacFileDownload(request)) {
+      return true;
+    }
     const authHeader = (request.headers.authorization || '') as string;
     const jwtSecret = process.env.JWT_SECRET || '';
 
@@ -128,9 +136,40 @@ export class AuthGuard implements CanActivate {
     }
 
     throw new UnauthorizedException(
-      'Valid JWT (Authorization: Bearer) or API key (x-api-key) required. Configure AUTH_API_KEYS / DB api_keys / JWT_SECRET, or AUTH_DISABLED=true on trusted networks.',
+      'Valid JWT (Authorization: Bearer), API key (x-api-key), or HMAC download signature required. Configure AUTH_API_KEYS / DB api_keys / JWT_SECRET / FILES_SIGNING_SECRET, or AUTH_DISABLED=true on trusted networks.',
     );
   }
+
+  private allowHmacFileDownload(request: {
+    path?: string;
+    url?: string;
+    originalUrl?: string;
+    query?: Record<string, unknown>;
+    fileDownloadHmac?: { fileId: string; exp: number; variant?: string };
+  }): boolean {
+    const path = (request.path || request.originalUrl || request.url || '')
+      .split('?')[0];
+    const fileId = parseFileDownloadPath(path);
+    if (!fileId) return false;
+
+    const expRaw = firstQuery(request.query?.exp);
+    const sig = firstQuery(request.query?.sig) || '';
+    const variant = firstQuery(request.query?.variant);
+    const exp = Number(expRaw);
+    const secret = filesSigningSecret();
+    if (!verifyFileDownloadHmac({ fileId, exp, variant }, sig, secret)) {
+      return false;
+    }
+    request.fileDownloadHmac = { fileId, exp, variant };
+    return true;
+  }
+}
+
+function firstQuery(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    return typeof value[0] === 'string' ? value[0] : undefined;
+  }
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** Enforce body/header orgId matches the API key's organization. */

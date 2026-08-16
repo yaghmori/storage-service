@@ -255,9 +255,7 @@ export class SeedService {
       config: {
         endpoint: process.env.MINIO_ENDPOINT?.trim() || 'minio',
         port: process.env.MINIO_PORT || '9000',
-        publicEndpoint:
-          process.env.MINIO_PUBLIC_ENDPOINT?.trim() ||
-          `http://localhost:${process.env.MINIO_PUBLIC_PORT?.trim() || process.env.MINIO_PORT || '9000'}`,
+        browserEndpoint: process.env.MINIO_BROWSER_ENDPOINT?.trim() || '',
         accessKeyId: process.env.MINIO_ACCESS_KEY?.trim() || '',
         secretAccessKey: process.env.MINIO_SECRET_KEY?.trim() || '',
         bucket: process.env.MINIO_BUCKET?.trim() || 'storage',
@@ -274,18 +272,20 @@ export class SeedService {
       !!process.env.AWS_S3_BUCKET?.trim();
 
     await this.upsertStorageProvider(orgId, {
-      name: 'AWS S3 Storage',
+      name: process.env.AWS_S3_PROVIDER_NAME?.trim() || 'AWS S3 Storage',
       type: 's3',
       config: {
         region: process.env.AWS_S3_REGION?.trim() || 'us-east-1',
         bucket: process.env.AWS_S3_BUCKET?.trim() || 'your-bucket-name',
         endpoint: process.env.AWS_S3_ENDPOINT?.trim() || '',
+        publicEndpoint: process.env.AWS_S3_PUBLIC_ENDPOINT?.trim() || '',
+        forcePathStyle: process.env.AWS_S3_FORCE_PATH_STYLE === 'true',
         accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID?.trim() || 'your-access-key',
         secretAccessKey:
           process.env.AWS_S3_SECRET_ACCESS_KEY?.trim() || 'your-secret-key',
       },
       isActive: s3Configured ? process.env.AWS_S3_ACTIVE !== 'false' : false,
-      isDefault: false,
+      isDefault: s3Configured && process.env.AWS_S3_DEFAULT === 'true',
     });
   }
 }

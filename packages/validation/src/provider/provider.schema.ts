@@ -52,7 +52,20 @@ export const minioProviderConfigSchema = z.object({
         /^[a-z0-9.-]+(?::\d+)?$/i.test(v),
       {
         message:
-          "Use a host (localhost:9000) or URL (http://localhost:9000 / https://cdn.example.com)",
+          "Deprecated. Use browserEndpoint only if MinIO itself is on a public HTTPS host.",
+      },
+    )
+    .optional()
+    .or(z.literal("")),
+  browserEndpoint: optionalTrimmed
+    .refine(
+      (v) =>
+        v === "" ||
+        /^https:\/\//i.test(v) ||
+        /^[a-z0-9.-]+(?::\d+)?$/i.test(v),
+      {
+        message:
+          "Leave empty for private MinIO. Set only if browsers can reach this MinIO over HTTPS.",
       },
     )
     .optional()
@@ -132,7 +145,8 @@ export const DEFAULT_LOCAL_PROVIDER_CONFIG: LocalProviderConfigInput = {
 export const DEFAULT_MINIO_PROVIDER_CONFIG: MinioProviderConfigInput = {
   endpoint: "minio",
   port: 9000,
-  publicEndpoint: "http://localhost:9000",
+  publicEndpoint: "",
+  browserEndpoint: "",
   bucket: "storage",
   accessKeyId: "minioadmin",
   secretAccessKey: "minioadmin",
@@ -244,10 +258,8 @@ export function providerConfigToFormParts(
       ...DEFAULT_MINIO_PROVIDER_CONFIG,
       endpoint: asString(c.endpoint, DEFAULT_MINIO_PROVIDER_CONFIG.endpoint),
       port: asOptionalNumber(c.port) ?? DEFAULT_MINIO_PROVIDER_CONFIG.port,
-      publicEndpoint: asString(
-        c.publicEndpoint,
-        DEFAULT_MINIO_PROVIDER_CONFIG.publicEndpoint ?? "",
-      ),
+      publicEndpoint: asString(c.publicEndpoint, ""),
+      browserEndpoint: asString(c.browserEndpoint, ""),
       bucket: asString(c.bucket, DEFAULT_MINIO_PROVIDER_CONFIG.bucket),
       accessKeyId: asString(
         c.accessKeyId,
@@ -317,6 +329,7 @@ export function formValuesToProviderConfig(
       port:
         values.minio.port != null ? String(values.minio.port) : undefined,
       publicEndpoint: values.minio.publicEndpoint,
+      browserEndpoint: values.minio.browserEndpoint,
       bucket: values.minio.bucket,
       accessKeyId: values.minio.accessKeyId,
       secretAccessKey: values.minio.secretAccessKey,
