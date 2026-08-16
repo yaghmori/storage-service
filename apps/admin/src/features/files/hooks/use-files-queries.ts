@@ -601,6 +601,92 @@ export function useBulkRegenerateProcessingMutation(orgId?: string) {
   });
 }
 
+export type BulkProcessingProgress = {
+  running: boolean;
+  matched: number;
+  processed: number;
+  scheduled: number;
+  failed: number;
+  cancelRequested: boolean;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+};
+
+/** Filters describing "all files matching the current table view". */
+export type RegenerateProcessingAllInput = {
+  search?: string;
+  fileType?: string;
+  processingStatus?: string;
+  minSize?: number;
+  maxSize?: number;
+  limit?: number;
+};
+
+export function useRegenerateProcessingAllMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RegenerateProcessingAllInput) => {
+      const response = await upstream.post(
+        FilesEndpoints.RegenerateProcessingAll,
+        input,
+        { params: { orgId } },
+      );
+      return unwrapApiData<{
+        matched: number;
+        progress: BulkProcessingProgress;
+        message: string;
+      }>(response.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: fileKeys.bulkProcessingStatus(orgId),
+      });
+    },
+  });
+}
+
+/** Polls while a sweep is running so the toolbar can show live progress. */
+export function useBulkProcessingStatusQuery(orgId?: string, enabled = true) {
+  return useQuery({
+    queryKey: fileKeys.bulkProcessingStatus(orgId),
+    queryFn: async () => {
+      const response = await upstream.get(
+        FilesEndpoints.RegenerateProcessingAllStatus,
+        { params: { orgId } },
+      );
+      return unwrapApiData<{ progress: BulkProcessingProgress | null }>(
+        response.data,
+      ).progress;
+    },
+    enabled: enabled && !!orgId,
+    refetchInterval: (query) => (query.state.data?.running ? 1500 : false),
+  });
+}
+
+export function useCancelBulkProcessingMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await upstream.post(
+        FilesEndpoints.RegenerateProcessingAllCancel,
+        {},
+        { params: { orgId } },
+      );
+      return unwrapApiData<{
+        cancelled: boolean;
+        progress: BulkProcessingProgress | null;
+        message: string;
+      }>(response.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: fileKeys.bulkProcessingStatus(orgId),
+      });
+    },
+  });
+}
+
 export function useVerifyFileMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({

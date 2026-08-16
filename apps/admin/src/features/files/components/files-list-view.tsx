@@ -18,7 +18,7 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components";
 import { useDataTable } from "@workspace/ui/hooks/use-data-table";
-import { FileIcon, RefreshCw, Trash2, Upload } from "lucide-react";
+import { FileIcon, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -27,8 +27,11 @@ import {
 } from "../columns/files-columns";
 import {
   useBulkDeleteFilesMutation,
+  useBulkProcessingStatusQuery,
   useBulkRegenerateProcessingMutation,
+  useCancelBulkProcessingMutation,
   useDeleteFileMutation,
+  useRegenerateProcessingAllMutation,
   useFilesQuery,
   useHardDeleteFileMutation,
   useRestoreFileMutation,
@@ -136,6 +139,13 @@ export function FilesListView() {
   const bulkRegenerateMutation = useBulkRegenerateProcessingMutation(
     activeOrg?.id,
   );
+  const regenerateAllMutation = useRegenerateProcessingAllMutation(
+    activeOrg?.id,
+  );
+  const cancelBulkProcessing = useCancelBulkProcessingMutation(activeOrg?.id);
+  const bulkProcessingStatus = useBulkProcessingStatusQuery(activeOrg?.id);
+  const sweep = bulkProcessingStatus.data;
+  const sweepRunning = !!sweep?.running;
   const deletePending =
     softDeleteMutation.isPending || hardDeleteMutation.isPending;
 
@@ -365,6 +375,80 @@ export function FilesListView() {
         >
           <DataGridContainer className="flex flex-col overflow-auto">
             <DataTableToolbar table={table}>
+              {sweepRunning ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Processing {sweep.processed}/{sweep.matched}
+                    {sweep.failed > 0 ? ` · ${sweep.failed} failed` : ""}
+                    {sweep.cancelRequested ? " · stopping…" : ""}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      sweep.cancelRequested || cancelBulkProcessing.isPending
+                    }
+                    onClick={() => {
+                      cancelBulkProcessing.mutate(undefined, {
+                        onSuccess: (result) => toast.info(result.message),
+                        onError: (error) =>
+                          toast.error(
+                            extractApiErrorMessage(error, "Cancel failed"),
+                          ),
+                      });
+                    }}
+                  >
+                    <X className="size-4" />
+                    Stop
+                  </Button>
+                </div>
+              ) : (
+                visibility === "active" &&
+                total > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={regenerateAllMutation.isPending}
+                    onClick={() => {
+                      regenerateAllMutation.mutate(
+                        {
+                          search: searchTerm.trim() || undefined,
+                          fileType:
+                            fileType.length > 0 ? fileType.join(",") : undefined,
+                          processingStatus:
+                            processingStatus.length > 0
+                              ? processingStatus.join(",")
+                              : undefined,
+                          minSize: sizeFilter?.minSize,
+                          maxSize: sizeFilter?.maxSize,
+                        },
+                        {
+                          onSuccess: (result) => {
+                            table.resetRowSelection();
+                            if (result.matched === 0) {
+                              toast.warning(result.message);
+                              return;
+                            }
+                            toast.success(result.message);
+                          },
+                          onError: (error) =>
+                            toast.error(
+                              extractApiErrorMessage(
+                                error,
+                                "Failed to start bulk processing",
+                              ),
+                            ),
+                        },
+                      );
+                    }}
+                  >
+                    <RefreshCw
+                      className={`size-4 ${regenerateAllMutation.isPending ? "animate-spin" : ""}`}
+                    />
+                    Process all ({total})
+                  </Button>
+                )
+              )}
               {showBulkRegenerate && (
                 <Button
                   size="sm"

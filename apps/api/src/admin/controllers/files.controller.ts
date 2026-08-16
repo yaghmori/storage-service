@@ -25,17 +25,8 @@ import {
   count,
   desc,
   eq,
-  gte,
-  ilike,
-  inArray,
-  isNotNull,
   isNull,
-  like,
-  lte,
-  not,
-  or,
   SQL,
-  sql,
 } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import {
@@ -74,66 +65,12 @@ import {
 } from '../decorators/current-admin.decorator';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
 import { OrgMembershipGuard } from '../guards/org-membership.guard';
+import {
+  FilesBulkProcessingService,
+  MAX_SWEEP_FILES,
+} from '../services/files-bulk-processing.service';
+import { buildFileListConditions } from '../utils/file-list-filters';
 import { requireOrgId } from '../utils/require-org-id';
-
-/** MIME families aligned with org usage breakdown. */
-const FILE_TYPE_FILTERS = [
-  'images',
-  'videos',
-  'audio',
-  'documents',
-  'other',
-] as const;
-
-type FileTypeFilter = (typeof FILE_TYPE_FILTERS)[number];
-
-const PROCESSING_STATUS_FILTERS = [
-  'pending',
-  'processing',
-  'completed',
-  'failed',
-  'cancelled',
-  'partial',
-  'skipped',
-] as const;
-
-type ProcessingStatusFilter = (typeof PROCESSING_STATUS_FILTERS)[number];
-
-function parseFileTypeFilter(raw: string): FileTypeFilter[] {
-  const parts = raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length === 0) {
-    return [];
-  }
-  const allowed = FILE_TYPE_FILTERS as readonly string[];
-  const invalid = parts.filter((s) => !allowed.includes(s));
-  if (invalid.length > 0) {
-    throw new BadRequestException(
-      `Invalid fileType value(s): ${invalid.join(', ')}. Allowed: ${FILE_TYPE_FILTERS.join(', ')}`,
-    );
-  }
-  return [...new Set(parts)] as FileTypeFilter[];
-}
-
-function parseProcessingStatusFilter(raw: string): ProcessingStatusFilter[] {
-  const parts = raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length === 0) {
-    return [];
-  }
-  const allowed = PROCESSING_STATUS_FILTERS as readonly string[];
-  const invalid = parts.filter((s) => !allowed.includes(s));
-  if (invalid.length > 0) {
-    throw new BadRequestException(
-      `Invalid processingStatus value(s): ${invalid.join(', ')}. Allowed: ${PROCESSING_STATUS_FILTERS.join(', ')}`,
-    );
-  }
-  return [...new Set(parts)] as ProcessingStatusFilter[];
-}
 
 class ListFilesQueryDto {
   @IsOptional()
@@ -198,6 +135,45 @@ class BulkRegenerateProcessingDto {
   ids!: string[];
 }
 
+/** Same filter shape as the Files table so "all matching" equals what is listed. */
+class RegenerateProcessingAllDto {
+  @IsOptional()
+  @IsString()
+  orgId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  fileType?: string;
+
+  @IsOptional()
+  @IsString()
+  processingStatus?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minSize?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxSize?: number;
+
+  /** Optional ceiling on how many files this run schedules. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_SWEEP_FILES)
+  limit?: number;
+}
+
 @Public()
 @Controller({ path: 'admin/api/files', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
@@ -213,6 +189,7 @@ export class FilesController {
     private readonly fileDuplicationService: FileDuplicationService,
     private readonly variantsService: VariantsService,
     private readonly queuesService: QueuesService,
+    private readonly bulkProcessing: FilesBulkProcessingService,
   ) {}
 
   @Post('upload')
@@ -352,54 +329,15 @@ export class FilesController {
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const offset = (page - 1) * limit;
 
-    const conditions: SQL[] = [eq(schema.files.orgId, orgId)];
-
-    if (query.deletedOnly) {
-      conditions.push(isNotNull(schema.files.deletedAt));
-    } else if (!query.includeDeleted) {
-      conditions.push(isNull(schema.files.deletedAt));
-    }
-
-    if (query.search?.trim()) {
-      const term = `%${query.search.trim()}%`;
-      conditions.push(
-        or(
-          ilike(schema.files.originalFileName, term),
-          ilike(schema.files.mimeType, term),
-          sql`${schema.files.id}::text ilike ${term}`,
-        )!,
-      );
-    }
-
-    if (query.fileType?.trim()) {
-      const types = parseFileTypeFilter(query.fileType);
-      const mimeConditions = types
-        .map((t) => this.mimeTypeConditionForFileType(t))
-        .filter((c): c is SQL => c != null);
-      if (mimeConditions.length === 1) {
-        conditions.push(mimeConditions[0]!);
-      } else if (mimeConditions.length > 1) {
-        conditions.push(or(...mimeConditions)!);
-      }
-    }
-
-    if (query.processingStatus?.trim()) {
-      const statuses = parseProcessingStatusFilter(query.processingStatus);
-      if (statuses.length === 1) {
-        conditions.push(eq(schema.files.processingStatus, statuses[0]!));
-      } else if (statuses.length > 1) {
-        conditions.push(inArray(schema.files.processingStatus, statuses));
-      }
-    }
-
-    const minSize = Number(query.minSize);
-    const maxSize = Number(query.maxSize);
-    if (Number.isFinite(minSize) && minSize >= 0) {
-      conditions.push(gte(schema.files.size, BigInt(minSize)));
-    }
-    if (Number.isFinite(maxSize) && maxSize >= 0) {
-      conditions.push(lte(schema.files.size, BigInt(maxSize)));
-    }
+    const conditions = buildFileListConditions(orgId, {
+      search: query.search,
+      fileType: query.fileType,
+      processingStatus: query.processingStatus,
+      minSize: query.minSize,
+      maxSize: query.maxSize,
+      includeDeleted: query.includeDeleted,
+      deletedOnly: query.deletedOnly,
+    });
 
     const where = and(...conditions);
 
@@ -567,6 +505,66 @@ export class FilesController {
     });
 
     return { succeeded, failed };
+  }
+
+  /**
+   * Schedule processing for every file matching the current Files-table filters,
+   * not just the loaded page. Runs detached; poll the status endpoint.
+   */
+  @Post('regenerate-processing-all')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async regenerateProcessingAll(
+    @Body() body: RegenerateProcessingAllDto,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId || body.orgId, headerOrgId);
+    const { matched, progress } = await this.bulkProcessing.start(
+      orgId,
+      {
+        search: body.search,
+        fileType: body.fileType,
+        processingStatus: body.processingStatus,
+        minSize: body.minSize,
+        maxSize: body.maxSize,
+      },
+      body.limit,
+    );
+
+    return {
+      matched,
+      progress,
+      message:
+        matched > 0
+          ? `Scheduling processing for ${matched} files`
+          : 'No files matched the current filters',
+    };
+  }
+
+  @Get('regenerate-processing-all/status')
+  async regenerateProcessingAllStatus(
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    return { progress: this.bulkProcessing.getProgress(orgId) };
+  }
+
+  @Post('regenerate-processing-all/cancel')
+  @HttpCode(HttpStatus.OK)
+  async cancelRegenerateProcessingAll(
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    const cancelled = this.bulkProcessing.requestCancel(orgId);
+    return {
+      cancelled,
+      progress: this.bulkProcessing.getProgress(orgId),
+      message: cancelled
+        ? 'Cancellation requested; the current batch will finish first'
+        : 'No bulk processing run is in progress',
+    };
   }
 
   @Post(':id/regenerate-processing')
@@ -784,33 +782,6 @@ export class FilesController {
       message:
         'File soft-deleted (hidden from active lists; object remains in storage and can be restored)',
     });
-  }
-
-  /** Same MIME families as org usage breakdown. */
-  private mimeTypeConditionForFileType(fileType: FileTypeFilter): SQL | undefined {
-    switch (fileType) {
-      case 'images':
-        return like(schema.files.mimeType, 'image/%');
-      case 'videos':
-        return like(schema.files.mimeType, 'video/%');
-      case 'audio':
-        return like(schema.files.mimeType, 'audio/%');
-      case 'documents':
-        return or(
-          like(schema.files.mimeType, 'application/%'),
-          like(schema.files.mimeType, 'text/%'),
-        )!;
-      case 'other':
-        return and(
-          not(like(schema.files.mimeType, 'image/%')),
-          not(like(schema.files.mimeType, 'video/%')),
-          not(like(schema.files.mimeType, 'audio/%')),
-          not(like(schema.files.mimeType, 'application/%')),
-          not(like(schema.files.mimeType, 'text/%')),
-        )!;
-      default:
-        return undefined;
-    }
   }
 
   private async findOrgFile(id: string, orgId: string, includeDeleted = false) {

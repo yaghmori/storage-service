@@ -27,6 +27,7 @@ import { ProcessorBackendsController } from './controllers/processor-backends.co
 import { ProvidersController } from './controllers/providers.controller';
 import { OrgMembershipGuard } from './guards/org-membership.guard';
 import { AdminApiKeyService } from './services/admin-api-key.service';
+import { FilesBulkProcessingService } from './services/files-bulk-processing.service';
 import { MembershipService } from './services/membership.service';
 
 @Module({
@@ -58,7 +59,12 @@ import { MembershipService } from './services/membership.service';
     AdminMembersByHeaderController,
     AdminInvitesController,
   ],
-  providers: [AdminApiKeyService, MembershipService, OrgMembershipGuard],
+  providers: [
+    AdminApiKeyService,
+    FilesBulkProcessingService,
+    MembershipService,
+    OrgMembershipGuard,
+  ],
   exports: [MembershipService],
 })
 export class AdminModule {}
