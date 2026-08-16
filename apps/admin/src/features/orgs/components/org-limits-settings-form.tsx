@@ -24,6 +24,8 @@ type FormState = {
   allowedMimeTypesText: string;
   storageQuotaBytes: string;
   maxObjectCount: string;
+  uploadRateLimitMax: string;
+  uploadRateLimitTtlMs: string;
 };
 
 const SEGMENT_COLORS: Record<OrgUsageBreakdownCategory, string> = {
@@ -75,6 +77,14 @@ function toForm(limits: OrgLimitsSettings): FormState {
       limits.storageQuotaBytes != null ? String(limits.storageQuotaBytes) : "",
     maxObjectCount:
       limits.maxObjectCount != null ? String(limits.maxObjectCount) : "",
+    uploadRateLimitMax:
+      limits.uploadRateLimitMax != null
+        ? String(limits.uploadRateLimitMax)
+        : "",
+    uploadRateLimitTtlMs:
+      limits.uploadRateLimitTtlMs != null
+        ? String(limits.uploadRateLimitTtlMs)
+        : "",
   };
 }
 
@@ -291,6 +301,41 @@ export function OrgLimitsSettingsForm({ orgId }: { orgId: string }) {
                 placeholder="Unlimited"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="upload-rate-max">Upload rate limit (max)</Label>
+              <Input
+                id="upload-rate-max"
+                inputMode="numeric"
+                value={form.uploadRateLimitMax}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, uploadRateLimitMax: e.target.value } : f,
+                  )
+                }
+                placeholder="Platform default (120)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Max upload requests per window for API keys that do not set
+                their own limit. Empty = platform RATE_LIMIT_MAX.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="upload-rate-ttl">Upload rate window (ms)</Label>
+              <Input
+                id="upload-rate-ttl"
+                inputMode="numeric"
+                value={form.uploadRateLimitTtlMs}
+                onChange={(e) =>
+                  setForm((f) =>
+                    f ? { ...f, uploadRateLimitTtlMs: e.target.value } : f,
+                  )
+                }
+                placeholder="Platform default (60000)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Window size in milliseconds. Empty = platform RATE_LIMIT_TTL_MS.
+              </p>
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="mime-types">Allowed MIME types</Label>
               <Input
@@ -325,6 +370,10 @@ export function OrgLimitsSettingsForm({ orgId }: { orgId: string }) {
                 maxFileSizeBytes: emptyToNullNumber(form.maxFileSizeBytes),
                 storageQuotaBytes: emptyToNullNumber(form.storageQuotaBytes),
                 maxObjectCount: emptyToNullNumber(form.maxObjectCount),
+                uploadRateLimitMax: emptyToNullNumber(form.uploadRateLimitMax),
+                uploadRateLimitTtlMs: emptyToNullNumber(
+                  form.uploadRateLimitTtlMs,
+                ),
                 allowedMimeTypes: mimeParts.length > 0 ? mimeParts : null,
               },
               {

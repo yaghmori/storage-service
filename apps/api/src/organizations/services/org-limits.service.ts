@@ -71,6 +71,8 @@ export class OrgLimitsService {
         allowedMimeTypes: resolved.allowedMimeTypes,
         storageQuotaBytes: resolved.storageQuotaBytes,
         maxObjectCount: resolved.maxObjectCount,
+        uploadRateLimitMax: resolved.uploadRateLimitMax,
+        uploadRateLimitTtlMs: resolved.uploadRateLimitTtlMs,
       },
     };
   }
@@ -101,6 +103,14 @@ export class OrgLimitsService {
         patch.maxObjectCount !== undefined
           ? patch.maxObjectCount
           : (current.maxObjectCount ?? null),
+      uploadRateLimitMax:
+        patch.uploadRateLimitMax !== undefined
+          ? patch.uploadRateLimitMax
+          : (current.uploadRateLimitMax ?? null),
+      uploadRateLimitTtlMs:
+        patch.uploadRateLimitTtlMs !== undefined
+          ? patch.uploadRateLimitTtlMs
+          : (current.uploadRateLimitTtlMs ?? null),
     };
     await this.organizations.update(orgId, {
       metadata: withLimitsInMetadata(org.metadata, next),

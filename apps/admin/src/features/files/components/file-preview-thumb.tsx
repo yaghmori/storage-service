@@ -93,7 +93,6 @@ export function FilePreviewThumb({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const [useOriginal, setUseOriginal] = useState(false);
 
   const box =
     size === "sm"
@@ -120,9 +119,12 @@ export function FilePreviewThumb({
     );
   }
 
+  // Always request the small thumbnail variant. The backend generates it on
+  // demand when missing, so we never fall back to loading the full-size
+  // original for a preview — show the file-type icon instead on error.
   const src = fileContentUrl(fileId, {
     orgId,
-    variant: useOriginal ? undefined : "thumbnail",
+    variant: "thumbnail",
   });
 
   return (
@@ -139,13 +141,7 @@ export function FilePreviewThumb({
         alt={alt ?? "Preview"}
         className="size-full object-cover"
         loading="lazy"
-        onError={() => {
-          if (!useOriginal) {
-            setUseOriginal(true);
-            return;
-          }
-          setFailed(true);
-        }}
+        onError={() => setFailed(true)}
       />
     </div>
   );

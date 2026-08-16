@@ -3,6 +3,10 @@ import * as crypto from 'crypto';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/drizzle/schema';
+import {
+  extractOrgUploadRateLimit,
+  type OrgUploadRateLimit,
+} from '../../organizations/types/org-limits';
 
 @Injectable()
 export class ApiKeyService {
@@ -15,13 +19,12 @@ export class ApiKeyService {
     return crypto.createHash('sha256').update(apiKey).digest('hex');
   }
 
-  async verifyApiKey(
-    apiKey: string,
-  ): Promise<{
+  async verifyApiKey(apiKey: string): Promise<{
     valid: boolean;
     serviceName?: string;
     orgId?: string;
     permissions?: unknown;
+    orgUploadRateLimit?: OrgUploadRateLimit;
   }> {
     const keyHash = await this.hashApiKey(apiKey.trim());
 
@@ -31,6 +34,7 @@ export class ApiKeyService {
         orgId: schema.apiKeys.orgId,
         orgStatus: schema.organizations.status,
         permissions: schema.apiKeys.permissions,
+        orgMetadata: schema.organizations.metadata,
       })
       .from(schema.apiKeys)
       .innerJoin(
@@ -58,6 +62,7 @@ export class ApiKeyService {
       serviceName: apiKeyRecord.serviceName,
       orgId: apiKeyRecord.orgId,
       permissions: apiKeyRecord.permissions,
+      orgUploadRateLimit: extractOrgUploadRateLimit(apiKeyRecord.orgMetadata),
     };
   }
 }

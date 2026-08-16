@@ -56,6 +56,50 @@ export function createApiKeysColumns(
       ),
     },
     {
+      id: "rateLimit",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Rate limit" />
+      ),
+      meta: {
+        label: "Rate limit",
+        skeleton: <Skeleton className="h-4 w-28" />,
+      },
+      cell: ({ row }) => {
+        const perms = row.original.permissions;
+        if (!perms || typeof perms !== "object") {
+          return <span className="text-muted-foreground">Inherited</span>;
+        }
+        if (perms.rateLimitExempt === true || perms.migration === true) {
+          return <Badge variant="outline">Exempt</Badge>;
+        }
+        const max =
+          typeof perms.rateLimitMax === "number"
+            ? perms.rateLimitMax
+            : typeof perms.rateLimitMax === "string"
+              ? Number(perms.rateLimitMax)
+              : null;
+        const ttl =
+          typeof perms.rateLimitTtlMs === "number"
+            ? perms.rateLimitTtlMs
+            : typeof perms.rateLimitTtlMs === "string"
+              ? Number(perms.rateLimitTtlMs)
+              : null;
+        if (max != null && Number.isFinite(max) && max > 0) {
+          const window =
+            ttl != null && Number.isFinite(ttl) && ttl > 0
+              ? ` / ${ttl}ms`
+              : "";
+          return (
+            <span className="font-mono text-xs">
+              {Math.floor(max)}
+              {window}
+            </span>
+          );
+        }
+        return <span className="text-muted-foreground">Inherited</span>;
+      },
+    },
+    {
       accessorKey: "expiresAt",
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Expires" />
