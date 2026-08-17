@@ -19,6 +19,7 @@ import { ProcessorBackendsListView } from "@/features/processor-backends/compone
 import { ProvidersListView } from "@/features/providers/components/providers-list-view";
 import { OrgDangerZone } from "./org-danger-zone";
 import { OrgLimitsSettingsForm } from "./org-limits-settings-form";
+import { OrgLogoForm } from "./org-logo-form";
 import { OrganizationForm } from "./organization-form";
 import { OrgProcessingSettingsForm } from "./org-processing-settings-form";
 import { OrgRetentionSettingsForm } from "./org-retention-settings-form";
@@ -73,6 +74,12 @@ export function OrgSettingsSectionView({ section }: Props) {
 
       {section === "general" ? (
         <div className="space-y-4">
+          <OrgLogoForm
+            key={`${activeOrg.id}-logo`}
+            orgId={activeOrg.id}
+            orgName={activeOrg.name}
+            logoUrl={activeOrg.logoUrl}
+          />
           <Card>
             <CardContent className="p-6">
               <OrganizationForm

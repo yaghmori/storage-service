@@ -1,6 +1,7 @@
 import {
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -22,12 +23,25 @@ export class FilesController {
     private readonly insights: FileInsightsService,
   ) {}
 
+  private requireOrgId(
+    req: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
+    bodyOrgId?: string | null,
+  ): string {
+    const orgId = resolveBoundOrgId(req, bodyOrgId);
+    if (!orgId) {
+      throw new ForbiddenException(
+        'Organization context required (API key org binding or x-org-id)',
+      );
+    }
+    return orgId;
+  }
+
   @Get(':id')
   async getFile(
     @Param('id') id: string,
     @Req() req: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
-    const orgId = resolveBoundOrgId(req);
+    const orgId = this.requireOrgId(req);
     const file = await this.filesService.findById(id, orgId);
     if (!file) {
       throw new NotFoundException(notFound(`File with id ${id} not found`));
@@ -41,10 +55,7 @@ export class FilesController {
     @Param('id') id: string,
     @Req() req: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
-    const orgId = resolveBoundOrgId(req);
-    if (!orgId) {
-      throw new NotFoundException(notFound('Organization context required'));
-    }
+    const orgId = this.requireOrgId(req);
     return success(await this.insights.getMetadata(id, orgId));
   }
 
@@ -54,10 +65,7 @@ export class FilesController {
     @Param('id') id: string,
     @Req() req: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
-    const orgId = resolveBoundOrgId(req);
-    if (!orgId) {
-      throw new NotFoundException(notFound('Organization context required'));
-    }
+    const orgId = this.requireOrgId(req);
     return success(await this.insights.listProcessorResults(id, orgId));
   }
 
@@ -68,10 +76,7 @@ export class FilesController {
     @Param('processorKey') processorKey: string,
     @Req() req: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
-    const orgId = resolveBoundOrgId(req);
-    if (!orgId) {
-      throw new NotFoundException(notFound('Organization context required'));
-    }
+    const orgId = this.requireOrgId(req);
     return success(
       await this.insights.getProcessorResult(id, orgId, processorKey),
     );
@@ -83,10 +88,7 @@ export class FilesController {
     @Param('id') id: string,
     @Req() req: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
-    const orgId = resolveBoundOrgId(req);
-    if (!orgId) {
-      throw new NotFoundException(notFound('Organization context required'));
-    }
+    const orgId = this.requireOrgId(req);
     return success(await this.insights.listVariants(id, orgId));
   }
 
@@ -98,10 +100,9 @@ export class FilesController {
     @CurrentUser() user?: { id?: string; orgId?: string },
     @Req() req?: { orgId?: string; headers?: Record<string, string | string[] | undefined> },
   ) {
-    const orgId = resolveBoundOrgId(req || {}, user?.orgId);
-    if (orgId) {
-      await this.filesService.findById(id, orgId);
-    }
+    const orgId = this.requireOrgId(req || {}, user?.orgId);
+    // Org-scoped existence check before delete (fail closed if unbound).
+    await this.filesService.findById(id, orgId);
     await this.filesService.deleteFile(id, hardDelete === 'true', user?.id);
     return emptySuccess();
   }

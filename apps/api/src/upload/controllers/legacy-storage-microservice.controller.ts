@@ -11,8 +11,8 @@ import { UploadService } from '../services/upload.service';
  * Legacy TCP pattern aliases (Allyfe / older clients).
  * Prefer HTTP multipart upload + MESSAGE_PATTERNS.STORAGE.* patterns for new integrations.
  *
- * TCP has no API-key auth — callers must send orgId (UUID) or orgSlug.
- * Falling back to AUTH_DEFAULT_ORG_ID alone is why files land under Default.
+ * TCP has no API-key auth — callers must send orgId (UUID) or orgSlug for
+ * get / sign / delete. Upload may fall back to AUTH_DEFAULT_ORG_ID (logged).
  */
 @Controller()
 export class LegacyStorageMicroserviceController {
@@ -59,7 +59,7 @@ export class LegacyStorageMicroserviceController {
       ? `${data.folder.replace(/\/$/, '')}/${filename}`
       : undefined;
 
-    const orgId = await this.resolveTcpOrgId(data);
+    const orgId = await this.resolveTcpOrgId(data, { allowDefault: true });
     if (!orgId) {
       throw new Error(
         'uploadFile requires orgId (UUID) or orgSlug/tenantId in payload, or AUTH_DEFAULT_ORG_ID on the server',
@@ -84,6 +84,7 @@ export class LegacyStorageMicroserviceController {
         result.id,
         undefined,
         3600,
+        orgId,
       );
       url = signed.url;
     } catch {
@@ -98,11 +99,18 @@ export class LegacyStorageMicroserviceController {
     };
   }
 
-  private async resolveTcpOrgId(data: {
-    orgId?: string;
-    orgSlug?: string;
-    tenantId?: string;
-  }): Promise<string | undefined> {
+  /**
+   * Resolve org for TCP. When `allowDefault` is false (get/sign/delete), refuse
+   * if orgId/orgSlug are missing — do not fall back to AUTH_DEFAULT_ORG_ID.
+   */
+  private async resolveTcpOrgId(
+    data: {
+      orgId?: string;
+      orgSlug?: string;
+      tenantId?: string;
+    },
+    options?: { allowDefault?: boolean },
+  ): Promise<string | undefined> {
     const rawId = data.orgId?.trim();
     const rawSlug = (data.orgSlug || data.tenantId)?.trim();
 
@@ -116,16 +124,32 @@ export class LegacyStorageMicroserviceController {
       return this.organizations.resolveOrgRef({ orgSlug: slug });
     }
 
-    const fallback = process.env.AUTH_DEFAULT_ORG_ID?.trim();
-    if (fallback) {
-      this.logger.warn(
-        `TCP upload missing orgId/orgSlug — using AUTH_DEFAULT_ORG_ID (${fallback}). Files will land under that org (often Default).`,
-      );
-      return looksLikeUuid(fallback)
-        ? fallback
-        : this.organizations.resolveOrgRef({ orgSlug: fallback });
+    if (options?.allowDefault) {
+      const fallback = process.env.AUTH_DEFAULT_ORG_ID?.trim();
+      if (fallback) {
+        this.logger.warn(
+          `TCP upload missing orgId/orgSlug — using AUTH_DEFAULT_ORG_ID (${fallback}). Files will land under that org (often Default).`,
+        );
+        return looksLikeUuid(fallback)
+          ? fallback
+          : this.organizations.resolveOrgRef({ orgSlug: fallback });
+      }
     }
     return undefined;
+  }
+
+  private async requireTcpOrgId(data: {
+    orgId?: string;
+    orgSlug?: string;
+    tenantId?: string;
+  }): Promise<string> {
+    const orgId = await this.resolveTcpOrgId(data, { allowDefault: false });
+    if (!orgId) {
+      throw new Error(
+        'TCP get/sign/delete requires orgId (UUID) or orgSlug/tenantId in payload',
+      );
+    }
+    return orgId;
   }
 
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.GET_ASSET_URL)
@@ -138,6 +162,9 @@ export class LegacyStorageMicroserviceController {
       expiresIn?: number;
       variant?: string;
       requestId?: string;
+      orgId?: string;
+      orgSlug?: string;
+      tenantId?: string;
     },
   ): Promise<
     ApiResponse<{ url: string; expiresAt: string; expiresIn: number; signedUrl: string }> & {
@@ -150,6 +177,7 @@ export class LegacyStorageMicroserviceController {
     if (!fileId) {
       throw new Error('getAssetUrl requires assetId or fileId');
     }
+    const orgId = await this.requireTcpOrgId(data);
     const expiresIn =
       typeof data.expiresIn === 'number' && Number.isFinite(data.expiresIn)
         ? data.expiresIn
@@ -161,6 +189,7 @@ export class LegacyStorageMicroserviceController {
       fileId,
       variantType,
       expiresIn,
+      orgId,
     );
     const expiresAt = new Date(Date.now() + signed.expiresIn * 1000).toISOString();
     return {
@@ -188,12 +217,17 @@ export class LegacyStorageMicroserviceController {
       fileId?: string;
       hardDelete?: boolean;
       requestId?: string;
+      orgId?: string;
+      orgSlug?: string;
+      tenantId?: string;
     },
   ): Promise<ApiResponse<unknown> & { success: boolean }> {
     const id = data.assetId || data.id || data.fileId;
     if (!id) {
       throw new Error('deleteAsset requires assetId or id');
     }
+    const orgId = await this.requireTcpOrgId(data);
+    await this.filesService.findById(id, orgId);
     const result = await this.filesService.deleteFile(id, data.hardDelete || false);
     return { ...success(result, { requestId: data.requestId }), success: true };
   }

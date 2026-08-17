@@ -6,8 +6,6 @@ import {
   Badge,
   Button,
   DataGridColumnHeader,
-  DataGridTableRowSelect,
-  DataGridTableRowSelectAll,
   DateDisplay,
   DropdownMenu,
   DropdownMenuContent,
@@ -17,8 +15,25 @@ import {
   Skeleton,
 } from "@workspace/ui/components";
 import { JobStatusLabels, ProcessorKeyLabels } from "@workspace/validation";
-import { Ban, Eye, MoreHorizontal, RefreshCw } from "lucide-react";
-import type { JobRow } from "../hooks/use-jobs-queries";
+import {
+  Ban,
+  Eye,
+  MoreHorizontal,
+  PlayCircle,
+  RefreshCw,
+  Rocket,
+} from "lucide-react";
+import {
+  FilteredSelectAllHeader,
+  FilteredSelectRowCell,
+} from "@/lib/filtered-selection";
+import {
+  isJobCancellable,
+  isJobPending,
+  isJobRetryable,
+  isJobTerminal,
+  type JobRow,
+} from "../hooks/use-jobs-queries";
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -37,16 +52,26 @@ function statusBadgeClass(status: string): string {
   }
 }
 
-export function createJobsColumns(
-  onView?: (row: JobRow) => void,
-  onCancel?: (row: JobRow) => void,
-  onRetry?: (row: JobRow) => void,
-): ColumnDef<JobRow>[] {
+export type JobsColumnHandlers = {
+  onView?: (row: JobRow) => void;
+  onCancel?: (row: JobRow) => void;
+  onRetry?: (row: JobRow) => void;
+  onRerun?: (row: JobRow) => void;
+  onPrioritize?: (row: JobRow) => void;
+};
+
+export function createJobsColumns({
+  onView,
+  onCancel,
+  onRetry,
+  onRerun,
+  onPrioritize,
+}: JobsColumnHandlers = {}): ColumnDef<JobRow>[] {
   return [
     {
       id: "select",
-      header: () => <DataGridTableRowSelectAll />,
-      cell: ({ row }) => <DataGridTableRowSelect row={row} />,
+      header: () => <FilteredSelectAllHeader />,
+      cell: ({ row }) => <FilteredSelectRowCell id={row.original.id} />,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
@@ -212,14 +237,11 @@ export function createJobsColumns(
       header: "Actions",
       enableSorting: false,
       cell: ({ row }) => {
-        const canCancel =
-          row.original.status === "pending" ||
-          row.original.status === "processing";
-        const canRetry =
-          row.original.status === "failed" ||
-          row.original.status === "cancelled" ||
-          row.original.status === "skipped" ||
-          row.original.status === "partial";
+        const status = String(row.original.status);
+        const canCancel = isJobCancellable(status);
+        const canRetry = isJobRetryable(status);
+        const canRerun = isJobTerminal(status);
+        const canPrioritize = isJobPending(status);
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -232,14 +254,29 @@ export function createJobsColumns(
                 <Eye className="mr-2 h-4 w-4" />
                 View details
               </DropdownMenuItem>
+              {canPrioritize && onPrioritize ? (
+                <DropdownMenuItem onClick={() => onPrioritize(row.original)}>
+                  <Rocket className="mr-2 h-4 w-4" />
+                  Prioritize (run next)
+                </DropdownMenuItem>
+              ) : null}
               {canRetry ? (
                 <DropdownMenuItem onClick={() => onRetry?.(row.original)}>
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Retry job
                 </DropdownMenuItem>
               ) : null}
+              {canRerun && onRerun ? (
+                <DropdownMenuItem onClick={() => onRerun(row.original)}>
+                  <PlayCircle className="mr-2 h-4 w-4" />
+                  Rerun with parameters…
+                </DropdownMenuItem>
+              ) : null}
               {canCancel ? (
-                <DropdownMenuItem onClick={() => onCancel?.(row.original)}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => onCancel?.(row.original)}
+                >
                   <Ban className="mr-2 h-4 w-4" />
                   Cancel job
                 </DropdownMenuItem>

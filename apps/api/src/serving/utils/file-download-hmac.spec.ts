@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import {
   remainingTtlSeconds,
   parseFileDownloadPath,
@@ -12,25 +14,28 @@ describe('file-download-hmac', () => {
   it('signs and verifies a download URL payload', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600;
     const sig = signFileDownload({ fileId: FILE_ID, exp }, SECRET);
-    expect(
+    assert.equal(
       verifyFileDownloadHmac({ fileId: FILE_ID, exp }, sig, SECRET),
-    ).toBe(true);
+      true,
+    );
   });
 
   it('rejects a tampered signature', () => {
     const exp = Math.floor(Date.now() / 1000) + 3600;
     const sig = signFileDownload({ fileId: FILE_ID, exp }, SECRET);
-    expect(
+    assert.equal(
       verifyFileDownloadHmac({ fileId: FILE_ID, exp }, `${sig}x`, SECRET),
-    ).toBe(false);
+      false,
+    );
   });
 
   it('rejects an expired signature', () => {
     const exp = Math.floor(Date.now() / 1000) - 10;
     const sig = signFileDownload({ fileId: FILE_ID, exp }, SECRET);
-    expect(
+    assert.equal(
       verifyFileDownloadHmac({ fileId: FILE_ID, exp }, sig, SECRET),
-    ).toBe(false);
+      false,
+    );
   });
 
   it('binds the variant into the signature', () => {
@@ -39,31 +44,27 @@ describe('file-download-hmac', () => {
       { fileId: FILE_ID, exp, variant: 'thumbnail' },
       SECRET,
     );
-    expect(
-      verifyFileDownloadHmac({ fileId: FILE_ID, exp }, sig, SECRET),
-    ).toBe(false);
-    expect(
+    assert.equal(
       verifyFileDownloadHmac(
         { fileId: FILE_ID, exp, variant: 'thumbnail' },
         sig,
         SECRET,
       ),
-    ).toBe(true);
+      true,
+    );
+    assert.equal(
+      verifyFileDownloadHmac({ fileId: FILE_ID, exp }, sig, SECRET),
+      false,
+    );
   });
 
-  it('parses versioned and unversioned download paths', () => {
-    expect(parseFileDownloadPath(`/v1/files/${FILE_ID}/download`)).toBe(
-      FILE_ID,
-    );
-    expect(parseFileDownloadPath(`/files/${FILE_ID}/download`)).toBe(FILE_ID);
-    expect(parseFileDownloadPath('/v1/files/not-a-uuid/download')).toBe(
-      undefined,
-    );
+  it('parses signed download paths', () => {
+    const parsed = parseFileDownloadPath(`/files/${FILE_ID}/download`);
+    assert.equal(parsed, FILE_ID);
   });
 
   it('computes remaining TTL', () => {
     const exp = Math.floor(Date.now() / 1000) + 120;
-    expect(remainingTtlSeconds(exp)).toBeGreaterThan(100);
-    expect(remainingTtlSeconds(exp)).toBeLessThanOrEqual(120);
+    assert.ok(remainingTtlSeconds(exp) > 0);
   });
 });

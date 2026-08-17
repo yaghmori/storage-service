@@ -8,7 +8,8 @@
     "build": "pnpm --filter @workspace/validation build && next build",
     "start": "node ./scripts/run-admin.cjs start",
     "lint": "eslint",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "node --import ../api/node_modules/tsx/dist/loader.mjs --test \"src/lib/filtered-selection-math.spec.ts\""
   },
   "dependencies": {
     "@tanstack/react-form": "^1.27.7",
@@ -20,9 +21,13 @@
     "axios": "^1.7.9",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "d3-geo": "^3.1.1",
     "date-fns": "^4.1.0",
     "iron-session": "^8.0.4",
+    "json-edit-react": "^1.30.2",
+    "json5": "^2.2.3",
     "lucide-react": "^0.475.0",
+    "maplibre-gl": "^6.4.0",
     "next": "16.2.10",
     "next-themes": "^0.4.6",
     "react": "^19.2.0",
@@ -30,13 +35,18 @@
     "recharts": "2.15.4",
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.4",
+    "topojson-client": "^3.1.0",
     "zod": "^4.3.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/d3-geo": "^3.1.1",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "babel-plugin-react-compiler": "1.0.0",

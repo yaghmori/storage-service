@@ -3,6 +3,7 @@
 export * from "./animated-tooltip";
 export * from "./avatar-uploader";
 export * from "./date-display";
+export * from "./date-range-picker";
 export * from "./file-uploader";
 export * from "./liquid-glass-card";
 export * from "./user-avatar-profile";

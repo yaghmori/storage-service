@@ -1,10 +1,17 @@
 "use client";
 
 import { extractApiErrorMessage } from "@/lib/api/extract-api-error";
+import { JobRunDialog } from "@/features/jobs/components/job-run-dialog";
 import {
+  isJobCancellable,
+  isJobPending,
+  isJobRetryable,
+  isJobTerminal,
   useCancelJobMutation,
   useJobsQuery,
+  usePrioritizeJobMutation,
   useRetryJobMutation,
+  type JobRow,
 } from "@/features/jobs/hooks/use-jobs-queries";
 import { fileContentUrl } from "@/lib/constants/endpoints";
 import { formatJobElapsed } from "@/lib/format-job-elapsed";
@@ -14,6 +21,10 @@ import {
   Button,
   CopyButton,
   DateDisplay,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   ResponsiveSheet,
   Tabs,
   TabsContent,
@@ -35,8 +46,11 @@ import {
   Download,
   ExternalLink,
   Loader2,
+  PlayCircle,
+  Plus,
   RefreshCw,
   RotateCcw,
+  Rocket,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -393,9 +407,7 @@ function IntegrityVerifyRow({
                       void results.refetch();
                     },
                     onError: (err) =>
-                      toast.error(
-                        extractApiErrorMessage(err, "Verify failed"),
-                      ),
+                      toast.error(extractApiErrorMessage(err, "Verify failed")),
                   })
                 }
               >
@@ -688,12 +700,7 @@ function FileOverviewDetails({ data }: { data: FileRow }) {
 }
 
 type FileDetailTab =
-  | "overview"
-  | "details"
-  | "duplicates"
-  | "processors"
-  | "metadata"
-  | "jobs";
+  "overview" | "details" | "duplicates" | "processors" | "metadata" | "jobs";
 
 function isImageMime(mime: string | null | undefined) {
   return !!mime?.startsWith("image/");
@@ -808,7 +815,9 @@ function DeliveryAssetRow({
       {wantSigned ? (
         <div className="rounded-md border bg-muted/30 px-3 py-2">
           {signed.isLoading || signed.isFetching ? (
-            <p className="text-xs text-muted-foreground">Resolving signed URL…</p>
+            <p className="text-xs text-muted-foreground">
+              Resolving signed URL…
+            </p>
           ) : signed.data?.url ? (
             <div className="space-y-1.5">
               <div className="flex items-start justify-between gap-2">
@@ -823,11 +832,7 @@ function DeliveryAssetRow({
                     className="h-6 gap-1 px-2 text-xs"
                     asChild
                   >
-                    <a
-                      href={signed.data.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a href={signed.data.url} target="_blank" rel="noreferrer">
                       <ExternalLink className="size-3" />
                       Open
                     </a>
@@ -1137,7 +1142,12 @@ function DuplicateCompareCard({
       </dl>
       {fileId ? (
         <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-xs" asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 gap-1 px-2 text-xs"
+            asChild
+          >
             <a
               href={fileContentUrl(fileId, { orgId })}
               target="_blank"
@@ -1147,7 +1157,12 @@ function DuplicateCompareCard({
               Open
             </a>
           </Button>
-          <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-xs" asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 gap-1 px-2 text-xs"
+            asChild
+          >
             <a
               href={fileContentUrl(fileId, { orgId, download: true })}
               download={fileName ?? undefined}
@@ -1260,12 +1275,8 @@ function FileDuplicatesPanel({
                     {(row.similarityScore * 100).toFixed(0)}% similar
                   </Badge>
                 ) : null}
-                {sameHash ? (
-                  <Badge variant="default">Same hash</Badge>
-                ) : null}
-                {sameSize ? (
-                  <Badge variant="outline">Same size</Badge>
-                ) : null}
+                {sameHash ? <Badge variant="default">Same hash</Badge> : null}
+                {sameSize ? <Badge variant="outline">Same size</Badge> : null}
               </div>
 
               <p className="text-xs text-muted-foreground">
@@ -1563,10 +1574,53 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
   });
   const cancelMutation = useCancelJobMutation(activeOrg?.id);
   const retryMutation = useRetryJobMutation(activeOrg?.id);
+  const prioritizeMutation = usePrioritizeJobMutation(activeOrg?.id);
+  const [addOpen, setAddOpen] = useState(false);
+  const [rerunJob, setRerunJob] = useState<JobRow | null>(null);
   const busyId =
     cancelMutation.isPending || retryMutation.isPending
       ? (cancelMutation.variables ?? retryMutation.variables)
       : null;
+
+  const jobs = data?.items ?? [];
+  const jobCount = data?.total ?? jobs.length;
+
+  const header = (
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-xs text-muted-foreground">
+        {jobCount} job{jobCount === 1 ? "" : "s"}
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1.5"
+        onClick={() => setAddOpen(true)}
+      >
+        <Plus className="size-3.5" />
+        Add job
+      </Button>
+    </div>
+  );
+
+  const dialogs = (
+    <>
+      <JobRunDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        fileId={fileId}
+        onDone={() => void refetch()}
+      />
+      <JobRunDialog
+        open={!!rerunJob}
+        onOpenChange={(open) => !open && setRerunJob(null)}
+        job={rerunJob}
+        onDone={() => {
+          setRerunJob(null);
+          void refetch();
+        }}
+      />
+    </>
+  );
 
   if (isLoading) {
     return (
@@ -1588,30 +1642,28 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
     );
   }
 
-  const jobs = data?.items ?? [];
   if (jobs.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        No processing jobs for this file yet.
+      <div className="space-y-3">
+        {header}
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          No processing jobs for this file yet.
+        </div>
+        {dialogs}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        {data?.total ?? jobs.length} job
-        {(data?.total ?? jobs.length) === 1 ? "" : "s"}
-      </p>
+      {header}
       <ul className="space-y-2.5">
         {jobs.map((job) => {
-          const canCancel =
-            job.status === "pending" || job.status === "processing";
-          const canRetry =
-            job.status === "failed" ||
-            job.status === "cancelled" ||
-            job.status === "skipped" ||
-            job.status === "partial";
+          const status = String(job.status);
+          const canCancel = isJobCancellable(status);
+          const canRetry = isJobRetryable(status);
+          const canRerun = isJobTerminal(status);
+          const canPrioritize = isJobPending(status);
           return (
             <li
               key={job.id}
@@ -1633,6 +1685,9 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                     </Badge>
                   </div>
                   <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      ID:
+                    </span>
                     <div className="min-w-0 flex-1">
                       <TruncatedText
                         text={job.id}
@@ -1644,6 +1699,43 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
+                  {canPrioritize ? (
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="size-7"
+                      disabled={prioritizeMutation.isPending}
+                      title="Prioritize — move to front of queue"
+                      onClick={() =>
+                        prioritizeMutation.mutate(job.id, {
+                          onSuccess: () =>
+                            toast.success(
+                              "Job moved to the front of its queue",
+                            ),
+                          onError: (err) =>
+                            toast.error(
+                              extractApiErrorMessage(
+                                err,
+                                "Could not prioritize job",
+                              ),
+                            ),
+                        })
+                      }
+                    >
+                      <Rocket className="size-3.5" />
+                    </Button>
+                  ) : null}
+                  {canRerun ? (
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="size-7"
+                      title="Rerun with parameters"
+                      onClick={() => setRerunJob(job)}
+                    >
+                      <PlayCircle className="size-3.5" />
+                    </Button>
+                  ) : null}
                   {canRetry ? (
                     <Button
                       size="icon"
@@ -1672,8 +1764,8 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                   {canCancel ? (
                     <Button
                       size="icon"
-                      variant="outline"
-                      className="size-7 text-destructive"
+                      variant="destructive"
+                      className="size-7"
                       disabled={busyId === job.id}
                       title="Cancel"
                       onClick={() => {
@@ -1727,6 +1819,12 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                     <span className="tabular-nums">{job.retryCount}</span>
                   </div>
                 ) : null}
+                {job.priority != null ? (
+                  <div className="flex justify-between gap-2">
+                    <span>Priority</span>
+                    <span className="tabular-nums">{job.priority}</span>
+                  </div>
+                ) : null}
               </div>
               {job.status === "failed" && job.errorMessage ? (
                 <TruncatedText
@@ -1754,8 +1852,7 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
                     {job.logs
                       .slice(-40)
                       .map(
-                        (line) =>
-                          `${line.ts} [${line.level}] ${line.message}`,
+                        (line) => `${line.ts} [${line.level}] ${line.message}`,
                       )
                       .join("\n")}
                   </pre>
@@ -1765,6 +1862,7 @@ function FileJobsPanel({ fileId }: { fileId: string }) {
           );
         })}
       </ul>
+      {dialogs}
     </div>
   );
 }

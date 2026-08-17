@@ -11,6 +11,9 @@ export interface FileRow {
   id: string;
   orgId: string;
   storageProviderId: string;
+  /** Present when the API joins the provider onto list/detail rows. */
+  storageProviderName?: string | null;
+  storageProviderType?: string | null;
   storageKey: string;
   storageBucket: string | null;
   fileName: string;
@@ -88,6 +91,8 @@ export function useFilesQuery(params?: {
     | string;
   minSize?: number;
   maxSize?: number;
+  createdFrom?: string;
+  createdTo?: string;
   includeDeleted?: boolean;
   deletedOnly?: boolean;
   orgId?: string;
@@ -107,6 +112,8 @@ export function useFilesQuery(params?: {
       processingStatus: processingStatusParam,
       minSize: params?.minSize,
       maxSize: params?.maxSize,
+      createdFrom: params?.createdFrom,
+      createdTo: params?.createdTo,
       includeDeleted: params?.includeDeleted,
       deletedOnly: params?.deletedOnly,
       orgId: params?.orgId,
@@ -124,12 +131,14 @@ export function useFilesQuery(params?: {
             : {}),
           ...(params?.minSize != null ? { minSize: params.minSize } : {}),
           ...(params?.maxSize != null ? { maxSize: params.maxSize } : {}),
+          ...(params?.createdFrom ? { createdFrom: params.createdFrom } : {}),
+          ...(params?.createdTo ? { createdTo: params.createdTo } : {}),
           ...(params?.includeDeleted ? { includeDeleted: true } : {}),
           ...(params?.deletedOnly ? { deletedOnly: true } : {}),
         },
       });
       const payload = unwrapApiData<FilesListResponse>(response.data);
-      const limit = Number(payload.limit) || params?.limit || 20;
+      const limit = Number(payload.limit) || params?.limit || 10;
       const page = Number(payload.page) || params?.page || 1;
       const total = Number(payload.total) || 0;
       const totalPages = Math.ceil(total / limit) || 0;
@@ -381,47 +390,184 @@ export function useRestoreFileMutation(orgId?: string) {
   });
 }
 
-export type BulkDeleteFilesInput = {
-  ids: string[];
-  deleteFromStorage: boolean;
+/** Server-side description of "every file matching the current table view". */
+export type FilesBulkFilters = {
+  search?: string;
+  fileType?: string;
+  processingStatus?: string;
+  minSize?: number;
+  maxSize?: number;
+  createdFrom?: string;
+  createdTo?: string;
+  includeDeleted?: boolean;
+  deletedOnly?: boolean;
 };
 
-export type BulkDeleteFilesResult = {
+export type BulkFilesInput = {
+  ids?: string[];
+  allMatchingFilters?: boolean;
+  excludeIds?: string[];
+  filters?: FilesBulkFilters;
+};
+
+export type BulkDeleteFilesInput = BulkFilesInput & {
+  /** Permanent delete (DB rows + storage objects). */
+  hard?: boolean;
+};
+
+export type BulkFilesResult = {
   succeeded: string[];
   failed: { id: string; error: unknown }[];
+  /** Rows the server reports as changed; falls back to `succeeded.length`. */
+  affected: number;
 };
+
+/** The bulk endpoints may not be deployed yet — fall back to per-id calls. */
+function isEndpointMissing(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response
+    ?.status;
+  return status === 404 || status === 405 || status === 501;
+}
+
+function normalizeBulkFilesResult(
+  payload: unknown,
+  requestedIds: string[],
+): BulkFilesResult {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const succeeded = Array.isArray(data.succeeded)
+    ? data.succeeded
+        .map((entry) =>
+          typeof entry === "string"
+            ? entry
+            : typeof (entry as { id?: unknown })?.id === "string"
+              ? ((entry as { id: string }).id)
+              : null,
+        )
+        .filter((id): id is string => !!id)
+    : requestedIds;
+  const failed = Array.isArray(data.failed)
+    ? data.failed.map((entry) => {
+        const item = (entry ?? {}) as { id?: unknown; error?: unknown };
+        return {
+          id: typeof item.id === "string" ? item.id : "",
+          error: item.error ?? entry,
+        };
+      })
+    : [];
+  const affected = [
+    data.affected,
+    data.deleted,
+    data.restored,
+    data.count,
+  ].find((value): value is number => typeof value === "number");
+  return { succeeded, failed, affected: affected ?? succeeded.length };
+}
+
+async function settleFileIds(
+  ids: string[],
+  run: (id: string) => Promise<unknown>,
+): Promise<BulkFilesResult> {
+  const results = await Promise.allSettled(ids.map((id) => run(id)));
+  const succeeded: string[] = [];
+  const failed: { id: string; error: unknown }[] = [];
+  results.forEach((result, index) => {
+    const id = ids[index]!;
+    if (result.status === "fulfilled") succeeded.push(id);
+    else failed.push({ id, error: result.reason });
+  });
+  return { succeeded, failed, affected: succeeded.length };
+}
 
 export function useBulkDeleteFilesMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      ids,
-      deleteFromStorage,
-    }: BulkDeleteFilesInput): Promise<BulkDeleteFilesResult> => {
-      const results = await Promise.allSettled(
-        ids.map(async (id) => {
-          const path = replacePathParams(
-            deleteFromStorage
-              ? FilesEndpoints.HardDelete
-              : FilesEndpoints.Delete,
-            id,
-          );
-          await upstream.delete(path, { params: { orgId } });
-          return id;
-        }),
-      );
+    mutationFn: async (input: BulkDeleteFilesInput) => {
+      const ids = input.ids ?? [];
+      try {
+        const response = await upstream.post(
+          FilesEndpoints.BulkDelete,
+          {
+            ...(ids.length > 0 ? { ids } : {}),
+            ...(input.allMatchingFilters ? { allMatchingFilters: true } : {}),
+            ...(input.excludeIds?.length
+              ? { excludeIds: input.excludeIds }
+              : {}),
+            ...(input.hard ? { hard: true } : {}),
+            ...(input.filters ? { filters: input.filters } : {}),
+          },
+          { params: { orgId } },
+        );
+        return normalizeBulkFilesResult(unwrapApiData(response.data), ids);
+      } catch (error) {
+        if (!isEndpointMissing(error) || ids.length === 0) throw error;
+        return settleFileIds(ids, (id) =>
+          upstream.delete(
+            replacePathParams(
+              input.hard ? FilesEndpoints.HardDelete : FilesEndpoints.Delete,
+              id,
+            ),
+            { params: { orgId } },
+          ),
+        );
+      }
+    },
+    onSuccess: () => {
+      invalidateFiles(queryClient);
+    },
+  });
+}
 
-      const succeeded: string[] = [];
-      const failed: { id: string; error: unknown }[] = [];
-      results.forEach((result, index) => {
-        const id = ids[index]!;
-        if (result.status === "fulfilled") {
-          succeeded.push(id);
-        } else {
-          failed.push({ id, error: result.reason });
-        }
-      });
-      return { succeeded, failed };
+export function useBulkRestoreFilesMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: BulkFilesInput) => {
+      const ids = input.ids ?? [];
+      try {
+        const response = await upstream.post(
+          FilesEndpoints.BulkRestore,
+          {
+            ...(ids.length > 0 ? { ids } : {}),
+            ...(input.allMatchingFilters ? { allMatchingFilters: true } : {}),
+            ...(input.excludeIds?.length
+              ? { excludeIds: input.excludeIds }
+              : {}),
+            ...(input.filters ? { filters: input.filters } : {}),
+          },
+          { params: { orgId } },
+        );
+        return normalizeBulkFilesResult(unwrapApiData(response.data), ids);
+      } catch (error) {
+        if (!isEndpointMissing(error) || ids.length === 0) throw error;
+        return settleFileIds(ids, (id) =>
+          upstream.post(
+            replacePathParams(FilesEndpoints.Restore, id),
+            {},
+            { params: { orgId } },
+          ),
+        );
+      }
+    },
+    onSuccess: () => {
+      invalidateFiles(queryClient);
+    },
+  });
+}
+
+export function useEmptyTrashMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await upstream.post(
+        FilesEndpoints.EmptyTrash,
+        { confirm: "DELETE" },
+        { params: { orgId } },
+      );
+      const payload = unwrapApiData<{
+        deleted?: number;
+        failed?: number;
+        message?: string;
+      }>(response.data);
+      return payload ?? {};
     },
     onSuccess: () => {
       invalidateFiles(queryClient);
@@ -620,7 +766,11 @@ export type RegenerateProcessingAllInput = {
   processingStatus?: string;
   minSize?: number;
   maxSize?: number;
+  createdFrom?: string;
+  createdTo?: string;
   limit?: number;
+  /** Rows unchecked after a select-all; ignored by servers that predate it. */
+  excludeIds?: string[];
 };
 
 export function useRegenerateProcessingAllMutation(orgId?: string) {

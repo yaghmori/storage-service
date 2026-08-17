@@ -40,6 +40,11 @@ export class VideoProcessingProcessor extends WorkerHost {
       ? await this.jobsRepository.findByBullmqJobId(job.id)
       : null;
 
+    if (jobRecord?.status === 'cancelled') {
+      this.logger.log(`Skipping cancelled video.preview job ${jobRecord.id}`);
+      return { success: false, cancelled: true, variants: [] };
+    }
+
     try {
       if (jobRecord && job.id) {
         await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'processing');

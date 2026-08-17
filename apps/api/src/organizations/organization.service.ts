@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, ne } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../database/drizzle/schema';
 
@@ -169,7 +169,6 @@ export class OrganizationService {
           metadata: input.metadata ?? null,
         } as schema.NewOrganization)
         .returning();
-      await this.cloneProvidersPack(row.id);
       return row;
     } catch (error) {
       const code =
@@ -183,41 +182,6 @@ export class OrganizationService {
       }
       throw error;
     }
-  }
-
-  /** Copy storage providers from default (or first) org so a new tenant is usable. */
-  async cloneProvidersPack(targetOrgId: string): Promise<void> {
-    const source =
-      (await this.getDefault()) ??
-      (
-        await this.db
-          .select()
-          .from(schema.organizations)
-          .where(ne(schema.organizations.id, targetOrgId))
-          .limit(1)
-      )[0];
-
-    if (!source || source.id === targetOrgId) return;
-
-    const sourceProviders = await this.db
-      .select()
-      .from(schema.storageProviders)
-      .where(eq(schema.storageProviders.orgId, source.id));
-
-    for (const p of sourceProviders) {
-      await this.db.insert(schema.storageProviders).values({
-        orgId: targetOrgId,
-        name: p.name,
-        type: p.type,
-        config: p.config,
-        isActive: p.isActive,
-        isDefault: p.isDefault,
-      });
-    }
-
-    this.logger.log(
-      `Cloned ${sourceProviders.length} storage providers from org ${source.slug} → ${targetOrgId}`,
-    );
   }
 
   async update(

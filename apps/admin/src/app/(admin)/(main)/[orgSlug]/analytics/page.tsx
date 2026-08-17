@@ -1,5 +1,10 @@
-import { AnalyticsView } from "@/features/analytics/components/analytics-view";
+import { redirect } from "next/navigation";
 
-export default function AnalyticsPage() {
-  return <AnalyticsView />;
+export default async function AnalyticsRedirectPage({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>;
+}) {
+  const { orgSlug } = await params;
+  redirect(`/${orgSlug}/metrics`);
 }

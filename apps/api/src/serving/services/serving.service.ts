@@ -5,6 +5,7 @@ import { Response } from 'express';
 import { extname } from 'path';
 import { pipeline } from 'stream/promises';
 import { AnalyticsService } from '../../analytics/services/analytics.service';
+import { resolveDownloadGeo } from '../../analytics/utils/geo-lookup';
 import * as schema from '../../database/drizzle/schema';
 import { FilesService } from '../../files/services/files.service';
 import { PLATFORM_PROCESSING_DEFAULTS } from '../../processing/types/processing-settings';
@@ -50,6 +51,11 @@ export class ServingService {
     ipAddress?: string,
     userAgent?: string,
     asDownload = false,
+    options?: {
+      headers?: Record<string, string | string[] | undefined>;
+      referer?: string;
+      downloadMethod?: 'direct' | 'signed_url' | 'cdn';
+    },
   ) {
     let variant = null;
     let key: string;
@@ -100,19 +106,30 @@ export class ServingService {
       contentLength = Number(file.size);
     }
 
-    if (ipAddress || userAgent) {
+    if (ipAddress || userAgent || options?.headers) {
       const [row] = await this.db
         .select({ orgId: schema.files.orgId })
         .from(schema.files)
         .where(eq(schema.files.id, fileId))
         .limit(1);
       if (row?.orgId) {
+        const geo = resolveDownloadGeo({
+          ipAddress,
+          headers: options?.headers,
+        });
         await this.analyticsService.logDownload({
           fileId: file.id,
           orgId: row.orgId,
           variantId: variant?.id,
           ipAddress,
           userAgent,
+          bytesDownloaded:
+            contentLength != null && Number.isFinite(contentLength)
+              ? contentLength
+              : undefined,
+          downloadMethod: options?.downloadMethod ?? 'direct',
+          referer: options?.referer,
+          geo,
         });
       }
     }
@@ -140,6 +157,49 @@ export class ServingService {
     const stream = await provider.openReadStream(key);
     await pipeline(stream, response);
     return undefined;
+  }
+
+  /** Log a browser redirect to a provider-presigned URL (S3/R2/MinIO). */
+  async logPresignedDownload(input: {
+    fileId: string;
+    variantId?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    referer?: string;
+    bytesDownloaded?: number;
+    headers?: Record<string, string | string[] | undefined>;
+  }) {
+    if (!input.ipAddress && !input.userAgent && !input.headers) return;
+
+    const [row] = await this.db
+      .select({
+        orgId: schema.files.orgId,
+        size: schema.files.size,
+      })
+      .from(schema.files)
+      .where(eq(schema.files.id, input.fileId))
+      .limit(1);
+    if (!row?.orgId) return;
+
+    const geo = resolveDownloadGeo({
+      ipAddress: input.ipAddress,
+      headers: input.headers,
+    });
+    const bytes =
+      input.bytesDownloaded ??
+      (row.size != null ? Number(row.size) : undefined);
+
+    await this.analyticsService.logDownload({
+      fileId: input.fileId,
+      orgId: row.orgId,
+      variantId: input.variantId,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+      bytesDownloaded: bytes != null && Number.isFinite(bytes) ? bytes : undefined,
+      downloadMethod: 'signed_url',
+      referer: input.referer,
+      geo,
+    });
   }
 
   private async getSharp(): Promise<SharpModule | null> {

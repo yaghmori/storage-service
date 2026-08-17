@@ -21,7 +21,12 @@ import { useEffect, useState } from "react";
 type FileBulkDeleteDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Files loaded on the current page — used for the preview list only. */
   files: { id: string; originalFileName: string }[];
+  /** Total selected across pages; defaults to `files.length`. */
+  count?: number;
+  /** Selection covers every row matching the current filters. */
+  allMatching?: boolean;
   isPending?: boolean;
   /** When true, only permanent delete is allowed (soft-deleted view). */
   forcePermanent?: boolean;
@@ -37,13 +42,15 @@ export function FileBulkDeleteDialog({
   open,
   onOpenChange,
   files,
+  count: countProp,
+  allMatching = false,
   isPending,
   forcePermanent = false,
   onConfirm,
 }: FileBulkDeleteDialogProps) {
   const [value, setValue] = useState("");
   const [deleteFromStorage, setDeleteFromStorage] = useState(forcePermanent);
-  const count = files.length;
+  const count = countProp ?? files.length;
   const matched = value.trim() === CONFIRM_PHRASE;
   const previewFiles = files.slice(0, 5);
   const remaining = Math.max(0, count - previewFiles.length);
@@ -75,7 +82,7 @@ export function FileBulkDeleteDialog({
                   <span className="font-medium text-foreground">
                     {count} files
                   </span>
-                  :
+                  {allMatching ? " matching the current filters" : ""}:
                 </p>
                 <ul className="max-h-32 list-disc space-y-1 overflow-y-auto pl-5">
                   {previewFiles.map((file) => (

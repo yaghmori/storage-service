@@ -79,6 +79,7 @@
     "./components/badge": "./src/components/ui/badge.tsx",
     "./components/breadcrumb": "./src/components/ui/breadcrumb.tsx",
     "./components/calendar": "./src/components/ui/calendar.tsx",
+    "./components/custom/date-range-picker": "./src/components/custom/date-range-picker.tsx",
     "./components/event-calendar": "./src/components/event-calendar/index.ts",
     "./components/card": "./src/components/ui/card.tsx",
     "./components/card-flip": "./src/components/mvpblocks/card-flip.tsx",

@@ -340,6 +340,16 @@ export function useUpdateOrgLimitsMutation(orgId?: string) {
   });
 }
 
+/** For flows where the org id only becomes known mid-submit (create wizard). */
+export async function updateOrgLimits(
+  orgId: string,
+  input: Partial<OrgLimitsSettings>,
+): Promise<OrgLimitsSettings> {
+  const path = replacePathParams(OrgsEndpoints.Limits, orgId);
+  const response = await upstream.put(path, input);
+  return unwrapApiData<OrgLimitsSettings>(response.data);
+}
+
 export function useOrgRetentionQuery(orgId?: string) {
   return useQuery({
     queryKey: orgKeys.retention(orgId),

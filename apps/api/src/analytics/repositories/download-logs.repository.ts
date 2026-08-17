@@ -20,6 +20,11 @@ export class DownloadLogsRepository {
     bytesDownloaded?: bigint;
     downloadMethod?: 'direct' | 'signed_url' | 'cdn';
     referer?: string;
+    countryCode?: string;
+    regionCode?: string;
+    city?: string;
+    latitude?: string;
+    longitude?: string;
   }) {
     const result = await this.db
       .insert(schema.downloadLogs)
@@ -33,6 +38,11 @@ export class DownloadLogsRepository {
         bytesDownloaded: data.bytesDownloaded,
         downloadMethod: data.downloadMethod,
         referer: data.referer,
+        countryCode: data.countryCode,
+        regionCode: data.regionCode,
+        city: data.city,
+        latitude: data.latitude,
+        longitude: data.longitude,
       })
       .returning();
     return result[0];
@@ -60,12 +70,14 @@ export class DownloadLogsRepository {
     return {
       totalDownloads: logs.length,
       uniqueIPs: new Set(logs.map((log) => log.ipAddress).filter(Boolean)).size,
-      downloadsByVariant: logs.reduce((acc, log) => {
-        const variantId = log.variantId || 'original';
-        acc[variantId] = (acc[variantId] || 0) + 1;
-        return acc;
-      }, {} as Record<string | number, number>),
+      downloadsByVariant: logs.reduce(
+        (acc, log) => {
+          const variantId = log.variantId || 'original';
+          acc[variantId] = (acc[variantId] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string | number, number>,
+      ),
     };
   }
 }
-

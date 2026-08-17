@@ -57,6 +57,17 @@ export function useCreateProviderMutation(orgId?: string) {
   });
 }
 
+/** For flows where the org id only becomes known mid-submit (create wizard). */
+export async function createProviderForOrg(
+  orgId: string,
+  input: UpsertProviderInput,
+): Promise<ProviderRow> {
+  const response = await upstream.post(ProvidersEndpoints.Create, input, {
+    params: { orgId },
+  });
+  return unwrapApiData<ProviderRow>(response.data);
+}
+
 export function useUpdateProviderMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({

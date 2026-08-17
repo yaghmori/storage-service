@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminSidebar } from "@/components/admin-sidebar";
+import { BreadcrumbOrgSwitcher } from "@/components/layout/breadcrumb-org-switcher";
 import { OrgProvider, useActiveOrg } from "@/provider/org-provider";
 import {
   Breadcrumb,
@@ -34,7 +35,8 @@ function pageTitle(pathname: string): string {
     {
       files: "Files",
       jobs: "Jobs",
-      analytics: "Analytics",
+      metrics: "Metrics",
+      analytics: "Metrics",
       providers: "Providers",
       tokens: "API keys",
       "api-keys": "API keys",
@@ -46,7 +48,7 @@ function pageTitle(pathname: string): string {
 function AdminHeader() {
   const pathname = usePathname();
   const title = pageTitle(pathname);
-  const { activeOrg } = useActiveOrg();
+  const { orgs } = useActiveOrg();
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 shadow-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
@@ -54,14 +56,12 @@ function AdminHeader() {
       <Separator orientation="vertical" className="mr-2 h-4" />
       <Breadcrumb>
         <BreadcrumbList>
-          {activeOrg && (
+          {orgs.length > 0 && (
             <>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbPage className="text-muted-foreground font-normal">
-                  {activeOrg.name}
-                </BreadcrumbPage>
+              <BreadcrumbItem>
+                <BreadcrumbOrgSwitcher />
               </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbSeparator />
             </>
           )}
           <BreadcrumbItem>

@@ -68,6 +68,7 @@ export class CreateOrganizationDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(5_000_000)
   logoUrl?: string | null;
 
   /** Optional; defaults server-side when omitted. */
@@ -129,6 +130,7 @@ export class UpdateOrganizationDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(5_000_000)
   logoUrl?: string | null;
 
   @IsOptional()

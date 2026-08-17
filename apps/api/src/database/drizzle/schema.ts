@@ -7,6 +7,7 @@ import {
   integer,
   json,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   real,
@@ -67,7 +68,7 @@ export const organizations = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     status: orgStatusEnum('status').default('active').notNull(),
     externalRef: varchar('external_ref', { length: 255 }),
-    logoUrl: varchar('logo_url', { length: 500 }),
+    logoUrl: text('logo_url'),
     frontendBaseUrl: varchar('frontend_base_url', { length: 500 }),
     customDomain: varchar('custom_domain', { length: 255 }),
     primaryColor: varchar('primary_color', { length: 50 }),
@@ -539,6 +540,11 @@ export const downloadLogs = pgTable(
     bytesDownloaded: bigint('bytes_downloaded', { mode: 'bigint' }),
     downloadMethod: downloadMethodEnum('download_method'),
     referer: text('referer'),
+    countryCode: varchar('country_code', { length: 2 }),
+    regionCode: varchar('region_code', { length: 8 }),
+    city: varchar('city', { length: 120 }),
+    latitude: numeric('latitude', { precision: 9, scale: 6 }),
+    longitude: numeric('longitude', { precision: 9, scale: 6 }),
     downloadedAt: timestamp('downloaded_at', { withTimezone: false })
       .notNull()
       .defaultNow(),
@@ -551,6 +557,14 @@ export const downloadLogs = pgTable(
     ipAddressIdx: index('download_logs_ip_address_idx').on(table.ipAddress),
     userIdIdx: index('download_logs_user_id_idx').on(table.userId),
     fileDateIdx: index('download_logs_file_date_idx').on(table.fileId, table.downloadedAt),
+    orgCountryIdx: index('download_logs_org_country_idx').on(
+      table.orgId,
+      table.countryCode,
+    ),
+    orgDownloadedAtIdx: index('download_logs_org_downloaded_at_idx').on(
+      table.orgId,
+      table.downloadedAt,
+    ),
   }),
 );
 

@@ -53,12 +53,19 @@ export class SignedUrlService {
     private readonly storageConfig: StorageConfig,
   ) {}
 
+  /**
+   * Mint a short-lived HMAC download URL.
+   * Prefer passing `orgId` so the file lookup is org-scoped. Callers that have
+   * an org context (HTTP API key, TCP payload, admin) should always supply it.
+   * The download endpoint itself remains fileId + HMAC (capability URL) after mint.
+   */
   async generateSignedUrl(
     fileId: string,
     variantType?: VariantType,
     expiresIn?: number,
+    orgId?: string,
   ) {
-    const file = await this.filesService.findById(fileId);
+    const file = await this.filesService.findById(fileId, orgId);
     const providerRow = await this.storageFactory.getProviderConfig(
       file.storageProviderId,
     );
@@ -89,9 +96,10 @@ export class SignedUrlService {
   async resolveDownloadTarget(fileId: string, variantType?: VariantType) {
     const file = await this.filesService.findById(fileId);
     let key = file.key;
+    let variant = null;
 
     if (variantType) {
-      const variant = await this.variantsService.findByFileIdAndType(
+      variant = await this.variantsService.findByFileIdAndType(
         fileId,
         variantType,
       );
@@ -101,6 +109,6 @@ export class SignedUrlService {
     }
 
     const provider = await this.filesService.getFileProvider(fileId);
-    return { file, key, provider };
+    return { file, key, provider, variant };
   }
 }

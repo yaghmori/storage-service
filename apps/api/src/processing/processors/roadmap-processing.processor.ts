@@ -41,6 +41,17 @@ export abstract class RoadmapProcessingProcessor extends WorkerHost {
     }
 
     const tracked = await this.jobs.findByBullmqJobId(String(job.id));
+    if (tracked?.status === 'cancelled') {
+      this.baseLogger.log(
+        `Skipping cancelled ${processorKey} job ${tracked.id} for file ${job.data.fileId}`,
+      );
+      return {
+        success: false,
+        cancelled: true,
+        processorKey,
+        fileId: job.data.fileId,
+      };
+    }
     if (tracked) {
       await this.jobs.updateStatusByBullmqJobId(String(job.id), 'processing');
       await this.jobs.appendLog(

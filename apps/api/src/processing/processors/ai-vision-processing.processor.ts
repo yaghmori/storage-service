@@ -36,6 +36,10 @@ export class AiVisionProcessingProcessor extends WorkerHost {
     this.logger.log(`Processing ai.vision for file ${fileId}`);
 
     const tracked = await this.jobsRepository.findByBullmqJobId(String(job.id));
+    if (tracked?.status === 'cancelled') {
+      this.logger.log(`Skipping cancelled ai.vision job ${tracked.id}`);
+      return { success: false, cancelled: true };
+    }
     if (tracked) {
       await this.jobsRepository.updateStatusByBullmqJobId(
         String(job.id),

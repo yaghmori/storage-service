@@ -16,9 +16,10 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@workspace/ui/components";
-import { Building2, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsUpDown, Plus } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { OrgMaskedAvatar } from "@/features/orgs/components/org-masked-avatar";
 
 /**
  * Org switcher — always shows the selected organization (including on
@@ -48,7 +49,7 @@ export function OrgSwitcher() {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" className="animate-pulse">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary/20" />
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted" />
             <div className="grid flex-1 gap-1 text-left text-sm">
               <span className="h-3 w-24 rounded bg-sidebar-accent" />
               <span className="h-2 w-16 rounded bg-sidebar-accent" />
@@ -65,8 +66,8 @@ export function OrgSwitcher() {
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" asChild>
             <Link href={PAGE_ROUTES.ORG_NEW}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <Plus className="size-4" />
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg border bg-muted">
+                <Plus className="size-4 text-muted-foreground" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">Add organization</span>
@@ -93,9 +94,11 @@ export function OrgSwitcher() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <Building2 className="size-4" />
-              </div>
+              <OrgMaskedAvatar
+                src={activeOrg?.logoUrl}
+                alt={title}
+                sizeClassName="size-8 min-h-8 min-w-8"
+              />
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{title}</span>
                 <span className="truncate text-xs capitalize">{subtitle}</span>
@@ -124,15 +127,11 @@ export function OrgSwitcher() {
                       : "gap-2 p-2"
                   }
                 >
-                  <div
-                    className={
-                      isSelected
-                        ? "flex size-6 items-center justify-center rounded-md border   text-sidebar-primary-foreground"
-                        : "flex size-6 items-center justify-center rounded-md border"
-                    }
-                  >
-                    <Building2 className="size-3.5 shrink-0" />
-                  </div>
+                  <OrgMaskedAvatar
+                    src={org.logoUrl}
+                    alt={org.name}
+                    sizeClassName="size-6 min-h-6 min-w-6"
+                  />
                   <div className="flex flex-1 flex-col">
                     <span
                       className={

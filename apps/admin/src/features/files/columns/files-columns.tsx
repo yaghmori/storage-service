@@ -4,9 +4,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
   Button,
+  CopyButton,
   DataGridColumnHeader,
-  DataGridTableRowSelect,
-  DataGridTableRowSelectAll,
   DateDisplay,
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +14,10 @@ import {
   Skeleton,
 } from "@workspace/ui/components";
 import { Eye, MoreHorizontal, RotateCcw, Trash2, Workflow } from "lucide-react";
+import {
+  FilteredSelectAllHeader,
+  FilteredSelectRowCell,
+} from "@/lib/filtered-selection";
 import type { FileRow } from "../hooks/use-files-queries";
 import { FilePreviewThumb } from "../components/file-preview-thumb";
 
@@ -66,8 +69,13 @@ export function createFilesColumns(
   const columns: ColumnDef<FileRow>[] = [
     {
       id: "select",
-      header: () => <DataGridTableRowSelectAll />,
-      cell: ({ row }) => <DataGridTableRowSelect row={row} />,
+      header: () => <FilteredSelectAllHeader />,
+      cell: ({ row }) => (
+        <FilteredSelectRowCell
+          id={row.original.id}
+          disabled={visibility !== "deleted" && !!row.original.deletedAt}
+        />
+      ),
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
@@ -97,49 +105,70 @@ export function createFilesColumns(
       },
     },
     {
-      id: "preview",
-      header: "",
-      enableSorting: false,
-      size: 56,
-      meta: { skeleton: <Skeleton className="size-11 rounded-md" /> },
-      cell: ({ row }) => (
-        <button
-          type="button"
-          className="block"
-          onClick={() => onView?.(row.original)}
-          aria-label={`Preview ${row.original.originalFileName}`}
-        >
-          <FilePreviewThumb
-            fileId={row.original.id}
-            mimeType={row.original.mimeType}
-            orgId={orgId}
-            alt={row.original.originalFileName}
-            size="md"
-          />
-        </button>
-      ),
-    },
-    {
       accessorKey: "originalFileName",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Name" />
+        <DataGridColumnHeader column={column} title="File" />
       ),
-      meta: { label: "Name", skeleton: <Skeleton className="h-4 w-40" /> },
+      meta: {
+        label: "File",
+        skeleton: (
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-11 rounded-md" />
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          </div>
+        ),
+      },
       cell: ({ row }) => (
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            className="max-w-[240px] truncate text-left font-medium hover:underline"
-            dir="auto"
+            className="shrink-0"
             onClick={() => onView?.(row.original)}
+            aria-label={`Preview ${row.original.originalFileName}`}
           >
-            {row.original.originalFileName}
+            <FilePreviewThumb
+              fileId={row.original.id}
+              mimeType={row.original.mimeType}
+              orgId={orgId}
+              alt={row.original.originalFileName}
+              size="md"
+            />
           </button>
-          {row.original.deletedAt && (
-            <Badge variant="destructive" className="shrink-0">
-              Soft-deleted
-            </Badge>
-          )}
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                className="max-w-[240px] truncate text-left font-medium hover:underline"
+                dir="auto"
+                onClick={() => onView?.(row.original)}
+              >
+                {row.original.originalFileName}
+              </button>
+              {row.original.deletedAt && (
+                <Badge variant="destructive" className="shrink-0">
+                  Soft-deleted
+                </Badge>
+              )}
+            </div>
+            <div className="flex min-w-0 items-center gap-1">
+              <span
+                className="max-w-[220px] truncate font-mono text-[11px] text-muted-foreground"
+                title={row.original.id}
+              >
+                {row.original.id}
+              </span>
+              <CopyButton
+                content={row.original.id}
+                variant="ghost"
+                size="sm"
+                className="size-5 shrink-0 text-muted-foreground shadow-none"
+                aria-label="Copy file ID"
+              />
+            </div>
+          </div>
         </div>
       ),
     },
@@ -194,6 +223,50 @@ export function createFilesColumns(
       ),
     },
     {
+      id: "provider",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Provider" />
+      ),
+      enableSorting: false,
+      meta: { label: "Provider", skeleton: <Skeleton className="h-4 w-24" /> },
+      cell: ({ row }) => {
+        const name = row.original.storageProviderName;
+        const type = row.original.storageProviderType;
+        if (!name && !type) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="min-w-0 max-w-[160px]">
+            <p className="truncate text-sm">{name ?? "—"}</p>
+            {type ? (
+              <p className="truncate font-mono text-[11px] text-muted-foreground">
+                {type}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      id: "bucket",
+      header: ({ column }) => (
+        <DataGridColumnHeader column={column} title="Bucket" />
+      ),
+      enableSorting: false,
+      meta: { label: "Bucket", skeleton: <Skeleton className="h-4 w-24" /> },
+      cell: ({ row }) =>
+        row.original.storageBucket ? (
+          <span
+            className="block max-w-[180px] truncate font-mono text-xs text-muted-foreground"
+            title={row.original.storageBucket}
+          >
+            {row.original.storageBucket}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
       accessorKey: "processingStatus",
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Status" />
@@ -230,7 +303,12 @@ export function createFilesColumns(
       header: ({ column }) => (
         <DataGridColumnHeader column={column} title="Created" />
       ),
-      meta: { label: "Created", skeleton: <Skeleton className="h-4 w-28" /> },
+      enableColumnFilter: true,
+      meta: {
+        variant: "dateRange",
+        label: "Created",
+        skeleton: <Skeleton className="h-4 w-28" />,
+      },
       cell: ({ row }) => (
         <DateDisplay date={row.original.createdAt} format="relative" />
       ),

@@ -19,13 +19,12 @@ export class StorageProvidersService implements OnModuleInit {
 
   private async ensureDefaultProvider() {
     try {
-      // Check if a default provider exists
+      // Bootstrap only: look for any org-level default (no cross-org unset here).
       const defaultProvider = await this.repository.findDefault();
 
       if (!defaultProvider) {
         this.logger.warn('No default storage provider found. Attempting to set one...');
 
-        // Get all active providers
         const activeProviders = await this.repository.findActive();
 
         if (activeProviders.length === 0) {
@@ -33,7 +32,6 @@ export class StorageProvidersService implements OnModuleInit {
           return;
         }
 
-        // Set the first active provider as default
         await this.repository.update(activeProviders[0].id, { isDefault: true });
         this.logger.log(`Set storage provider "${activeProviders[0].name}" (ID: ${activeProviders[0].id}) as default`);
       } else {
@@ -44,24 +42,30 @@ export class StorageProvidersService implements OnModuleInit {
     }
   }
 
-  async findAll(): Promise<StorageProviderResponse[]> {
-    const providers = await this.repository.findAll();
+  async findAll(orgId?: string): Promise<StorageProviderResponse[]> {
+    const providers = await this.repository.findAll(orgId);
     return providers.map(toStorageProviderResponse);
   }
 
-  async findById(id: string): Promise<StorageProviderResponse | null> {
-    const provider = await this.repository.findById(id);
+  async findById(id: string, orgId?: string): Promise<StorageProviderResponse | null> {
+    const provider = await this.repository.findById(id, orgId);
     return toStorageProviderResponse(provider);
   }
 
-  async findActive(): Promise<StorageProviderResponse[]> {
-    const providers = await this.repository.findActive();
+  async findActive(orgId?: string): Promise<StorageProviderResponse[]> {
+    const providers = await this.repository.findActive(orgId);
     return providers.map(toStorageProviderResponse);
+  }
+
+  /** Org-scoped default provider lookup. */
+  async findDefault(orgId: string): Promise<StorageProviderResponse | null> {
+    const provider = await this.repository.findDefault(orgId);
+    return toStorageProviderResponse(provider);
   }
 
   async create(data: CreateStorageProviderRequest & { orgId: string }): Promise<StorageProviderResponse> {
     if (data.isDefault) {
-      await this.unsetOtherDefaults();
+      await this.unsetOtherDefaults(data.orgId);
     }
     const provider = await this.repository.create({
       orgId: data.orgId,
@@ -83,19 +87,25 @@ export class StorageProvidersService implements OnModuleInit {
       isActive: boolean;
       isDefault: boolean;
     }>,
+    orgId?: string,
   ): Promise<StorageProviderResponse | null> {
-    // If setting as default, unset other defaults
+    const existing = await this.repository.findById(id, orgId);
+    if (!existing) {
+      return null;
+    }
+    // If setting as default, unset other defaults within the same org only.
     if (data.isDefault) {
-      await this.unsetOtherDefaults(id);
+      await this.unsetOtherDefaults(existing.orgId, id);
     }
     const provider = await this.repository.update(id, data);
     return toStorageProviderResponse(provider);
   }
 
-  private async unsetOtherDefaults(excludeId?: string) {
-    const defaultProviders = await this.repository.findDefault();
-    if (defaultProviders && defaultProviders.id !== excludeId) {
-      await this.repository.update(defaultProviders.id, { isDefault: false });
+  /** Clear other defaults in the same organization only. */
+  private async unsetOtherDefaults(orgId: string, excludeId?: string) {
+    const defaultProvider = await this.repository.findDefault(orgId);
+    if (defaultProvider && defaultProvider.id !== excludeId) {
+      await this.repository.update(defaultProvider.id, { isDefault: false });
     }
   }
 
@@ -103,4 +113,3 @@ export class StorageProvidersService implements OnModuleInit {
     return this.repository.delete(id);
   }
 }
-

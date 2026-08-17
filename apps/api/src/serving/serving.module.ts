@@ -4,6 +4,7 @@ import { ServingService } from './services/serving.service';
 import { SignedUrlService } from './services/signed-url.service';
 import { FilesMicroserviceController } from '../files/controllers/files-microservice.controller';
 import { FilesModule } from '../files/files.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 import { VariantsModule } from '../variants/variants.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { StorageProvidersModule } from '../storage-providers/storage-providers.module';
@@ -17,6 +18,7 @@ import { DatabaseModule } from '../database/database.module';
   imports: [
     DatabaseModule,
     FilesModule,
+    OrganizationsModule,
     VariantsModule,
     AnalyticsModule,
     StorageProvidersModule,
