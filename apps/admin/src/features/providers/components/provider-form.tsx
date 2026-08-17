@@ -11,7 +11,7 @@ import {
   type ProviderFormValues,
 } from "@workspace/validation";
 import { Button, ResponsiveSheet, useAppForm } from "@workspace/ui/components";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import type {
   ProviderRow,
   UpsertProviderInput,
@@ -36,12 +36,22 @@ function buildDefaultValues(
   };
 }
 
+function InlineSection({
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return <div className="space-y-4">{children}</div>;
+}
+
 export function ProviderForm({
   formId = "provider-form",
   initialValues,
   isSubmitting,
   isTesting,
   submitLabel,
+  layout = "sheet",
   onSubmit,
   onCancel,
   onTest,
@@ -51,11 +61,18 @@ export function ProviderForm({
   isSubmitting?: boolean;
   isTesting?: boolean;
   submitLabel: string;
+  /** "inline" drops the sheet chrome and footer so a host (wizard) owns the actions. */
+  layout?: "sheet" | "inline";
   onSubmit: (payload: UpsertProviderInput) => void;
   onCancel?: () => void;
   onTest?: () => void;
 }) {
   const isEdit = Boolean(initialValues?.id);
+  const isInline = layout === "inline";
+  const Section: (props: {
+    className?: string;
+    children: ReactNode;
+  }) => ReactNode = isInline ? InlineSection : ResponsiveSheet.Content;
 
   const validate = ({ value }: { value: ProviderFormValues }) => {
     const result = providerFormSchema.safeParse(value);
@@ -94,9 +111,9 @@ export function ProviderForm({
         e.stopPropagation();
         form.handleSubmit();
       }}
-      className="flex min-h-0 flex-1 flex-col"
+      className={isInline ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}
     >
-      <ResponsiveSheet.Content className="space-y-4 px-4 pb-4">
+      <Section className="space-y-4 px-4 pb-4">
         <form.AppField name="name">
           {(field) => (
             <field.Input
@@ -352,8 +369,9 @@ export function ProviderForm({
             )}
           </form.AppField>
         </div>
-      </ResponsiveSheet.Content>
+      </Section>
 
+      {isInline ? null : (
       <ResponsiveSheet.Footer className="gap-2 px-4 pb-4">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>
@@ -389,6 +407,7 @@ export function ProviderForm({
           )}
         </form.Subscribe>
       </ResponsiveSheet.Footer>
+      )}
     </form>
   );
 }

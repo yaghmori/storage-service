@@ -2,25 +2,44 @@ import {
   Controller,
   Get,
   Headers,
-  Inject,
   Query,
   UseGuards,
   VERSION_NEUTRAL,
 } from '@nestjs/common';
-import { and, count, desc, eq, gte, sql, sum } from 'drizzle-orm';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { Public } from '../../common/decorators/public.decorator';
-import * as schema from '../../database/drizzle/schema';
 import { AdminAuthGuard } from '../guards/admin-auth.guard';
 import { OrgMembershipGuard } from '../guards/org-membership.guard';
+import { MetricsService } from '../services/metrics.service';
 import { requireOrgId } from '../utils/require-org-id';
+
+function toStringArray(value: unknown): string[] | undefined {
+  if (value == null || value === '') return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((v) => String(v).split(','))
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  return String(value)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
 
 class AnalyticsQueryDto {
   @IsOptional()
   @IsString()
   orgId?: string;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @IsOptional()
+  @IsString()
+  to?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -34,16 +53,60 @@ class AnalyticsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  country?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  method?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  device?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minBytes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxBytes?: number;
+
+  @IsOptional()
+  @IsString()
+  sort?: string;
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
+
+  @IsOptional()
+  @IsIn(['requests', 'bytes'])
+  metric?: 'requests' | 'bytes';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  days?: number;
 }
 
 @Public()
 @Controller({ path: 'admin/api/analytics', version: VERSION_NEUTRAL })
 @UseGuards(AdminAuthGuard, OrgMembershipGuard)
 export class AnalyticsController {
-  constructor(
-    @Inject('DRIZZLE_DB')
-    private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+  constructor(private readonly metrics: MetricsService) {}
 
   @Get('summary')
   async getSummary(
@@ -51,40 +114,41 @@ export class AnalyticsController {
     @Headers('x-org-id') headerOrgId?: string,
   ) {
     const orgId = requireOrgId(query.orgId, headerOrgId);
-    const since = new Date();
-    since.setDate(since.getDate() - 14);
-    since.setHours(0, 0, 0, 0);
+    return this.metrics.getSummary(orgId, query.from, query.to);
+  }
 
-    const orgFilter = eq(schema.downloadLogs.orgId, orgId);
+  @Get('regions')
+  async getRegions(
+    @Query() query: AnalyticsQueryDto,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(query.orgId, headerOrgId);
+    return this.metrics.getRegions(orgId, {
+      from: query.from,
+      to: query.to,
+      metric: query.metric,
+    });
+  }
 
-    const [totals] = await this.db
-      .select({
-        totalDownloads: count(),
-        bytesDownloaded: sum(schema.downloadLogs.bytesDownloaded),
-      })
-      .from(schema.downloadLogs)
-      .where(orgFilter);
+  @Get('storage-series')
+  async getStorageSeries(
+    @Query() query: AnalyticsQueryDto,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(query.orgId, headerOrgId);
+    // Query params arrive as strings — ValidationPipe returns the plain payload.
+    const days = Math.min(365, Math.max(1, Number(query.days) || 30));
+    return this.metrics.getStorageSeries(orgId, days);
+  }
 
-    const downloadsByDay = await this.db
-      .select({
-        day: sql<string>`to_char(date_trunc('day', ${schema.downloadLogs.downloadedAt}), 'YYYY-MM-DD')`,
-        downloads: count(),
-        bytes: sum(schema.downloadLogs.bytesDownloaded),
-      })
-      .from(schema.downloadLogs)
-      .where(and(orgFilter, gte(schema.downloadLogs.downloadedAt, since)))
-      .groupBy(sql`date_trunc('day', ${schema.downloadLogs.downloadedAt})`)
-      .orderBy(sql`date_trunc('day', ${schema.downloadLogs.downloadedAt})`);
-
-    return {
-      totalDownloads: Number(totals?.totalDownloads ?? 0),
-      bytesDownloaded: Number(totals?.bytesDownloaded ?? 0),
-      downloadsByDay: downloadsByDay.map((row) => ({
-        day: row.day,
-        downloads: Number(row.downloads),
-        bytes: Number(row.bytes ?? 0),
-      })),
-    };
+  @Get('transfer-series')
+  async getTransferSeries(
+    @Query() query: AnalyticsQueryDto,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(query.orgId, headerOrgId);
+    const days = Math.min(365, Math.max(1, Number(query.days) || 30));
+    return this.metrics.getTransferSeries(orgId, days);
   }
 
   @Get('downloads')
@@ -93,27 +157,23 @@ export class AnalyticsController {
     @Headers('x-org-id') headerOrgId?: string,
   ) {
     const orgId = requireOrgId(query.orgId, headerOrgId);
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
-    const offset = (page - 1) * limit;
-    const where = eq(schema.downloadLogs.orgId, orgId);
-
-    const [rows, totalResult] = await Promise.all([
-      this.db
-        .select()
-        .from(schema.downloadLogs)
-        .where(where)
-        .orderBy(desc(schema.downloadLogs.downloadedAt))
-        .limit(limit)
-        .offset(offset),
-      this.db.select({ total: count() }).from(schema.downloadLogs).where(where),
-    ]);
-
-    return {
-      items: rows,
-      total: Number(totalResult[0]?.total ?? 0),
+    // Query params arrive as strings — ValidationPipe returns the plain payload
+    // after validating a transformed copy, so coerce before limit/offset.
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    return this.metrics.listDownloads(orgId, {
       page,
       limit,
-    };
+      search: query.search,
+      country: toStringArray(query.country),
+      method: toStringArray(query.method),
+      device: toStringArray(query.device),
+      minBytes: query.minBytes,
+      maxBytes: query.maxBytes,
+      from: query.from,
+      to: query.to,
+      sort: query.sort,
+      order: query.order,
+    });
   }
 }

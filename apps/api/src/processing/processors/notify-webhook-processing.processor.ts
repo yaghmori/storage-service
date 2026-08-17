@@ -32,6 +32,10 @@ export class NotifyWebhookProcessingProcessor extends WorkerHost {
 
     const { fileId, orgId, processingStatus, processingError } = job.data;
     const tracked = await this.jobsRepository.findByBullmqJobId(String(job.id));
+    if (tracked?.status === 'cancelled') {
+      this.logger.log(`Skipping cancelled notify.webhook job ${tracked.id}`);
+      return { success: false, cancelled: true };
+    }
     if (tracked) {
       await this.jobsRepository.updateStatusByBullmqJobId(
         String(job.id),

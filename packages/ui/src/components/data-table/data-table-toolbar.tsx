@@ -9,6 +9,7 @@ import { Input } from "@workspace/ui/components/input";
 import { useDebouncedCallback } from "@workspace/ui/hooks/use-debounced-callback";
 import { cn } from "@workspace/ui/lib/utils";
 import { DataTableDateFilter } from "./data-table-date-filter";
+import { DataTableDateRangeFilter } from "./data-table-date-range-filter";
 import { DataTableFacetedFilter } from "./data-table-faceted-filter";
 import { DataTableSliderFilter } from "./data-table-slider-filter";
 import { DataTableSortList } from "./data-table-sort-list";
@@ -161,12 +162,18 @@ function DataTableToolbarFilter<TData>({
           );
 
         case "date":
-        case "dateRange":
           return (
             <DataTableDateFilter
               column={column}
               title={columnMeta.label ?? column.id}
-              multiple={columnMeta.variant === "dateRange"}
+            />
+          );
+
+        case "dateRange":
+          return (
+            <DataTableDateRangeFilter
+              column={column}
+              title={columnMeta.label ?? column.id}
             />
           );
 

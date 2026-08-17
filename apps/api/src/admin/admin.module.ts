@@ -29,6 +29,7 @@ import { OrgMembershipGuard } from './guards/org-membership.guard';
 import { AdminApiKeyService } from './services/admin-api-key.service';
 import { FilesBulkProcessingService } from './services/files-bulk-processing.service';
 import { MembershipService } from './services/membership.service';
+import { MetricsService } from './services/metrics.service';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { MembershipService } from './services/membership.service';
     AdminApiKeyService,
     FilesBulkProcessingService,
     MembershipService,
+    MetricsService,
     OrgMembershipGuard,
   ],
   exports: [MembershipService],

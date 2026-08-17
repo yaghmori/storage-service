@@ -16,14 +16,29 @@ import {
   ProcessorKeyDescriptions,
   ProcessorKeyLabels,
 } from "@workspace/validation";
-import { Check, Copy, Loader2, RefreshCw } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Copy,
+  Loader2,
+  PlayCircle,
+  RefreshCw,
+  Rocket,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { FilePreviewThumb } from "@/features/files/components/file-preview-thumb";
 import {
+  isJobCancellable,
+  isJobPending,
+  isJobRetryable,
+  isJobTerminal,
+  useCancelJobMutation,
   useJobDetailQuery,
+  usePrioritizeJobMutation,
   useRetryJobMutation,
 } from "../hooks/use-jobs-queries";
+import { JobRunDialog } from "./job-run-dialog";
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -55,8 +70,11 @@ function CopyableId({ label, value }: { label: string; value: string }) {
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="min-w-0 flex-1 break-all rounded-md border bg-muted/40 px-2.5 py-2 font-mono text-xs leading-relaxed">
+          {value}
+        </p>
         <Button
           type="button"
           variant="ghost"
@@ -81,9 +99,6 @@ function CopyableId({ label, value }: { label: string; value: string }) {
           <span className="sr-only">Copy {label}</span>
         </Button>
       </div>
-      <p className="break-all rounded-md border bg-muted/40 px-2.5 py-2 font-mono text-xs leading-relaxed">
-        {value}
-      </p>
     </div>
   );
 }
@@ -103,17 +118,24 @@ export function JobDetailSheet({
     activeOrg?.id,
   );
   const retryMutation = useRetryJobMutation(activeOrg?.id);
+  const cancelMutation = useCancelJobMutation(activeOrg?.id);
+  const prioritizeMutation = usePrioritizeJobMutation(activeOrg?.id);
+  const [rerunOpen, setRerunOpen] = useState(false);
 
   const processorKey = data?.processorKey;
   const progress =
     data?.progress == null || !Number.isFinite(Number(data.progress))
       ? null
       : Math.max(0, Math.min(100, Number(data.progress)));
-  const canRetry =
-    data?.status === "failed" ||
-    data?.status === "cancelled" ||
-    data?.status === "skipped" ||
-    data?.status === "partial";
+  const status = String(data?.status ?? "");
+  const canRetry = isJobRetryable(status);
+  const canRerun = isJobTerminal(status);
+  const canCancel = isJobCancellable(status);
+  const canPrioritize = isJobPending(status);
+  const actionsPending =
+    retryMutation.isPending ||
+    cancelMutation.isPending ||
+    prioritizeMutation.isPending;
 
   return (
     <ResponsiveSheet
@@ -215,10 +237,6 @@ export function JobDetailSheet({
                 <dd className="tabular-nums">{data.retryCount}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Priority</dt>
-                <dd className="tabular-nums">{data.priority ?? "—"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Created</dt>
                 <dd>
                   <DateDisplay date={data.createdAt} format="datetime" />
@@ -260,11 +278,11 @@ export function JobDetailSheet({
             <Separator />
 
             <div className="space-y-3">
-              <CopyableId label="Job ID" value={data.id} />
-              <CopyableId label="File ID" value={data.fileId} />
-              <CopyableId label="BullMQ ID" value={data.bullmqJobId ?? "—"} />
+              <CopyableId label="Job ID:" value={data.id} />
+              <CopyableId label="File ID:" value={data.fileId} />
+              <CopyableId label="BullMQ ID:" value={data.bullmqJobId ?? "—"} />
               {data.orgId ? (
-                <CopyableId label="Organization ID" value={data.orgId} />
+                <CopyableId label="Organization ID:" value={data.orgId} />
               ) : null}
             </div>
 
@@ -312,8 +330,7 @@ export function JobDetailSheet({
                   <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
                     {data.logs
                       .map(
-                        (line) =>
-                          `${line.ts} [${line.level}] ${line.message}`,
+                        (line) => `${line.ts} [${line.level}] ${line.message}`,
                       )
                       .join("\n")}
                   </pre>
@@ -336,29 +353,94 @@ export function JobDetailSheet({
         )}
       </ResponsiveSheet.Content>
 
-      {canRetry && data ? (
+      {data && (canRetry || canRerun || canCancel || canPrioritize) ? (
         <ResponsiveSheet.Footer className="gap-2 px-4 pb-4">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={retryMutation.isPending}
-            onClick={() =>
-              retryMutation.mutate(data.id, {
-                onSuccess: () => toast.success("Job queued for retry"),
-                onError: (err) =>
-                  toast.error(extractApiErrorMessage(err, "Retry failed")),
-              })
-            }
-          >
-            {retryMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <RefreshCw className="size-4" />
-            )}
-            Retry job
-          </Button>
+          {canRetry ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={actionsPending}
+              onClick={() =>
+                retryMutation.mutate(data.id, {
+                  onSuccess: () => toast.success("Job queued for retry"),
+                  onError: (err) =>
+                    toast.error(extractApiErrorMessage(err, "Retry failed")),
+                })
+              }
+            >
+              {retryMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Retry job
+            </Button>
+          ) : null}
+          {canRerun ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={actionsPending}
+              onClick={() => setRerunOpen(true)}
+            >
+              <PlayCircle className="size-4" />
+              Rerun…
+            </Button>
+          ) : null}
+          {canPrioritize ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={actionsPending}
+              onClick={() =>
+                prioritizeMutation.mutate(data.id, {
+                  onSuccess: () =>
+                    toast.success("Job moved to the front of its queue"),
+                  onError: (err) =>
+                    toast.error(
+                      extractApiErrorMessage(err, "Could not prioritize job"),
+                    ),
+                })
+              }
+            >
+              {prioritizeMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Rocket className="size-4" />
+              )}
+              Prioritize
+            </Button>
+          ) : null}
+          {canCancel ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={actionsPending}
+              onClick={() =>
+                cancelMutation.mutate(data.id, {
+                  onSuccess: () => toast.success("Job cancelled"),
+                  onError: (err) =>
+                    toast.error(extractApiErrorMessage(err, "Cancel failed")),
+                })
+              }
+            >
+              {cancelMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Ban className="size-4" />
+              )}
+              Cancel job
+            </Button>
+          ) : null}
         </ResponsiveSheet.Footer>
       ) : null}
+
+      <JobRunDialog
+        open={rerunOpen}
+        onOpenChange={setRerunOpen}
+        job={data ?? null}
+        onDone={() => setRerunOpen(false)}
+      />
     </ResponsiveSheet>
   );
 }

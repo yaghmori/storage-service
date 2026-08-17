@@ -11,79 +11,127 @@ import type {
   SignedUrlResponse,
 } from '../../lib/contracts';
 import { success, type ApiResponse } from '../../lib/contracts';
+import { looksLikeUuid } from '../../common/guards/auth.guard';
+import { OrganizationService } from '../../organizations/organization.service';
 import { FilesService } from '../services/files.service';
 import { SignedUrlService } from '../../serving/services/signed-url.service';
+
+type TcpOrgPayload = {
+  orgId?: string;
+  orgSlug?: string;
+  tenantId?: string;
+};
 
 /**
  * Files Microservice Controller
  *
  * VALIDATION STRATEGY:
- * - Input validation happens at the API Gateway using Zod schemas from 
+ * - Input validation happens at the API Gateway using Zod schemas from
  * - This controller trusts that data is already validated
  * - Focuses on business logic and domain-specific error handling
+ *
+ * Org isolation: get / sign / delete / batch require orgId or orgSlug (fail closed).
  */
 @Controller()
 export class FilesMicroserviceController {
   constructor(
     private readonly filesService: FilesService,
     private readonly signedUrlService: SignedUrlService,
+    private readonly organizations: OrganizationService,
   ) {}
 
+  private async requireTcpOrgId(data: TcpOrgPayload): Promise<string> {
+    const rawId = data.orgId?.trim();
+    const rawSlug = (data.orgSlug || data.tenantId)?.trim();
+
+    if (rawId && looksLikeUuid(rawId)) {
+      const resolved = await this.organizations.resolveOrgRef({ orgId: rawId });
+      if (resolved) return resolved;
+    }
+
+    const slug = rawSlug || (rawId && !looksLikeUuid(rawId) ? rawId : undefined);
+    if (slug) {
+      const resolved = await this.organizations.resolveOrgRef({ orgSlug: slug });
+      if (resolved) return resolved;
+    }
+
+    throw new Error(
+      'TCP file operations require orgId (UUID) or orgSlug/tenantId in payload',
+    );
+  }
+
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.GET_FILE_INFO)
-  async getFileInfo(@Payload() data: GetFileInfoRequest & { requestId?: string }): Promise<ApiResponse<FileResponse>> {
-    // Validation happens at Gateway - trust the data
+  async getFileInfo(
+    @Payload() data: GetFileInfoRequest & TcpOrgPayload & { requestId?: string },
+  ): Promise<ApiResponse<FileResponse>> {
     try {
-      const result = await this.filesService.findById(data.id);
+      const orgId = await this.requireTcpOrgId(data);
+      const result = await this.filesService.findById(data.id, orgId);
       return success(result, { requestId: data.requestId });
     } catch (error) {
-      // Let MicroserviceExceptionFilter handle service errors (including NotFoundException)
       throw error;
     }
   }
 
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.DELETE_FILE)
-  async deleteFile(@Payload() data: DeleteFileRequest & { requestId?: string }): Promise<ApiResponse<FileResponse>> {
-    // Validation happens at Gateway - trust the data
+  async deleteFile(
+    @Payload() data: DeleteFileRequest & TcpOrgPayload & { requestId?: string },
+  ): Promise<ApiResponse<FileResponse>> {
     try {
-      const result = await this.filesService.deleteFile(data.id, data.hardDelete || false);
+      const orgId = await this.requireTcpOrgId(data);
+      await this.filesService.findById(data.id, orgId);
+      const result = await this.filesService.deleteFile(
+        data.id,
+        data.hardDelete || false,
+      );
       return success(result, { requestId: data.requestId });
     } catch (error) {
-      // Let MicroserviceExceptionFilter handle service errors (including NotFoundException)
       throw error;
     }
   }
 
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.BATCH_OPERATIONS)
-  async batchOperations(@Payload() data: BatchOperationsRequest & { requestId?: string }): Promise<ApiResponse<BatchOperationsResponse>> {
-    // Validation happens at Gateway - trust the data
-    // Process each operation and collect results
+  async batchOperations(
+    @Payload()
+    data: BatchOperationsRequest & TcpOrgPayload & { requestId?: string },
+  ): Promise<ApiResponse<BatchOperationsResponse>> {
+    const orgId = await this.requireTcpOrgId(data);
     const results = [];
 
     for (const op of data.operations) {
       try {
         if (op.type === BATCH_OPERATION_TYPES.DELETE) {
           try {
-            const file = await this.filesService.findById(op.id);
+            const file = await this.filesService.findById(op.id, orgId);
             if (!file) {
               results.push({
                 error: `File with ID ${op.id} not found`,
               });
             } else {
-              const deleted = await this.filesService.deleteFile(op.id, op.hardDelete || false);
+              const deleted = await this.filesService.deleteFile(
+                op.id,
+                op.hardDelete || false,
+              );
               results.push(deleted);
             }
           } catch (error) {
             results.push({
-              error: error instanceof Error ? error.message : `File with ID ${op.id} not found`,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : `File with ID ${op.id} not found`,
             });
           }
         } else if (op.type === BATCH_OPERATION_TYPES.GET) {
           try {
-            const file = await this.filesService.findById(op.id);
+            const file = await this.filesService.findById(op.id, orgId);
             results.push(file);
           } catch (error) {
             results.push({
-              error: error instanceof Error ? error.message : `File with ID ${op.id} not found`,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : `File with ID ${op.id} not found`,
             });
           }
         } else {
@@ -102,17 +150,20 @@ export class FilesMicroserviceController {
   }
 
   @MessagePattern(MESSAGE_PATTERNS.STORAGE.GET_SIGNED_URL)
-  async getSignedUrl(@Payload() data: SignedUrlRequest & { requestId?: string }): Promise<ApiResponse<SignedUrlResponse>> {
-    // Validation happens at Gateway - trust the data
+  async getSignedUrl(
+    @Payload() data: SignedUrlRequest & TcpOrgPayload & { requestId?: string },
+  ): Promise<ApiResponse<SignedUrlResponse>> {
     try {
+      const orgId = await this.requireTcpOrgId(data);
       const requested =
         typeof data.expiresIn === 'number' && Number.isFinite(data.expiresIn)
           ? data.expiresIn
           : undefined;
       const signed = await this.signedUrlService.generateSignedUrl(
         data.fileId,
-        undefined, // variantType - not in SignedUrlRequest schema, can be extended later
+        undefined,
         requested,
+        orgId,
       );
 
       const expiresAt = new Date(
@@ -127,7 +178,6 @@ export class FilesMicroserviceController {
 
       return success(result, { requestId: data.requestId });
     } catch (error) {
-      // Let MicroserviceExceptionFilter handle service errors (including NotFoundException)
       throw error;
     }
   }

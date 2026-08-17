@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 const LEGACY_TENANT_LEAFS = new Set([
   "files",
   "jobs",
+  "metrics",
   "analytics",
   "providers",
   "tokens",

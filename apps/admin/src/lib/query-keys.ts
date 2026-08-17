@@ -26,7 +26,7 @@ export function invalidateAccount(qc: Qc) {
   qc.invalidateQueries({ queryKey: accountKeys.me });
 }
 
-// ─── Dashboard / Analytics ──────────────────────────────────────────────────
+// ─── Dashboard / Metrics ────────────────────────────────────────────────────
 
 export const dashboardKeys = {
   all: ["dashboard"] as const,
@@ -37,17 +37,27 @@ export function invalidateDashboard(qc: Qc) {
   qc.invalidateQueries({ queryKey: dashboardKeys.all });
 }
 
-export const analyticsKeys = {
-  all: ["analytics"] as const,
-  summary: (orgId?: string) =>
-    [...analyticsKeys.all, "summary", orgId] as const,
+export const metricsKeys = {
+  all: ["metrics"] as const,
+  summary: (orgId?: string, params?: Record<string, unknown>) =>
+    [...metricsKeys.all, "summary", orgId, params ?? {}] as const,
+  regions: (orgId?: string, params?: Record<string, unknown>) =>
+    [...metricsKeys.all, "regions", orgId, params ?? {}] as const,
+  storageSeries: (orgId?: string, days?: number) =>
+    [...metricsKeys.all, "storage-series", orgId, days] as const,
+  transferSeries: (orgId?: string, days?: number) =>
+    [...metricsKeys.all, "transfer-series", orgId, days] as const,
   downloads: (params?: Record<string, unknown>) =>
-    [...analyticsKeys.all, "downloads", params ?? {}] as const,
+    [...metricsKeys.all, "downloads", params ?? {}] as const,
 };
 
-export function invalidateAnalytics(qc: Qc) {
-  qc.invalidateQueries({ queryKey: analyticsKeys.all });
+export function invalidateMetrics(qc: Qc) {
+  qc.invalidateQueries({ queryKey: metricsKeys.all });
 }
+
+/** @deprecated Use metricsKeys / invalidateMetrics */
+export const analyticsKeys = metricsKeys;
+export const invalidateAnalytics = invalidateMetrics;
 
 // ─── Files ──────────────────────────────────────────────────────────────────
 

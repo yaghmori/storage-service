@@ -27,6 +27,9 @@ export const FilesEndpoints = {
   Metadata: "admin/api/files/{0}/metadata",
   ProcessorResults: "admin/api/files/{0}/processor-results",
   Variants: "admin/api/files/{0}/variants",
+  BulkDelete: "admin/api/files/bulk-delete",
+  BulkRestore: "admin/api/files/bulk-restore",
+  EmptyTrash: "admin/api/files/empty-trash",
   BulkRegenerateProcessing: "admin/api/files/bulk-regenerate-processing",
   RegenerateProcessingAll: "admin/api/files/regenerate-processing-all",
   RegenerateProcessingAllStatus:
@@ -56,17 +59,31 @@ export function fileContentUrl(
 
 export const JobsEndpoints = {
   List: "admin/api/jobs",
+  Create: "admin/api/jobs",
+  AvailableProcessors: "admin/api/jobs/available-processors",
   Detail: "admin/api/jobs/{0}",
   Cancel: "admin/api/jobs/{0}/cancel",
   Retry: "admin/api/jobs/{0}/retry",
+  Rerun: "admin/api/jobs/{0}/rerun",
+  Priority: "admin/api/jobs/{0}/priority",
+  Prioritize: "admin/api/jobs/{0}/prioritize",
   BulkCancel: "admin/api/jobs/bulk-cancel",
+  CancelAllPending: "admin/api/jobs/cancel-all-pending",
   BulkRetry: "admin/api/jobs/bulk-retry",
+  BulkPriority: "admin/api/jobs/bulk-priority",
+  BulkPrioritize: "admin/api/jobs/bulk-prioritize",
 } as const;
 
-export const AnalyticsEndpoints = {
+export const MetricsEndpoints = {
   Summary: "admin/api/analytics/summary",
+  Regions: "admin/api/analytics/regions",
+  StorageSeries: "admin/api/analytics/storage-series",
+  TransferSeries: "admin/api/analytics/transfer-series",
   Downloads: "admin/api/analytics/downloads",
 } as const;
+
+/** @deprecated Use MetricsEndpoints */
+export const AnalyticsEndpoints = MetricsEndpoints;
 
 export const ProvidersEndpoints = {
   List: "admin/api/providers",

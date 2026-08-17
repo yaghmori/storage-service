@@ -12,6 +12,10 @@ export interface DashboardStats {
   providersCount: number;
   jobsByStatus: Record<string, number>;
   downloadsLast7d: number;
+  downloadsPrev7d: number;
+  filesLast7d: number;
+  bytesLast7d: number;
+  downloadsSparkline: Array<{ day: string; count: number }>;
 }
 
 export function useDashboardStatsQuery(orgId?: string) {

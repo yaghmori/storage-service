@@ -1,6 +1,7 @@
 import { AppProviders } from "@/provider/app-providers";
 import { resolveAdminAppUrl } from "@/lib/config/ports";
 import type { Metadata, Viewport } from "next";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
 const appUrl = resolveAdminAppUrl();

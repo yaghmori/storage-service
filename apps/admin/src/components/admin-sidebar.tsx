@@ -6,7 +6,7 @@ import {
   type NavSecondaryItem,
 } from "@/components/layout/nav-secondary";
 import { NavUser } from "@/components/layout/nav-user";
-import { OrgSwitcher } from "@/components/layout/org-switcher";
+import { SidebarBrand } from "@/components/layout/sidebar-brand";
 import { PAGE_ROUTES } from "@/lib/constants/page-routes";
 import { useOptionalActiveOrg } from "@/provider/org-provider";
 import {
@@ -16,18 +16,13 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@workspace/ui/components";
-import {
-  BarChart3,
-  FileIcon,
-  Home,
-  Settings,
-  Workflow,
-} from "lucide-react";
+import { BarChart3, FileIcon, Home, Settings, Workflow } from "lucide-react";
 import type { ComponentProps } from "react";
+import { OrgSwitcher } from "./layout/org-switcher";
 
 /**
  * sidebar-07 AppSidebar composition:
- * Header → OrgSwitcher
+ * Header → SidebarBrand → OrgSwitcher
  * Content → NavMain (leaves + accordion groups, eallyfe-style)
  * Footer → NavSecondary (Settings) → NavUser
  * Rail → icon-collapse affordance
@@ -53,8 +48,8 @@ export function AdminSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           icon: Workflow,
         },
         {
-          title: "Analytics",
-          url: PAGE_ROUTES.analytics(activeOrg.slug),
+          title: "Metrics",
+          url: PAGE_ROUTES.metrics(activeOrg.slug),
           icon: BarChart3,
         },
       ]
@@ -79,11 +74,15 @@ export function AdminSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   ];
 
   return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <OrgSwitcher />
+    <Sidebar collapsible="icon" className="border-r shadow-md" {...props}>
+      <SidebarHeader className="border-b bg-sidebar">
+        <SidebarBrand />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="bg-background">
+        <SidebarHeader className="pt-5 pb-0">
+          <OrgSwitcher />
+        </SidebarHeader>
+
         {/* Keep org nav visible on platform routes using last/selected org */}
         {navItems.length > 0 && (
           <NavMain
@@ -93,7 +92,7 @@ export function AdminSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           />
         )}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="bg-background">
         <NavSecondary items={navFooter} />
         <NavUser />
       </SidebarFooter>

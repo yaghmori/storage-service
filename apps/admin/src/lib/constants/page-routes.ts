@@ -25,7 +25,9 @@ export const PAGE_ROUTES = {
   home: (slug: string) => orgPath(slug),
   files: (slug: string) => orgPath(slug, "files"),
   jobs: (slug: string) => orgPath(slug, "jobs"),
-  analytics: (slug: string) => orgPath(slug, "analytics"),
+  metrics: (slug: string) => orgPath(slug, "metrics"),
+  /** @deprecated Prefer metrics — kept for bookmarks. */
+  analytics: (slug: string) => orgPath(slug, "metrics"),
   /** @deprecated Prefer settingsProviders — kept for bookmarks. */
   providers: (slug: string) => orgPath(slug, "settings", "providers"),
   /** @deprecated Prefer settingsProcessorBackends — kept for bookmarks. */

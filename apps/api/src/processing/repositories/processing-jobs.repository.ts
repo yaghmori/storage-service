@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../database/drizzle/schema';
 import type { JobLogEntry } from '../../database/drizzle/schema';
@@ -14,6 +14,17 @@ export type ProcessingJobStatus =
   | 'skipped';
 
 const MAX_LOG_ENTRIES = 200;
+
+/**
+ * A cancelled job must stay cancelled: a worker that was already running (or
+ * that picked the job up before it could be removed from Redis) must not push
+ * the row back to processing/completed/failed. Re-queueing (retry/rerun) sets
+ * the row back to `pending` through its own reset and is allowed.
+ */
+function notCancelledUnless(status: ProcessingJobStatus) {
+  if (status === 'cancelled' || status === 'pending') return undefined;
+  return ne(schema.processingJobs.status, 'cancelled');
+}
 
 @Injectable()
 export class ProcessingJobsRepository {
@@ -85,29 +96,14 @@ export class ProcessingJobsRepository {
     status: ProcessingJobStatus,
     errorMessage?: string | null,
   ) {
-    const clearError =
-      status === 'pending' ||
-      status === 'processing' ||
-      status === 'completed' ||
-      status === 'cancelled';
     const result = await this.db
       .update(schema.processingJobs)
-      .set({
-        status,
-        errorMessage: clearError
-          ? errorMessage === undefined
-            ? null
-            : errorMessage
-          : (errorMessage ?? null),
-        completedAt:
-          status === 'completed' || status === 'failed' || status === 'skipped'
-            ? new Date()
-            : null,
-        startedAt: status === 'processing' ? new Date() : undefined,
-      })
-      .where(eq(schema.processingJobs.id, id))
+      .set(this.statusPatch(status, errorMessage))
+      .where(and(eq(schema.processingJobs.id, id), notCancelledUnless(status)))
       .returning();
-    return result[0];
+    if (result[0]) return result[0];
+    // Admin cancelled the job while it was in flight; keep the cancellation.
+    return (await this.findById(id)) ?? undefined;
   }
 
   async incrementRetry(id: string) {
@@ -151,29 +147,42 @@ export class ProcessingJobsRepository {
     status: ProcessingJobStatus,
     errorMessage?: string | null,
   ) {
+    const result = await this.db
+      .update(schema.processingJobs)
+      .set(this.statusPatch(status, errorMessage))
+      .where(
+        and(
+          eq(schema.processingJobs.bullmqJobId, bullmqJobId),
+          notCancelledUnless(status),
+        ),
+      )
+      .returning();
+    if (result[0]) return result[0];
+    return await this.findByBullmqJobId(bullmqJobId);
+  }
+
+  private statusPatch(
+    status: ProcessingJobStatus,
+    errorMessage?: string | null,
+  ) {
     const clearError =
       status === 'pending' ||
       status === 'processing' ||
       status === 'completed' ||
       status === 'cancelled';
-    const result = await this.db
-      .update(schema.processingJobs)
-      .set({
-        status,
-        errorMessage: clearError
-          ? errorMessage === undefined
-            ? null
-            : errorMessage
-          : (errorMessage ?? null),
-        completedAt:
-          status === 'completed' || status === 'failed' || status === 'skipped'
-            ? new Date()
-            : null,
-        startedAt: status === 'processing' ? new Date() : undefined,
-      })
-      .where(eq(schema.processingJobs.bullmqJobId, bullmqJobId))
-      .returning();
-    return result[0] || null;
+    return {
+      status,
+      errorMessage: clearError
+        ? errorMessage === undefined
+          ? null
+          : errorMessage
+        : (errorMessage ?? null),
+      completedAt:
+        status === 'completed' || status === 'failed' || status === 'skipped'
+          ? new Date()
+          : null,
+      startedAt: status === 'processing' ? new Date() : undefined,
+    };
   }
 
   async appendLog(

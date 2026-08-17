@@ -50,9 +50,14 @@ export class SeedService {
     await this.orgProcessors.ensureDefaults(org.id);
     await this.ensureOwnerMembership(org.id, admin);
 
-    // Seed providers when missing (covers migration-created org with no providers).
-    if (!options.onlyIfEmpty || providerCount === 0) {
+    // Seed providers when missing (covers migration-created org with no
+    // providers) but never inject them into an org a user created themselves.
+    if (!options.onlyIfEmpty || orgCount === 0 || this.isSeedOwnedOrg(org)) {
       await this.seedStorageProviders(org.id);
+    } else {
+      this.logger.log(
+        `Skipping provider seed — org ${org.slug} was not created by the seeder`,
+      );
     }
 
     if (process.env.AUTH_DEFAULT_ORG_ID !== org.id) {
@@ -77,9 +82,19 @@ export class SeedService {
     return row?.count ?? 0;
   }
 
+  private seedOrgSlug(): string {
+    return (
+      (process.env.SEED_ORG_SLUG || 'allyfe').trim().toLowerCase() || 'allyfe'
+    );
+  }
+
+  /** The seeder owns its own org and the migration-created `default` org only. */
+  private isSeedOwnedOrg(org: schema.Organization): boolean {
+    return org.slug === this.seedOrgSlug() || org.slug === 'default';
+  }
+
   private async ensureSeedOrg(): Promise<schema.Organization> {
-    const slug =
-      (process.env.SEED_ORG_SLUG || 'allyfe').trim().toLowerCase() || 'allyfe';
+    const slug = this.seedOrgSlug();
     const name = (process.env.SEED_ORG_NAME || 'Allyfe').trim() || 'Allyfe';
 
     const [bySlug] = await this.db

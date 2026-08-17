@@ -339,6 +339,7 @@ export class NotifyWebhookProcessingService {
             fileId,
             undefined,
             downloadUrlExpiresIn,
+            orgId,
           );
           downloadUrl = signed.url;
           expiresIn = signed.expiresIn;

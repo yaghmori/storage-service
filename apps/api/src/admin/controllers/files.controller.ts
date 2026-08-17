@@ -25,7 +25,10 @@ import {
   count,
   desc,
   eq,
+  inArray,
+  isNotNull,
   isNull,
+  notInArray,
   SQL,
 } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -34,6 +37,8 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -104,6 +109,14 @@ class ListFilesQueryDto {
   maxSize?: number;
 
   @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
+
+  @IsOptional()
   @Transform(({ value }) => value === true || value === 'true' || value === '1')
   @IsBoolean()
   includeDeleted?: boolean;
@@ -165,6 +178,14 @@ class RegenerateProcessingAllDto {
   @Min(0)
   maxSize?: number;
 
+  @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
+
   /** Optional ceiling on how many files this run schedules. */
   @IsOptional()
   @Type(() => Number)
@@ -173,6 +194,83 @@ class RegenerateProcessingAllDto {
   @Max(MAX_SWEEP_FILES)
   limit?: number;
 }
+
+class BulkSelectionFiltersDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  fileType?: string;
+
+  @IsOptional()
+  @IsString()
+  processingStatus?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minSize?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxSize?: number;
+
+  @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeDeleted?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  deletedOnly?: boolean;
+}
+
+class BulkFileSelectionDto {
+  /** Explicit IDs (page / cherry-pick). Mutually exclusive with allMatchingFilters. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  ids?: string[];
+
+  /** Select every file matching filters (across pages). */
+  @IsOptional()
+  @IsBoolean()
+  allMatchingFilters?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID(undefined, { each: true })
+  excludeIds?: string[];
+
+  @IsOptional()
+  filters?: BulkSelectionFiltersDto;
+
+  @IsOptional()
+  @IsBoolean()
+  hard?: boolean;
+}
+
+class EmptyTrashDto {
+  @IsString()
+  @IsIn(['DELETE'])
+  confirm!: string;
+}
+
+const BULK_FILE_CAP = 2_000;
 
 @Public()
 @Controller({ path: 'admin/api/files', version: VERSION_NEUTRAL })
@@ -326,7 +424,7 @@ export class FilesController {
     // Query params arrive as strings — ValidationPipe returns the plain payload
     // after validating a transformed copy, so coerce before limit/offset.
     const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 10));
     const offset = (page - 1) * limit;
 
     const conditions = buildFileListConditions(orgId, {
@@ -335,6 +433,8 @@ export class FilesController {
       processingStatus: query.processingStatus,
       minSize: query.minSize,
       maxSize: query.maxSize,
+      createdFrom: query.createdFrom,
+      createdTo: query.createdTo,
       includeDeleted: query.includeDeleted,
       deletedOnly: query.deletedOnly,
     });
@@ -343,8 +443,50 @@ export class FilesController {
 
     const [rows, totalResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          id: schema.files.id,
+          orgId: schema.files.orgId,
+          storageProviderId: schema.files.storageProviderId,
+          storageKey: schema.files.storageKey,
+          storageBucket: schema.files.storageBucket,
+          fileName: schema.files.fileName,
+          originalFileName: schema.files.originalFileName,
+          fileExtension: schema.files.fileExtension,
+          mimeType: schema.files.mimeType,
+          size: schema.files.size,
+          fileHash: schema.files.fileHash,
+          perceptualHash: schema.files.perceptualHash,
+          width: schema.files.width,
+          height: schema.files.height,
+          duration: schema.files.duration,
+          alt: schema.files.alt,
+          title: schema.files.title,
+          caption: schema.files.caption,
+          description: schema.files.description,
+          folder: schema.files.folder,
+          folderId: schema.files.folderId,
+          tags: schema.files.tags,
+          referenceCount: schema.files.referenceCount,
+          isOrphaned: schema.files.isOrphaned,
+          orphanedAt: schema.files.orphanedAt,
+          processingStatus: schema.files.processingStatus,
+          processingError: schema.files.processingError,
+          visibility: schema.files.visibility,
+          uploadedBy: schema.files.uploadedBy,
+          externalId: schema.files.externalId,
+          externalProvider: schema.files.externalProvider,
+          cdnUrl: schema.files.cdnUrl,
+          deletedAt: schema.files.deletedAt,
+          createdAt: schema.files.createdAt,
+          updatedAt: schema.files.updatedAt,
+          storageProviderName: schema.storageProviders.name,
+          storageProviderType: schema.storageProviders.type,
+        })
         .from(schema.files)
+        .leftJoin(
+          schema.storageProviders,
+          eq(schema.files.storageProviderId, schema.storageProviders.id),
+        )
         .where(where)
         .orderBy(desc(schema.files.createdAt))
         .limit(limit)
@@ -357,6 +499,128 @@ export class FilesController {
       total: Number(totalResult[0]?.total ?? 0),
       page,
       limit,
+    };
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  async bulkDeleteFiles(
+    @Body() body: BulkFileSelectionDto,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    const ids = await this.resolveBulkFileIds(orgId, body);
+    let deleted = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const id of ids) {
+      try {
+        if (body.hard) {
+          await this.findOrgFile(id, orgId, true);
+          await this.fileDeletionService.hardDelete(id, true);
+        } else {
+          await this.findOrgFile(id, orgId);
+          await this.db
+            .update(schema.files)
+            .set({ deletedAt: new Date(), updatedAt: new Date() })
+            .where(and(eq(schema.files.id, id), eq(schema.files.orgId, orgId)));
+        }
+        deleted++;
+      } catch (err) {
+        skipped++;
+        errors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return {
+      deleted,
+      skipped,
+      hard: !!body.hard,
+      ...(errors.length > 0 ? { errors: errors.slice(0, 50) } : {}),
+    };
+  }
+
+  @Post('bulk-restore')
+  @HttpCode(HttpStatus.OK)
+  async bulkRestoreFiles(
+    @Body() body: BulkFileSelectionDto,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    const selection = {
+      ...body,
+      filters: {
+        ...(body.filters ?? {}),
+        deletedOnly: true,
+      },
+    };
+    const ids = await this.resolveBulkFileIds(orgId, selection);
+    let restored = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const id of ids) {
+      try {
+        const ok = await this.fileDeletionService.restore(id);
+        if (ok) restored++;
+        else skipped++;
+      } catch (err) {
+        skipped++;
+        errors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return {
+      restored,
+      skipped,
+      ...(errors.length > 0 ? { errors: errors.slice(0, 50) } : {}),
+    };
+  }
+
+  @Post('empty-trash')
+  @HttpCode(HttpStatus.OK)
+  async emptyTrash(
+    @Body() body: EmptyTrashDto,
+    @Query('orgId') queryOrgId?: string,
+    @Headers('x-org-id') headerOrgId?: string,
+  ) {
+    const orgId = requireOrgId(queryOrgId, headerOrgId);
+    if (body.confirm !== 'DELETE') {
+      throw new BadRequestException('confirm must be the string DELETE');
+    }
+
+    const rows = await this.db
+      .select({ id: schema.files.id })
+      .from(schema.files)
+      .where(
+        and(eq(schema.files.orgId, orgId), isNotNull(schema.files.deletedAt)),
+      )
+      .limit(BULK_FILE_CAP);
+
+    let deleted = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const row of rows) {
+      try {
+        await this.fileDeletionService.hardDelete(row.id, true);
+        deleted++;
+      } catch (err) {
+        skipped++;
+        errors.push(
+          `${row.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return {
+      deleted,
+      skipped,
+      capped: rows.length >= BULK_FILE_CAP,
+      ...(errors.length > 0 ? { errors: errors.slice(0, 50) } : {}),
     };
   }
 
@@ -381,6 +645,7 @@ export class FilesController {
       id,
       variantType,
       Number.isFinite(requested) ? requested : undefined,
+      orgId,
     );
 
     return {
@@ -527,6 +792,8 @@ export class FilesController {
         processingStatus: body.processingStatus,
         minSize: body.minSize,
         maxSize: body.maxSize,
+        createdFrom: body.createdFrom,
+        createdTo: body.createdTo,
       },
       body.limit,
     );
@@ -704,6 +971,19 @@ export class FilesController {
       ipAddress,
       request?.headers['user-agent'],
       asDownload,
+      {
+        headers: request?.headers as
+          | Record<string, string | string[] | undefined>
+          | undefined,
+        referer: (() => {
+          const raw =
+            request?.headers?.['referer'] ?? request?.headers?.['referrer'];
+          if (typeof raw === 'string') return raw;
+          if (Array.isArray(raw)) return raw[0];
+          return undefined;
+        })(),
+        downloadMethod: 'direct',
+      },
     );
   }
 
@@ -782,6 +1062,54 @@ export class FilesController {
       message:
         'File soft-deleted (hidden from active lists; object remains in storage and can be restored)',
     });
+  }
+
+  private async resolveBulkFileIds(
+    orgId: string,
+    body: BulkFileSelectionDto,
+  ): Promise<string[]> {
+    if (body.allMatchingFilters) {
+      const conditions = buildFileListConditions(orgId, {
+        search: body.filters?.search,
+        fileType: body.filters?.fileType,
+        processingStatus: body.filters?.processingStatus,
+        minSize: body.filters?.minSize,
+        maxSize: body.filters?.maxSize,
+        createdFrom: body.filters?.createdFrom,
+        createdTo: body.filters?.createdTo,
+        includeDeleted: body.filters?.includeDeleted,
+        deletedOnly: body.filters?.deletedOnly,
+      });
+      if (body.excludeIds && body.excludeIds.length > 0) {
+        conditions.push(notInArray(schema.files.id, body.excludeIds));
+      }
+      const rows = await this.db
+        .select({ id: schema.files.id })
+        .from(schema.files)
+        .where(and(...conditions))
+        .limit(BULK_FILE_CAP);
+      return rows.map((r) => r.id);
+    }
+
+    const ids = [...new Set((body.ids ?? []).filter(Boolean))];
+    if (ids.length === 0) {
+      throw new BadRequestException(
+        'Provide ids or set allMatchingFilters=true',
+      );
+    }
+    if (ids.length > BULK_FILE_CAP) {
+      throw new BadRequestException(
+        `Cannot process more than ${BULK_FILE_CAP} files in one request`,
+      );
+    }
+
+    const rows = await this.db
+      .select({ id: schema.files.id })
+      .from(schema.files)
+      .where(
+        and(eq(schema.files.orgId, orgId), inArray(schema.files.id, ids)),
+      );
+    return rows.map((r) => r.id);
   }
 
   private async findOrgFile(id: string, orgId: string, includeDeleted = false) {

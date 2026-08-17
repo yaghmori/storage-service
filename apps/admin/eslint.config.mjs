@@ -15,13 +15,13 @@ const noMagicQueryKeys = {
       "error",
       {
         selector:
-          "Property[key.name='queryKey'] > ArrayExpression > Literal[value=/^(files|jobs|orgs|providers|api-keys|users|dashboard|analytics|auth|account)/]",
+          "Property[key.name='queryKey'] > ArrayExpression > Literal[value=/^(files|jobs|orgs|providers|api-keys|users|dashboard|metrics|analytics|auth|account)/]",
         message:
           "Do not use magic-string query keys. Import a factory from `@/lib/query-keys` (e.g. fileKeys, jobKeys, orgKeys).",
       },
       {
         selector:
-          "CallExpression[callee.property.name='invalidateQueries'] Property[key.name='queryKey'] > ArrayExpression > Literal[value=/^(files|jobs|orgs|providers|api-keys|users|dashboard|analytics|auth|account)/]",
+          "CallExpression[callee.property.name='invalidateQueries'] Property[key.name='queryKey'] > ArrayExpression > Literal[value=/^(files|jobs|orgs|providers|api-keys|users|dashboard|metrics|analytics|auth|account)/]",
         message:
           "Do not invalidate with magic-string query keys. Use invalidateX helpers or factories from `@/lib/query-keys`.",
       },

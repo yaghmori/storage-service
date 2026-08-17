@@ -26,6 +26,8 @@ export interface JobRow {
   retryCount: number;
   progress: number | null;
   priority: number | null;
+  parameters?: Record<string, unknown> | null;
+  backendId?: string | null;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -130,9 +132,7 @@ export function useJobsQuery(params?: {
           page: queryParams.page,
           limit: queryParams.limit,
           ...(statusParam ? { status: statusParam } : {}),
-          ...(processorKeyParam
-            ? { processorKey: processorKeyParam }
-            : {}),
+          ...(processorKeyParam ? { processorKey: processorKeyParam } : {}),
           ...(queryParams.fileId ? { fileId: queryParams.fileId } : {}),
           ...(queryParams.search?.trim()
             ? { search: queryParams.search.trim() }
@@ -209,38 +209,35 @@ export function useRetryJobMutation(orgId?: string) {
     },
     onSuccess: (updated) => {
       // Patch every cached jobs list so file detail updates immediately.
-      queryClient.setQueriesData(
-        { queryKey: jobKeys.all },
-        (old: unknown) => {
-          if (!old || typeof old !== "object") return old;
-          const data = old as {
-            items?: JobRow[];
-            groups?: unknown;
-            total?: number;
-            totalPages?: number;
-            page?: number;
-            limit?: number;
-          };
-          if (!Array.isArray(data.items)) return old;
-          const items = data.items.map((job) =>
-            job.id === updated.id
-              ? {
-                  ...job,
-                  ...updated,
-                  status: updated.status ?? "pending",
-                  errorMessage: null,
-                  logs: updated.logs ?? [],
-                  output: updated.output ?? null,
-                }
-              : job,
-          );
-          return {
-            ...data,
-            items,
-            groups: groupJobsByFile(items),
-          };
-        },
-      );
+      queryClient.setQueriesData({ queryKey: jobKeys.all }, (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        const data = old as {
+          items?: JobRow[];
+          groups?: unknown;
+          total?: number;
+          totalPages?: number;
+          page?: number;
+          limit?: number;
+        };
+        if (!Array.isArray(data.items)) return old;
+        const items = data.items.map((job) =>
+          job.id === updated.id
+            ? {
+                ...job,
+                ...updated,
+                status: updated.status ?? "pending",
+                errorMessage: null,
+                logs: updated.logs ?? [],
+                output: updated.output ?? null,
+              }
+            : job,
+        );
+        return {
+          ...data,
+          items,
+          groups: groupJobsByFile(items),
+        };
+      });
       queryClient.setQueryData(jobKeys.detail(orgId, updated.id), updated);
       invalidateJobs(queryClient);
       if (orgId && updated.fileId) {
@@ -258,17 +255,47 @@ export function useRetryJobMutation(orgId?: string) {
 export type BulkJobsResult = {
   cancelled?: number;
   retried?: number;
+  prioritized?: number;
   skipped: number;
   errors?: string[];
+};
+
+export type BulkJobSelectionInput = {
+  ids?: string[];
+  allMatchingFilters?: boolean;
+  excludeIds?: string[];
+  filters?: {
+    fileId?: string;
+    search?: string;
+    status?: string;
+    processorKey?: string;
+    createdFrom?: string;
+    createdTo?: string;
+  };
 };
 
 export function useBulkCancelJobsMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (ids: string[]) => {
+    mutationFn: async (input: BulkJobSelectionInput) => {
+      const response = await upstream.post(JobsEndpoints.BulkCancel, input, {
+        params: { orgId },
+      });
+      return unwrapApiData<BulkJobsResult>(response.data);
+    },
+    onSuccess: () => {
+      invalidateJobs(queryClient);
+    },
+  });
+}
+
+export function useCancelAllPendingJobsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input?: BulkJobSelectionInput["filters"]) => {
       const response = await upstream.post(
-        JobsEndpoints.BulkCancel,
-        { ids },
+        JobsEndpoints.CancelAllPending,
+        input ? { filters: input } : {},
         { params: { orgId } },
       );
       return unwrapApiData<BulkJobsResult>(response.data);
@@ -282,13 +309,205 @@ export function useBulkCancelJobsMutation(orgId?: string) {
 export function useBulkRetryJobsMutation(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (ids: string[]) => {
+    mutationFn: async (input: BulkJobSelectionInput) => {
+      const response = await upstream.post(JobsEndpoints.BulkRetry, input, {
+        params: { orgId },
+      });
+      return unwrapApiData<BulkJobsResult>(response.data);
+    },
+    onSuccess: () => {
+      invalidateJobs(queryClient);
+    },
+  });
+}
+
+/** BullMQ numeric priorities retained for API compatibility (lower = sooner). */
+export const JOB_PRIORITY_PRESETS = [0, 1, 2, 3, 5, 10] as const;
+
+export function isJobPending(status: string): boolean {
+  return status === "pending";
+}
+
+export function isJobCancellable(status: string): boolean {
+  return status === "pending" || status === "processing";
+}
+
+export function isJobRetryable(status: string): boolean {
+  return (
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "skipped" ||
+    status === "partial"
+  );
+}
+
+/** Finished jobs (any outcome) can be rerun with fresh parameters. */
+export function isJobTerminal(status: string): boolean {
+  return status === "completed" || isJobRetryable(status);
+}
+
+export type CreateJobInput = {
+  fileId: string;
+  processorKey: ProcessorKey | string;
+  parameters?: Record<string, unknown>;
+  priority?: number;
+  backendId?: string;
+};
+
+export type AvailableProcessor = {
+  processorKey: ProcessorKey | string;
+  backendId: string | null;
+  sortOrder: number;
+};
+
+/**
+ * Processors enabled in the org processing settings that accept this file's
+ * type and do not already have a job on the file.
+ */
+export function useAvailableProcessorsQuery(
+  fileId: string | undefined,
+  orgId?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [...jobKeys.all, orgId, "available-processors", fileId] as const,
+    queryFn: async () => {
+      const response = await upstream.get(JobsEndpoints.AvailableProcessors, {
+        params: { orgId, fileId },
+      });
+      return unwrapApiData<{ items: AvailableProcessor[] }>(response.data);
+    },
+    enabled: enabled && !!fileId && !!orgId,
+  });
+}
+
+function invalidateJobsForFile(
+  queryClient: ReturnType<typeof useQueryClient>,
+  orgId: string | undefined,
+  fileId: string | null | undefined,
+) {
+  invalidateJobs(queryClient);
+  if (!orgId || !fileId) return;
+  queryClient.invalidateQueries({
+    queryKey: fileKeys.processorResults(orgId, fileId),
+  });
+  queryClient.invalidateQueries({ queryKey: fileKeys.detail(orgId, fileId) });
+}
+
+export function useCreateJobMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateJobInput) => {
       const response = await upstream.post(
-        JobsEndpoints.BulkRetry,
-        { ids },
+        JobsEndpoints.Create,
+        {
+          fileId: input.fileId,
+          processorKey: input.processorKey,
+          ...(input.parameters ? { parameters: input.parameters } : {}),
+          ...(input.priority != null ? { priority: input.priority } : {}),
+          ...(input.backendId ? { backendId: input.backendId } : {}),
+        },
+        { params: { orgId } },
+      );
+      return unwrapApiData<JobRow>(response.data);
+    },
+    onSuccess: (job, input) => {
+      invalidateJobsForFile(queryClient, orgId, job?.fileId ?? input.fileId);
+    },
+  });
+}
+
+export type RerunJobInput = {
+  id: string;
+  fileId?: string;
+  parameters?: Record<string, unknown>;
+  priority?: number;
+  backendId?: string;
+};
+
+export function useRerunJobMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RerunJobInput) => {
+      const path = replacePathParams(JobsEndpoints.Rerun, input.id);
+      const response = await upstream.post(
+        path,
+        {
+          ...(input.parameters ? { parameters: input.parameters } : {}),
+          ...(input.priority != null ? { priority: input.priority } : {}),
+          ...(input.backendId ? { backendId: input.backendId } : {}),
+        },
+        { params: { orgId } },
+      );
+      return unwrapApiData<JobRow>(response.data);
+    },
+    onSuccess: (job, input) => {
+      invalidateJobsForFile(queryClient, orgId, job?.fileId ?? input.fileId);
+    },
+  });
+}
+
+export function useUpdateJobPriorityMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; priority: number }) => {
+      const path = replacePathParams(JobsEndpoints.Priority, input.id);
+      const response = await upstream.post(
+        path,
+        { priority: input.priority },
+        { params: { orgId } },
+      );
+      return unwrapApiData<JobRow>(response.data);
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(jobKeys.detail(orgId, updated.id), updated);
+      invalidateJobs(queryClient);
+    },
+  });
+}
+
+export function usePrioritizeJobMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const path = replacePathParams(JobsEndpoints.Prioritize, id);
+      const response = await upstream.post(path, undefined, {
+        params: { orgId },
+      });
+      return unwrapApiData<JobRow>(response.data);
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(jobKeys.detail(orgId, updated.id), updated);
+      invalidateJobs(queryClient);
+    },
+  });
+}
+
+export function useBulkPrioritizeJobsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: BulkJobSelectionInput) => {
+      const response = await upstream.post(
+        JobsEndpoints.BulkPrioritize,
+        input,
         { params: { orgId } },
       );
       return unwrapApiData<BulkJobsResult>(response.data);
+    },
+    onSuccess: () => invalidateJobs(queryClient),
+  });
+}
+
+export function useBulkPriorityJobsMutation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { ids: string[]; priority: number }) => {
+      const response = await upstream.post(JobsEndpoints.BulkPriority, input, {
+        params: { orgId },
+      });
+      return unwrapApiData<BulkJobsResult & { updated?: number }>(
+        response.data,
+      );
     },
     onSuccess: () => {
       invalidateJobs(queryClient);

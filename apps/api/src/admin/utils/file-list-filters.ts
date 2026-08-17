@@ -106,12 +106,27 @@ export function mimeTypeConditionForFileType(
   }
 }
 
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function parseCreatedBound(value: string, endOfDay: boolean): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException(`Invalid date "${value}"`);
+  }
+  if (endOfDay && DATE_ONLY_RE.test(value)) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+  return date;
+}
+
 export type FileListFilters = {
   search?: string;
   fileType?: string;
   processingStatus?: string;
   minSize?: number | string;
   maxSize?: number | string;
+  createdFrom?: string;
+  createdTo?: string;
   includeDeleted?: boolean;
   deletedOnly?: boolean;
 };
@@ -172,6 +187,17 @@ export function buildFileListConditions(
   }
   if (Number.isFinite(maxSize) && maxSize >= 0) {
     conditions.push(lte(schema.files.size, BigInt(maxSize)));
+  }
+
+  if (filters.createdFrom?.trim()) {
+    conditions.push(
+      gte(schema.files.createdAt, parseCreatedBound(filters.createdFrom, false)),
+    );
+  }
+  if (filters.createdTo?.trim()) {
+    conditions.push(
+      lte(schema.files.createdAt, parseCreatedBound(filters.createdTo, true)),
+    );
   }
 
   return conditions;

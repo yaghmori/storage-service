@@ -40,6 +40,11 @@ export class MetadataExtractionProcessor extends WorkerHost {
       ? await this.jobsRepository.findByBullmqJobId(job.id)
       : null;
 
+    if (jobRecord?.status === 'cancelled') {
+      this.logger.log(`Skipping cancelled metadata.exif job ${jobRecord.id}`);
+      return { success: false, cancelled: true };
+    }
+
     try {
       if (jobRecord && job.id) {
         await this.jobsRepository.updateStatusByBullmqJobId(job.id, 'processing');

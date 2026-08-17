@@ -113,8 +113,15 @@ export class AuthGuard implements CanActivate {
     if (apiKey) {
       const staticKeys = staticApiKeys();
       if (staticKeys.has(apiKey)) {
+        const defaultOrgId = process.env.AUTH_DEFAULT_ORG_ID?.trim();
+        if (!defaultOrgId) {
+          // Fail closed: static keys must be bound to an org (HMAC download bypass stays above).
+          throw new ForbiddenException(
+            'Static AUTH_API_KEYS require AUTH_DEFAULT_ORG_ID to be set (organization binding)',
+          );
+        }
         request.serviceName = process.env.AUTH_SERVICE_NAME || 'static-client';
-        request.orgId = process.env.AUTH_DEFAULT_ORG_ID || undefined;
+        request.orgId = defaultOrgId;
         request.user = {
           serviceName: request.serviceName,
           orgId: request.orgId,
