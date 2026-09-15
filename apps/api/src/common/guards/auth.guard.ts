@@ -111,24 +111,7 @@ export class AuthGuard implements CanActivate {
     const apiKey = apiKeyRaw?.trim();
 
     if (apiKey) {
-      const staticKeys = staticApiKeys();
-      if (staticKeys.has(apiKey)) {
-        const defaultOrgId = process.env.AUTH_DEFAULT_ORG_ID?.trim();
-        if (!defaultOrgId) {
-          // Fail closed: static keys must be bound to an org (HMAC download bypass stays above).
-          throw new ForbiddenException(
-            'Static AUTH_API_KEYS require AUTH_DEFAULT_ORG_ID to be set (organization binding)',
-          );
-        }
-        request.serviceName = process.env.AUTH_SERVICE_NAME || 'static-client';
-        request.orgId = defaultOrgId;
-        request.user = {
-          serviceName: request.serviceName,
-          orgId: request.orgId,
-        };
-        return true;
-      }
-
+      // Prefer DB-bound keys. Org comes from the key — clients must not send x-org-id.
       const verification = await this.apiKeyService.verifyApiKey(apiKey);
       if (verification.valid && verification.serviceName) {
         request.serviceName = verification.serviceName;
@@ -141,10 +124,29 @@ export class AuthGuard implements CanActivate {
         };
         return true;
       }
+
+      // Optional local/dev static keys only (not for Allyfe/Legacy production).
+      // Enabled when AUTH_API_KEYS is set AND AUTH_DEFAULT_ORG_ID binds them.
+      const staticKeys = staticApiKeys();
+      if (staticKeys.has(apiKey)) {
+        const defaultOrgId = process.env.AUTH_DEFAULT_ORG_ID?.trim();
+        if (!defaultOrgId) {
+          throw new ForbiddenException(
+            'API key not found in database. Create an org-bound key in storage admin, or for local static AUTH_API_KEYS set AUTH_DEFAULT_ORG_ID.',
+          );
+        }
+        request.serviceName = process.env.AUTH_SERVICE_NAME || 'static-client';
+        request.orgId = defaultOrgId;
+        request.user = {
+          serviceName: request.serviceName,
+          orgId: request.orgId,
+        };
+        return true;
+      }
     }
 
     throw new UnauthorizedException(
-      'Valid JWT (Authorization: Bearer), API key (x-api-key), or HMAC download signature required. Configure AUTH_API_KEYS / DB api_keys / JWT_SECRET / FILES_SIGNING_SECRET, or AUTH_DISABLED=true on trusted networks.',
+      'Valid JWT (Authorization: Bearer), DB API key (x-api-key), or HMAC download signature required. Configure DB api_keys / JWT_SECRET / FILES_SIGNING_SECRET.',
     );
   }
 
