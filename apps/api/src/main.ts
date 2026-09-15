@@ -21,6 +21,28 @@ async function bootstrap() {
     if (typeof instance?.set === 'function') {
       instance.set('trust proxy', 1);
     }
+    // SDK 0.2.x posts to `/api/upload` and `/api/files/*` (old Nest `/api` prefix).
+    // Current HTTP is `/v1/upload` and `/v1/files/*`. Do not rewrite `/admin/api/*`.
+    if (typeof instance?.use === 'function') {
+      instance.use(
+        (req: { url?: string }, _res: unknown, next: () => void) => {
+          const url = req.url ?? '';
+          const path = url.split('?')[0] ?? '';
+          if (
+            path === '/api/upload' ||
+            path.startsWith('/api/upload/') ||
+            path === '/api/files' ||
+            path.startsWith('/api/files/')
+          ) {
+            req.url = `/v1${url.slice('/api'.length)}`;
+          } else if (path === '/api/health' || path.startsWith('/api/health/')) {
+            // Legacy Nest client 0.2.x probed /api/health; canonical path is /health.
+            req.url = `/health${url.slice('/api/health'.length)}`;
+          }
+          next();
+        },
+      );
+    }
   }
 
   app.enableVersioning({

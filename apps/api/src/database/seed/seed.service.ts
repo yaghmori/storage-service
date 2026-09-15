@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { OrgProcessorsService } from '../../processing/services/org-processors.service';
@@ -36,10 +37,11 @@ export class SeedService {
     const orgCount = await this.countOrgs();
     const providerCount = await this.countProviders();
 
-    // Boot path: if orgs and providers already exist, still ensure owner membership.
+    // Boot path: if orgs and providers already exist, still ensure owner membership + seed API key.
     if (options.onlyIfEmpty && orgCount > 0 && providerCount > 0) {
       const org = await this.ensureSeedOrg();
       await this.ensureOwnerMembership(org.id, admin);
+      await this.ensureSeedApiKey(org.id);
       this.logger.log(
         `Skipping org/provider seed — ${orgCount} org(s), ${providerCount} provider(s) already exist`,
       );
@@ -60,9 +62,11 @@ export class SeedService {
       );
     }
 
-    if (process.env.AUTH_DEFAULT_ORG_ID !== org.id) {
+    await this.ensureSeedApiKey(org.id);
+
+    if (process.env.AUTH_API_KEYS?.trim()) {
       this.logger.warn(
-        `Set AUTH_DEFAULT_ORG_ID=${org.id} for static AUTH_API_KEYS to bind to this org`,
+        'AUTH_API_KEYS is set — prefer DB api_keys (SEED_API_KEY / storage admin). Static keys are a local-dev fallback only.',
       );
     }
     this.logger.log(`Seeding completed (org slug=${org.slug} id=${org.id})`);
@@ -198,6 +202,86 @@ export class SeedService {
       token: null,
     });
     this.logger.log(`Created owner membership for ${user.email}`);
+  }
+
+  /**
+   * Upsert an org-bound API key from SEED_API_KEY (preferred) so Allyfe/Legacy
+   * authenticate via DB — no AUTH_API_KEYS / AUTH_DEFAULT_ORG_ID / x-org-id.
+   * Plaintext is only logged when the key is first created.
+   */
+  private async ensureSeedApiKey(orgId: string): Promise<void> {
+    const plainKey =
+      process.env.SEED_API_KEY?.trim() ||
+      process.env.STORAGE_SERVICE_API_KEY?.trim() ||
+      '';
+    if (!plainKey) {
+      this.logger.log(
+        'SEED_API_KEY unset — create an org API key in storage admin and store it in Allyfe ServiceIntegrations',
+      );
+      return;
+    }
+
+    const serviceName =
+      (process.env.SEED_API_KEY_SERVICE_NAME || 'eallyfe').trim() || 'eallyfe';
+    const keyHash = crypto.createHash('sha256').update(plainKey).digest('hex');
+
+    const [byHash] = await this.db
+      .select()
+      .from(schema.apiKeys)
+      .where(eq(schema.apiKeys.keyHash, keyHash))
+      .limit(1);
+    if (byHash) {
+      if (!byHash.isActive) {
+        await this.db
+          .update(schema.apiKeys)
+          .set({ isActive: true })
+          .where(eq(schema.apiKeys.id, byHash.id));
+        this.logger.log(
+          `Reactivated seed API key for service "${byHash.serviceName}" (org ${byHash.orgId})`,
+        );
+      } else {
+        this.logger.log(
+          `Seed API key already present for service "${byHash.serviceName}" (org ${byHash.orgId})`,
+        );
+      }
+      return;
+    }
+
+    const [byService] = await this.db
+      .select()
+      .from(schema.apiKeys)
+      .where(
+        and(
+          eq(schema.apiKeys.orgId, orgId),
+          eq(schema.apiKeys.serviceName, serviceName),
+        ),
+      )
+      .limit(1);
+
+    if (byService) {
+      await this.db
+        .update(schema.apiKeys)
+        .set({
+          keyHash,
+          isActive: true,
+        })
+        .where(eq(schema.apiKeys.id, byService.id));
+      this.logger.warn(
+        `Updated seed API key hash for service "${serviceName}" (org ${orgId}). Copy SEED_API_KEY into Allyfe ServiceIntegrations secrets.`,
+      );
+      return;
+    }
+
+    await this.db.insert(schema.apiKeys).values({
+      orgId,
+      serviceName,
+      keyHash,
+      permissions: null,
+      isActive: true,
+    });
+    this.logger.warn(
+      `Created org-bound API key service="${serviceName}" org=${orgId}. Store the same SEED_API_KEY value in Allyfe ServiceIntegrations (encrypted) — do not use AUTH_API_KEYS.`,
+    );
   }
 
   private async upsertStorageProvider(
