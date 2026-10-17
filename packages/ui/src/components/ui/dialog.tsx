@@ -151,32 +151,36 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        className={cn(
-          "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 transition-[opacity,scale,transform,translate] ease-out data-[ending-style]:opacity-0 data-[ending-style]:scale-95 data-[starting-style]:opacity-0 data-[starting-style]:scale-95",
-          size === "sm" && "sm:max-w-md",
-          size === "md" && "sm:max-w-lg",
-          size === "lg" && "sm:max-w-xl",
-          size === "xl" && "sm:max-w-2xl",
-          size === "2xl" && "sm:max-w-3xl",
-          size === "3xl" && "sm:max-w-4xl",
-          size === "full" && "sm:max-w-full",
-          className
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[open]:bg-accent data-[open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-          >
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Popup>
+      {/* Flex-center instead of translate(-50%,-50%) — avoids subpixel / GPU text blur. */}
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4">
+        <DialogPrimitive.Popup
+          data-slot="dialog-content"
+          className={cn(
+            // No scale / translate centering: permanent transform layers soften text AA.
+            "pointer-events-auto bg-background relative z-50 grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-200 transition-opacity ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+            size === "sm" && "sm:max-w-md",
+            size === "md" && "sm:max-w-lg",
+            size === "lg" && "sm:max-w-xl",
+            size === "xl" && "sm:max-w-2xl",
+            size === "2xl" && "sm:max-w-3xl",
+            size === "3xl" && "sm:max-w-4xl",
+            size === "full" && "sm:max-w-full",
+            className
+          )}
+          {...props}
+        >
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close
+              data-slot="dialog-close"
+              className="ring-offset-background focus:ring-ring data-[open]:bg-accent data-[open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            >
+              <XIcon />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Popup>
+      </div>
     </DialogPortal>
   );
 }

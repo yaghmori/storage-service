@@ -70,14 +70,18 @@ function AlertDialogContent({
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
-      <AlertDialogPrimitive.Popup
-        data-slot="alert-dialog-content"
-        className={cn(
-          "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg transition-[opacity,scale,transform,translate] ease-out data-[ending-style]:opacity-0 data-[ending-style]:scale-95 data-[starting-style]:opacity-0 data-[starting-style]:scale-95",
-          className
-        )}
-        {...props}
-      />
+      {/* Flex-center instead of translate(-50%,-50%) — avoids subpixel / GPU text blur. */}
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4">
+        <AlertDialogPrimitive.Popup
+          data-slot="alert-dialog-content"
+          className={cn(
+            // No scale / translate centering: permanent transform layers soften text AA.
+            "pointer-events-auto bg-background relative z-50 grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg transition-opacity ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+            className
+          )}
+          {...props}
+        />
+      </div>
     </AlertDialogPortal>
   );
 }
