@@ -147,7 +147,8 @@ function SheetContent({
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          "bg-background fixed z-50 flex flex-col gap-4 shadow-lg transition-[translate,transform] duration-500 ease-out data-[ending-style]:duration-300 data-[ending-style]:ease-in",
+          // Animate translate only — avoid permanent `transform` compositor layers that soften text.
+          "bg-background fixed z-50 flex flex-col gap-4 shadow-lg transition-[translate] duration-500 ease-out data-[ending-style]:duration-300 data-[ending-style]:ease-in",
           side === "right" &&
             "inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full",
           side === "left" &&
